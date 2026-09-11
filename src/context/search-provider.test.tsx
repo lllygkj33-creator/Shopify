@@ -2,8 +2,26 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, type RenderResult } from 'vitest-browser-react'
 import { userEvent } from 'vitest/browser'
 import { SearchProvider } from '@/context/search-provider'
+import { sidebarData } from '@/components/layout/data/sidebar-data'
 
 const COMMAND_MENU_PLACEHOLDER = 'Type a command or search...'
+
+/**
+ * 断言用的菜单项从**真实侧边栏数据**里取，不写死字符串。
+ *
+ * 之前这里写的是模板自带的 `Dashboard` / `Tasks` / `Settings Account`，
+ * 侧边栏换成 Zima 的栏目后就全找不到、测试变红 —— 但页面其实没问题。
+ * 从 sidebarData 推导后，以后改菜单不用回来改测试。
+ *
+ * 嵌套子项（NavCollapsible）在真实数据里目前没有，那种分支由
+ * `search-provider-nested.test.tsx` 用 fixture 覆盖。
+ */
+const firstGroup = sidebarData.navGroups[0]
+const topLevelItem = firstGroup.items[0] as { title: string; url: string }
+const channelItem = sidebarData.navGroups[1].items[0] as {
+  title: string
+  url: string
+}
 
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
@@ -73,7 +91,7 @@ describe('SearchProvider and CommandMenu', () => {
     await expect.element(getByText('Light')).toBeInTheDocument()
     await expect.element(getByText('Dark')).toBeInTheDocument()
     await expect.element(getByText('System')).toBeInTheDocument()
-    await expect.element(getByText('Dashboard')).toBeInTheDocument()
+    await expect.element(getByText(topLevelItem.title)).toBeInTheDocument()
   })
 
   it('does not show the dialog content when search is closed', async () => {
@@ -109,25 +127,11 @@ describe('SearchProvider and CommandMenu', () => {
 
     await openCommandPalette(screen)
 
-    await userEvent.click(screen.getByText('Tasks'))
+    await userEvent.click(screen.getByText(channelItem.title))
 
-    expect(mocks.navigate).toHaveBeenCalledWith({ to: '/tasks' })
+    expect(mocks.navigate).toHaveBeenCalledWith({ to: channelItem.url })
     await expect
       .element(screen.getByPlaceholder(COMMAND_MENU_PLACEHOLDER))
-      .not.toBeInTheDocument()
-  })
-
-  it('navigates for nested sidebar items (group with sub-items)', async () => {
-    const screen = await renderWithSearchProvider()
-    const { getByPlaceholder, getByRole } = screen
-
-    await openCommandPalette(screen)
-
-    await userEvent.click(getByRole('option', { name: 'Settings Account' }))
-
-    expect(mocks.navigate).toHaveBeenCalledWith({ to: '/settings/account' })
-    await expect
-      .element(getByPlaceholder(COMMAND_MENU_PLACEHOLDER))
       .not.toBeInTheDocument()
   })
 
