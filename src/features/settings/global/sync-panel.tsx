@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import type { ReconcileReport } from '@/types/content'
+import type { SyncReport } from '@/types/content'
 import {
   AlertTriangle,
   CheckCircle2,
@@ -20,22 +20,26 @@ import { Separator } from '@/components/ui/separator'
  *
  * ## 为什么需要它
  *
- * 平台发定时内容用的是 Shopify 原生机制：创建时就给未来的 `publishDate`
- * 并且 `isPublished: false`，到点**由 Shopify 自己上线**。
+ * 本地库 = 「平台自己发过的」+「线上所有未来排期」。两件事都得同步：
  *
- * 好处是本地不需要定时任务 —— 服务没开也不会漏发，不存在「漏发」这种事故。
- * 代价是：线上到点发生了什么，本地不会自动知道。所以需要对账把真实状态拉回来。
+ * 1. **拉未来排期** —— 排期不是平台独有的事。内容可能是在 Shopify 后台、
+ *    或别的工具排上去的（实测店铺里就有 172 条这样的页面）。不拉进来，
+ *    仪表盘的排期全景就是残缺的：用户明明排了 100 多条，界面写 0。
  *
- * 不对账会看到的假象：
- *   - 内容早就发出去了，界面还写「待发布」
- *   - 人在后台把还没到点的对象删了，界面以为它还会按时上线
- *   - 人在后台改了发布时间或标题，界面显示的是旧值
+ * 2. **对账已知对象** —— 平台发定时内容用的是 Shopify 原生机制
+ *    （未来 `publishDate` + `isPublished: false`），到点**由 Shopify 自己上线**。
+ *    好处是本地不需要定时任务，服务没开也不会漏发；代价是线上到点发生的事
+ *    本地不会自动知道。不对账会看到三种假象：
+ *      - 内容早就发出去了，界面还写「待发布」
+ *      - 人在后台把还没到点的对象删了，界面以为它还会按时上线
+ *      - 人在后台改了发布时间或标题，界面显示的是旧值
  *
  * ## 边界
  *
- * 只对账**平台自己排期/发布过的对象**。店铺里平台上线之前就存在的历史内容
- * 不入库 —— 用户明确要求「只存平台自己发布的 和未来的，过去的通通不记录」，
- * 所以这里不需要「导入历史」这种操作，也不会有本地与线上对不上的漂移问题。
+ * **不含**店铺里平台上线之前就存在的已发布历史（用户要求
+ * 「只存平台自己发布的 和未来的，过去的通通不记录」）。
+ * 所以没有「导入历史」这种操作，也不会有「本地 N 条 vs 线上 M 条对不上」
+ * 的漂移问题 —— 拉取成本也不随店铺历史增长。
  */
 
 type SyncPanelProps = {
@@ -43,24 +47,80 @@ type SyncPanelProps = {
   timezone: string
 }
 
-function ReconcileResult({ report }: { report: ReconcileReport }) {
-  const drift = report.updated + report.gone
+/** 把 {桶: 数量} 摊成一行行，数量大的排前面 */
+function SortedCounts({ counts }: { counts: Record<string, number> }) {
+  const entries = Object.entries(counts).sort(([, a], [, b]) => b - a)
+  if (entries.length === 0) return null
 
   return (
-    <div className='space-y-1 rounded-md border bg-muted/30 p-2 text-xs'>
+    <ul className='space-y-0.5'>
+      {entries.map(([label, count]) => (
+        <li key={label} className='flex justify-between gap-3'>
+          <span className='truncate'>{label}</span>
+          <span className='shrink-0 font-mono'>{count}</span>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+function SyncResult({ report }: { report: SyncReport }) {
+  const drift = report.updated + report.gone
+  const skippedTotal = Object.values(report.skipped).reduce((a, b) => a + b, 0)
+
+  return (
+    <div className='space-y-1.5 rounded-md border bg-muted/30 p-2 text-xs'>
       <p className='flex items-center gap-1.5 font-medium'>
+        <CheckCircle2 className='size-3.5 text-emerald-600' />
+        拉到 {report.scheduledPulled} 条未发布排期
+        {report.scheduledFound > 0 && (
+          <span className='font-normal text-muted-foreground'>
+            （线上未发布的未来排期共 {report.scheduledFound} 条）
+          </span>
+        )}
+      </p>
+
+      {Object.keys(report.byChannel).length > 0 && (
+        <details>
+          <summary className='cursor-pointer text-muted-foreground'>
+            按栏目分布
+          </summary>
+          <div className='mt-1 ps-2'>
+            <SortedCounts counts={report.byChannel} />
+          </div>
+        </details>
+      )}
+
+      {skippedTotal > 0 && (
+        <details>
+          <summary className='cursor-pointer text-muted-foreground'>
+            跳过 {skippedTotal} 条（不属于平台任何栏目）
+          </summary>
+          <div className='mt-1 ps-2'>
+            <SortedCounts counts={report.skipped} />
+          </div>
+        </details>
+      )}
+
+      <p className='flex items-center gap-1.5'>
         {drift === 0 ? (
           <CheckCircle2 className='size-3.5 text-emerald-600' />
         ) : (
           <AlertTriangle className='size-3.5 text-amber-600' />
         )}
-        {drift === 0 ? '本地与线上一致' : `修正了 ${drift} 条`}
+        对账 {report.checked} 条
+        {drift === 0 ? (
+          <span className='text-muted-foreground'>· 本地与线上一致</span>
+        ) : (
+          <span className='text-muted-foreground'>
+            · 修正 {drift} 条
+            {report.updated > 0 && `（状态更新 ${report.updated}`}
+            {report.gone > 0 && `${report.updated > 0 ? '，' : '（'}线上已删除 ${report.gone}`}
+            {`）`}
+          </span>
+        )}
       </p>
-      <p className='text-muted-foreground'>
-        检查 {report.checked} 条 · 匹配 {report.matched} 条
-        {report.updated > 0 && ` · 状态更新 ${report.updated} 条`}
-        {report.gone > 0 && ` · 线上已删除 ${report.gone} 条`}
-      </p>
+
       {report.gone > 0 && (
         <p className='text-muted-foreground'>
           已删除的对象会在列表里标注原因，不会被静默移除。
@@ -72,19 +132,19 @@ function ReconcileResult({ report }: { report: ReconcileReport }) {
 
 export function SyncPanel({ hasCredentials, timezone }: SyncPanelProps) {
   const queryClient = useQueryClient()
-  const [result, setResult] = useState<ReconcileReport | null>(null)
+  const [result, setResult] = useState<SyncReport | null>(null)
 
   const statusQuery = useQuery({
     queryKey: ['sync-status'],
     queryFn: () => syncApi.status(),
   })
 
-  const reconcileMutation = useMutation({
-    mutationFn: () => syncApi.reconcile(),
+  const syncMutation = useMutation({
+    mutationFn: () => syncApi.run(),
     onSuccess: (report) => {
       setResult(report)
       if (report.error) {
-        toast.error(`对账失败：${report.error}`)
+        toast.error(`同步失败：${report.error}`)
         return
       }
       // 对账可能改了状态/时间/标题，列表和仪表盘都要重新拉
@@ -95,45 +155,45 @@ export function SyncPanel({ hasCredentials, timezone }: SyncPanelProps) {
       void queryClient.invalidateQueries({ queryKey: ['sync-status'] })
 
       const drift = report.updated + report.gone
+      const parts = [`拉到 ${report.scheduledPulled} 条排期`]
+      if (drift > 0) parts.push(`修正 ${drift} 条`)
+      if (drift === 0) parts.push(`对账 ${report.checked} 条一致`)
       if (drift === 0) {
-        toast.success(`已检查 ${report.checked} 条，本地与线上一致`)
+        toast.success(parts.join('，'))
       } else {
-        toast.info(
-          `已修正 ${drift} 条（状态更新 ${report.updated}，线上删除 ${report.gone}）`
-        )
+        toast.info(parts.join('，'))
       }
     },
-    onError: (error: Error) => toast.error(`对账失败：${error.message}`),
+    onError: (error: Error) => toast.error(`同步失败：${error.message}`),
   })
 
   const status = statusQuery.data
-  const disabled = !hasCredentials || reconcileMutation.isPending
+  const disabled = !hasCredentials || syncMutation.isPending
 
   return (
     <div className='space-y-3 rounded-md border p-3'>
       <div className='flex flex-wrap items-center gap-2 text-xs'>
-        <span className='text-muted-foreground'>已关联 Shopify</span>
+        <span className='text-muted-foreground'>已跟踪</span>
         <Badge variant='outline' className='font-mono'>
           {status ? status.trackedContents : '—'}
         </Badge>
-
-        {status && status.trackedContents === 0 && (
+        {status && status.scheduledContents > 0 && (
           <span className='text-muted-foreground'>
-            还没有发布过内容，发布后这里会开始有数
+            （其中排期中 {status.scheduledContents} 条）
           </span>
         )}
 
-        {status?.lastReconcileAt ? (
+        {status?.lastSyncAt ? (
           <span className='text-muted-foreground'>
-            上次对账 {relativeTime(status.lastReconcileAt)}
+            上次同步 {relativeTime(status.lastSyncAt)}
           </span>
         ) : (
-          status && <span className='text-muted-foreground'>尚未对账</span>
+          status && <span className='text-muted-foreground'>尚未同步</span>
         )}
 
         {status && (
           <span className='ms-auto text-muted-foreground'>
-            自动对账
+            自动同步
             {status.syncIntervalMinutes > 0
               ? ` 每 ${status.syncIntervalMinutes} 分钟`
               : '已关闭'}
@@ -147,14 +207,14 @@ export function SyncPanel({ hasCredentials, timezone }: SyncPanelProps) {
           variant='outline'
           size='sm'
           disabled={disabled}
-          onClick={() => reconcileMutation.mutate()}
+          onClick={() => syncMutation.mutate()}
         >
-          {reconcileMutation.isPending ? (
+          {syncMutation.isPending ? (
             <Loader2 className='size-3.5 animate-spin' />
           ) : (
             <RefreshCw className='size-3.5' />
           )}
-          立即对账
+          立即同步
         </Button>
         <span className='text-xs text-muted-foreground'>
           （时区 {timezone}）
@@ -171,7 +231,7 @@ export function SyncPanel({ hasCredentials, timezone }: SyncPanelProps) {
         </p>
       )}
 
-      {result && <ReconcileResult report={result} />}
+      {result && <SyncResult report={result} />}
 
       <Separator />
       <p className='flex items-start gap-1.5 text-xs text-muted-foreground'>

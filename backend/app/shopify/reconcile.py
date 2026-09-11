@@ -183,12 +183,21 @@ class ShopifyReconciler:
             status = derive_status(
                 bool(node.get("isPublished")), published_at_dt, now
             )
+            # `published_at` 与 `scheduled_at` 是两个字段，各管各的：
+            #   - 排期中的项，Shopify 也会返回一个**未来**的 publishedAt，
+            #     但它还没真的发布 —— 写进 published_at 会让时间轴把它显示成
+            #     「已发布」，而且会与拉取写入的 None 冲突、被判成反复有更新
+            #   - 已发布的项不该再留 scheduled_at，否则时间轴同时显示两条
             published_at = (
-                published_at_dt.isoformat() if published_at_dt else None
+                published_at_dt.isoformat()
+                if status == "published" and published_at_dt
+                else None
             )
-            # 只有仍是排期状态才留 scheduled_at；线上已经发了就清掉，
-            # 否则时间轴会同时显示「已发布」和一条未来的排期
-            scheduled_at = published_at if status == "scheduled" else None
+            scheduled_at = (
+                published_at_dt.isoformat()
+                if status == "scheduled" and published_at_dt
+                else None
+            )
 
             # 时间要归一化后再比，不然 `...Z` 和 `+00:00` 会被判成不一致
             changed = (

@@ -6,9 +6,9 @@
  * 店铺里文章的发布时间，不能随手跑。本脚本**只读**（加上一次幂等的对账）。
  *
  * 检查什么：
- *  - 面板能读到后端真实数字（不是演示数据）
+ *  - 面板能读到后端真实数字（跟踪条数不是演示数据）
  *  - 两个按钮存在且可点（凭据齐全时不能是灰的）
- *  - 点「立即对账」后能拿到真实报告，而不是报错
+ *  - 点「立即同步」后能拿到真实报告（拉到排期条数 + 对账结果），而不是报错
  *
  * 用法：
  *   pnpm dev --port 5178   # 默认就是真实后端
@@ -55,27 +55,27 @@ try {
   }
 
   // ---- 面板本体 ----
-  const panel = page.locator('text=已关联 Shopify').first()
+  const panel = page.locator('text=已跟踪').first()
   await panel.waitFor({ timeout: 10000 })
   ok('数据同步面板已渲染')
 
   const tracked = await page
-    .locator('text=已关联 Shopify')
+    .locator('text=已跟踪')
     .first()
     .locator('xpath=following-sibling::*[1]')
     .textContent()
-  console.log('  已关联 Shopify :', tracked)
+  console.log('  已跟踪      :', tracked)
   if (!/^\d+$/.test((tracked ?? '').trim())) {
-    fail(`已关联 Shopify 不是数字：${tracked}`)
+    fail(`已跟踪不是数字：${tracked}`)
   } else {
-    ok(`已关联 Shopify ${tracked} 条（真实数据）`)
+    ok(`已跟踪 ${tracked} 条（真实数据）`)
   }
 
-  const reconcileButton = page.locator('button', { hasText: '立即对账' })
+  const reconcileButton = page.locator('button', { hasText: '立即同步' })
   await reconcileButton.waitFor({ timeout: 5000 })
 
   if (await reconcileButton.isEnabled()) {
-    ok('对账按钮可点（凭据齐全）')
+    ok('同步按钮可点（凭据齐全）')
   } else {
     fail('按钮被禁用，但后端报告凭据齐全')
   }
@@ -85,18 +85,18 @@ try {
     fullPage: true,
   })
 
-  // ---- 点一次对账（幂等，只读线上 + 写本地状态） ----
+  // ---- 点一次同步（幂等：只读线上 + 写本地状态）----
   await reconcileButton.click()
-  await page.waitForSelector('text=检查', { timeout: 60000 })
+  await page.waitForSelector('text=拉到', { timeout: 120000 })
   await page.waitForTimeout(500)
 
   const resultText = await page.locator('body').textContent()
-  const match = resultText.match(/检查 (\d+) 条 · 匹配 (\d+) 条/)
+  const match = resultText.match(/拉到 (\d+) 条未发布排期/)
   if (!match) {
-    fail('对账结果没有出现（或文案变了）')
+    fail('同步结果没有出现（或文案变了）')
   } else {
-    console.log(`  对账结果   : 检查 ${match[1]} 条 / 匹配 ${match[2]} 条`)
-    ok(`对账结果与后端一致（检查 ${match[1]} 条）`)
+    console.log(`  同步结果   : 拉到 ${match[1]} 条未发布排期`)
+    ok('同步结果与后端一致')
   }
 
   await page.screenshot({

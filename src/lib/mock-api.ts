@@ -20,7 +20,7 @@ import type {
   PublishHistoryEntry,
   PublishResult,
   TimelineBar,
-  ReconcileReport,
+  SyncReport,
   SyncStatus,
 } from '@/types/content'
 
@@ -513,15 +513,26 @@ export const mockApi = {
 
   getSyncStatus(): SyncStatus {
     return {
-      lastReconcileAt: new Date(Date.now() - 12 * 60 * 1000).toISOString(),
+      lastSyncAt: new Date(Date.now() - 12 * 60 * 1000).toISOString(),
       trackedContents: 12,
+      scheduledContents: 9,
       syncIntervalMinutes: 15,
       hasCredentials: true,
     }
   },
 
-  syncReconcile(): ReconcileReport {
-    return { checked: 12, matched: 12, updated: 0, gone: 0, error: null }
+  syncRun(): SyncReport {
+    return {
+      scheduledPulled: 9,
+      scheduledFound: 9,
+      byChannel: { 'community-post': 6, discord: 3 },
+      skipped: {},
+      checked: 12,
+      matched: 12,
+      updated: 0,
+      gone: 0,
+      error: null,
+    }
   },
 
   cancelSchedule(id: string) {

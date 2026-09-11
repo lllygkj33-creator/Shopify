@@ -157,6 +157,39 @@ class ContentStore:
 
         return _row_to_dict(row) if row else {}
 
+    def upsert_remote(self, record: dict[str, Any]) -> dict[str, Any]:
+        """写入一条从 Shopify 拉回来的记录。
+
+        **按 GID 优先匹配**，而不是只看 publish_key —— 否则会出现同一对象两行：
+        平台自己发布的行用 `channel|file|index|handle` 作 key，
+        而拉回来的行用 `shopify|<kind>|<gid>`，两者指向线上同一个对象。
+
+        匹配顺序：
+          1. 本地已有同 GID 的行 → 更新它（保留原来的 publish_key 与来源文件）
+          2. 否则按 publish_key upsert（通常是新插入）
+        """
+        gid = record.get("shopify_gid")
+
+        if gid:
+            existing = self.find_by_gid(str(gid))
+            if existing is not None:
+                merged = {**record, "publish_key": existing["publish_key"]}
+                # 已有行的来源信息**优先**（不是 setdefault）：平台自己发布的行
+                # 记着「哪个 JSON 的第几条」，这比拉回来的 shopify-schedule 具体得多，
+                # 不能被覆盖掉 —— 否则用户在界面上看不到这条内容的出处。
+                for field in ("source_file", "source_index", "mode"):
+                    if existing.get(field) not in (None, ""):
+                        merged[field] = existing[field]
+                return self.upsert(merged)
+
+        return self.upsert(record)
+
+    def find_by_gid(self, gid: str) -> dict[str, Any] | None:
+        with self._cursor() as cursor:
+            cursor.execute("SELECT * FROM content WHERE shopify_gid = ?", (gid,))
+            row = cursor.fetchone()
+        return _row_to_dict(row) if row else None
+
     def list_with_gid(self) -> list[dict[str, Any]]:
         """所有已关联 Shopify 对象的行（对账用）。"""
         with self._cursor() as cursor:

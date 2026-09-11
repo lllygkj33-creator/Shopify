@@ -428,29 +428,53 @@ export type DashboardStats = {
 }
 
 // ---------------------------------------------------------------------------
-// 数据同步（对账）
+// 数据同步
 // ---------------------------------------------------------------------------
 
 /**
  * 同步状态。
  *
- * 本地库只记**平台自己排期/发布的内容** —— 店铺里平台上线之前就存在的
- * 历史内容不入库（用户要求「只存平台自己发布的 和未来的，过去的通通不记录」）。
- * 所以这里的数字是「平台自己发过多少条」，不是「店铺里有多少条」。
+ * 本地库 = 「平台自己发过的」+「线上所有未来排期」，**不含**店铺既有历史内容
+ * （用户要求「只存平台自己发布的 和未来的，过去的通通不记录」）。
+ *
+ * 所以 `trackedContents` 不是「店铺里有多少条」，而是「本地跟踪了多少条」。
  */
 export type SyncStatus = {
-  /** 上次对账完成时间（ISO）；从未对账为 null */
-  lastReconcileAt?: string | null
-  /** 本地已关联 Shopify 对象的条数（= 对账覆盖范围） */
+  /** 上次同步完成时间（ISO）；从未同步为 null */
+  lastSyncAt?: string | null
+  /** 本地已关联 Shopify 对象的条数（= 同步覆盖范围） */
   trackedContents: number
-  /** 后台自动对账间隔（分钟）。0 = 已关闭 */
+  /** 其中还没到发布时间的（≈ 仪表盘时间轴上的条数） */
+  scheduledContents: number
+  /** 后台自动同步间隔（分钟）。0 = 已关闭 */
   syncIntervalMinutes: number
   /** 凭据是否齐全 —— 不齐时按钮不该能点 */
   hasCredentials: boolean
 }
 
-/** 对账结果 */
-export type ReconcileReport = {
+/**
+ * 一次同步的结果。
+ *
+ * 分两段，对应同步做的两件事：
+ *   1. 拉线上未来排期（排期可能是在 Shopify 后台或别的工具排的，平台未必知道）
+ *   2. 对账已知对象（到点后 Shopify 自己上线、人在后台改时间或删对象）
+ */
+export type SyncReport = {
+  // --- 拉取未来排期 ---
+  /** 写入本地的排期条数（含更新已有行） */
+  scheduledPulled: number
+  /** 线上未发布内容里时间在未来的条数（含认不出栏目的） */
+  scheduledFound: number
+  byChannel: Record<string, number>
+  /**
+   * 认不出栏目的原因 → 条数。
+   *
+   * 不静默丢弃：实测有 2 篇排期文章在 `zima-campaign-hub` 博客里，
+   * 不属于平台任何栏目。用户有权知道什么没进来。
+   */
+  skipped: Record<string, number>
+
+  // --- 对账已知对象 ---
   /** 本地有 GID、参与对账的行数 */
   checked: number
   matched: number
@@ -458,5 +482,6 @@ export type ReconcileReport = {
   updated: number
   /** 线上已不存在（后台被删）的行数 */
   gone: number
+
   error?: string | null
 }

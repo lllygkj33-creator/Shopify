@@ -172,22 +172,38 @@ PRD §4.3 写的是「由 `html代码` 里的 class 推断博客」。但核对�
 所以实现为：**有 class 用 class，没有则落回当前栏目的默认博客**，并在不一致时给出提示
 （见 `resolveBlogName()`）。
 
-### 5. 本地库只记平台自己发过的内容，不镜像店铺
+### 5. 本地库 = 平台自己发过的 + 线上所有未来排期，不含店铺历史
 
 用户明确要求：**「只存平台自己发布的 和未来的，过去的通通不记录」**。
 
-店铺里平台上线之前就存在的历史内容（实测 2748 条：1961 篇文章 + 787 个页面）
-不入库。因此没有「导入历史」这种操作，也不会出现「本地 N 条 vs 线上 M 条
-对不上」的漂移问题。
+店铺里平台上线之前就存在的已发布历史（实测 2748 条：1961 篇文章 +
+787 个页面）**不入库**。因此没有「导入历史」这种操作，也不会出现
+「本地 N 条 vs 线上 M 条对不上」的漂移问题。
 
-需要 Shopify 侧数据的地方靠**对账**拿，而且只核对平台自己发过的对象
-（有 `shopify_gid` 的行）：用 `nodes(ids:)` 按 GID 批量直查，一次最多 250 个，
-成本不随店铺历史增长 —— 实测 2748 条的店铺也只需 1 次请求。
+「未来的」这半句很关键：**排期不是平台独有的事**。内容可能是在 Shopify
+后台、或别的工具（GEO 那套脚本）排上去的 —— 实测店铺里就有 **172 条**
+这样的排期页面，平台一条都不知道。不拉进来的话仪表盘的「排期全景」是残缺的：
+用户明明排了 100 多条，界面写 0。所以同步要做两件事：
+
+| | 做什么 | 成本 |
+|---|---|---|
+| **拉未来排期** | `published_status:unpublished` 且时间在未来的内容入库 | 1 次请求（实测 12 文章 + 184 页面各一页）|
+| **对账已知对象** | 按本地 GID 直查，纠正线上改动 | `nodes(ids:)` 一次 250 个 |
+
+两者成本都**不随店铺历史增长**。
 
 为什么必须对账：定时发布用的是 Shopify 原生机制（`isPublished: false` +
 未来 `publishDate`），**到点由 Shopify 自己上线**。好处是本地不需要定时任务，
 服务没开也不会漏发；代价是线上发生的事本地不会自动知道，所以默认每 15 分钟
-对一次（`SYNC_INTERVAL_MINUTES`，0 = 关闭）。
+同步一次（`SYNC_INTERVAL_MINUTES`，0 = 关闭）。
+
+两个容易踩的坑（都有测试钉住）：
+
+- `published_at` 与 `scheduled_at` 是两个字段。Shopify 对**未发布**的排期项
+  也会返回一个未来的 `publishedAt` —— 直接写进 `published_at` 会让时间轴
+  显示成「已发布」，还会与拉取写入的 `None` 冲突、每次对账都报「更新了 N 条」
+- 拉取要**按 GID 优先匹配**已有行，否则平台自己发过的对象会出现两行
+  （平台行用 `channel|file|index|handle`，拉取行用 `shopify|<kind>|<gid>`）
 
 ### 6. 时间轴组件是自研的，且被隔离在一个文件里
 
@@ -305,8 +321,8 @@ Shopify 的 `client_credentials` 流程换来的 `shpat_` 令牌**只有约 24 �
 | PATCH | `/api/contents/{id}` | `ContentItem`（改期） |
 | DELETE | `/api/contents/{id}/schedule` | `ContentItem`（取消排期） |
 | GET | `/api/history?channel_id=` | `PublishHistoryEntry[]` |
-| GET | `/api/sync/status` | `SyncStatus`（已关联条数 / 上次对账 / 间隔） |
-| POST | `/api/sync/reconcile` | `ReconcileReport`（按 GID 直查，不拉全量） |
+| GET | `/api/sync/status` | `SyncStatus`（跟踪条数 / 排期中条数 / 上次同步 / 间隔） |
+| POST | `/api/sync/run` | `SyncReport`（拉未来排期 + 按 GID 对账） |
 
 ### 后端必须遵守的约定
 

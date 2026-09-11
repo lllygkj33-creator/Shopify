@@ -29,7 +29,8 @@ from .shopify.backlink import (
 )
 from .shopify.client import ShopifyError, shopify_client
 from .shopify.schedule_sync import SyncResult, schedule_sync
-from .shopify.reconcile import ReconcileReport, shopify_reconciler
+from .shopify.reconcile import shopify_reconciler
+from .shopify.schedule_pull import schedule_puller
 from .shopify.templates import TemplateList, template_service
 from .shopify.vs_resources import ResourceInjectionError, inject_resources
 from .shopify.page_publisher import (
@@ -59,12 +60,14 @@ from .shopify.token import (
 
 @contextlib.asynccontextmanager
 async def lifespan(_: FastAPI):
-    """启动后台对账任务。
+    """启动后台同步任务。
 
     注意这里**不是**用来"到点发布"的 —— 定时发布交给 Shopify 自己
     （创建时给未来 publishDate），所以本地没有开机风险。
-    这个任务只负责**把线上真实状态对齐回本地**：到点后 Shopify 会自己把
-    isPublished 翻成 true，本地要跟上；还有人在后台改时间/删对象的情况。
+
+    这个任务做两件事：
+      1. 拉线上未来排期进来（内容可能是在 Shopify 后台或别的工具排的）
+      2. 对账已知对象（到点后 Shopify 自己把 isPublished 翻成 true，本地要跟上）
     """
     task: asyncio.Task | None = None
     interval = app_config.resolved_sync_interval_minutes()
@@ -90,12 +93,14 @@ async def _reconcile_loop(interval_minutes: int) -> None:
             continue
 
         try:
+            pull = await schedule_puller.pull()
             report = await shopify_reconciler.reconcile()
-            if not report.error:
-                app_config.touch_sync_state("last_reconcile_at")
-                if report.updated or report.gone:
+            if not pull.error and not report.error:
+                app_config.touch_sync_state("last_sync_at")
+                if pull.upserted or report.updated or report.gone:
                     logging.info(
-                        "对账完成：检查 %s 条，更新 %s 条，缺失 %s 条",
+                        "同步完成：拉取排期 %s 条，对账 %s 条（更新 %s，缺失 %s）",
+                        pull.upserted,
                         report.checked,
                         report.updated,
                         report.gone,
@@ -572,48 +577,88 @@ async def refresh_token() -> SettingsResponse:
 
 
 class SyncStatusOut(BaseModel):
-    lastReconcileAt: str | None = None
+    lastSyncAt: str | None = None
     trackedContents: int = 0
-    """本地已关联 Shopify 对象的行数（= 对账覆盖范围，也就是平台自己发过的条数）"""
+    """本地已关联 Shopify 对象的行数（= 同步覆盖范围）"""
+    scheduledContents: int = 0
+    """其中还没到发布时间的（= 仪表盘时间轴上的条数）"""
     syncIntervalMinutes: int = 15
     hasCredentials: bool = False
 
 
-class ReconcileReportOut(BaseModel):
+class SyncReportOut(BaseModel):
+    # --- 拉取未来排期 ---
+    scheduledPulled: int = 0
+    """本次写入本地的排期条数（含更新已有行）"""
+    scheduledFound: int = 0
+    """线上未发布内容里时间在未来的条数（含认不出栏目的）"""
+    byChannel: dict[str, int] = Field(default_factory=dict)
+    skipped: dict[str, int] = Field(default_factory=dict)
+    """认不出栏目的原因 → 条数"""
+
+    # --- 对账已知对象 ---
     checked: int = 0
     matched: int = 0
     updated: int = 0
     gone: int = 0
+
     error: str | None = None
 
 
 @app.get("/api/sync/status", response_model=SyncStatusOut)
 async def sync_status() -> SyncStatusOut:
     state = app_config.resolved_sync_state()
+    scheduled = [
+        row for row in store.list_with_gid() if row.get("status") == "scheduled"
+    ]
     return SyncStatusOut(
-        lastReconcileAt=state["lastReconcileAt"],
+        lastSyncAt=state["lastSyncAt"],
         trackedContents=len(store.list_with_gid()),
+        scheduledContents=len(scheduled),
         syncIntervalMinutes=app_config.resolved_sync_interval_minutes(),
         hasCredentials=_has_credentials(),
     )
 
 
-@app.post("/api/sync/reconcile", response_model=ReconcileReportOut)
-async def sync_reconcile() -> ReconcileReportOut:
-    """用 Shopify 的真实状态对账本地记录。
+@app.post("/api/sync/run", response_model=SyncReportOut)
+async def sync_run() -> SyncReportOut:
+    """把线上状态同步回本地：先拉未来排期，再对账已知对象。
 
-    本地只记平台自己排期/发布的内容（用户要求「只存平台自己发布的 和未来的，
-    过去的通通不记录」），所以这里只需要核对这批对象的 GID，不拉全量历史。
+    为什么是两步：
 
-    要解决的三种偏差：
-      - 排期到点后 Shopify 自己上线了，本地还停在 scheduled
-      - 人在后台改了时间 / 标题 / handle
-      - 人在后台把还没到点的对象删了 —— 本地必须知道，否则用户会以为它还会发
+    1. **拉未来排期** —— 排期不是平台独有的事。内容可能是在 Shopify 后台、
+       或别的工具排上去的（实测店铺里就有 172 条这样的页面）。不拉进来，
+       仪表盘的「排期全景」就是残缺的：用户明明排了 100 多条，界面写 0。
+       只拉 `published_status:unpublished` 且时间在未来的，**一次请求**，
+       不碰店铺既有的已发布历史。
+
+    2. **对账已知对象** —— 按本地记录的 GID 直查，纠正三种偏差：
+       排期到点后 Shopify 自己上线了（本地还停在 scheduled）、
+       人在后台改了时间/标题/handle、人在后台把还没到点的对象删了。
+
+    合起来的效果：本地库 = 「平台自己发过的」+「线上所有未来排期」，
+    不含店铺的历史内容（用户要求「过去的通通不记录」）。
     """
-    report = await shopify_reconciler.reconcile()
-    if not report.error:
-        app_config.touch_sync_state("last_reconcile_at")
-    return ReconcileReportOut(**report.to_dict())
+    pull = await schedule_puller.pull()
+    if pull.error:
+        return SyncReportOut(error=pull.error)
+
+    reconcile = await shopify_reconciler.reconcile()
+    if reconcile.error:
+        return SyncReportOut(error=reconcile.error)
+
+    app_config.touch_sync_state("last_sync_at")
+
+    return SyncReportOut(
+        scheduledPulled=pull.upserted,
+        scheduledFound=pull.scheduled_found,
+        byChannel=pull.by_channel,
+        skipped=pull.skipped,
+        checked=reconcile.checked,
+        matched=reconcile.matched,
+        updated=reconcile.updated,
+        gone=reconcile.gone,
+    )
 
 
 @app.get("/api/theme/templates", response_model=TemplateList)

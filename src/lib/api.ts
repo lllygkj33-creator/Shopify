@@ -48,7 +48,7 @@ import type {
   PublishResult,
   SettingsUpdatePayload,
   TimelineBar,
-  ReconcileReport,
+  SyncReport,
   SyncStatus,
 } from '@/types/content'
 import { mockApi } from './mock-api'
@@ -390,13 +390,14 @@ export const historyApi = {
 /**
  * 为什么需要这一组接口。
  *
- * 我们的定时发布是「不发布 + 未来 publishDate」，到点由 **Shopify 自己**把
- * isPublished 翻成 true —— 本地没有定时任务，服务没开也不会漏发，代价是
- * 线上发生的事本地不会自动知道。不对账，界面显示的状态就是假的：
- * 内容早发了还写「待发布」，或者人在后台删了对象而本地以为它还会发。
- *
- * 只对账平台自己发过的对象（有 GID 的行），不拉店铺全量历史 ——
- * 所以对账成本不随店铺历史增长。
+ * 两件事：
+ *  1. **拉未来排期** —— 排期可能是在 Shopify 后台或别的工具排的，平台未必知道。
+ *     只拉 `published_status:unpublished` 且时间在未来的，一次请求，
+ *     不碰店铺既有的已发布历史。
+ *  2. **对账已知对象** —— 我们的定时发布是「不发布 + 未来 publishDate」，
+ *     到点由 **Shopify 自己**上线。本地没有定时任务（服务没开也不会漏发），
+ *     代价是线上发生的事本地不会自动知道。不对账，界面显示的状态就是假的：
+ *     内容早发了还写「待发布」，或者人在后台删了对象而本地以为它还会发。
  */
 export const syncApi = {
   status(): Promise<SyncStatus> {
@@ -404,8 +405,18 @@ export const syncApi = {
     return get<SyncStatus>('/api/sync/status')
   },
 
-  reconcile(): Promise<ReconcileReport> {
-    if (USE_MOCK) return mockDelay(mockApi.syncReconcile(), 900)
-    return send<ReconcileReport>('post', '/api/sync/reconcile')
+  /**
+   * 同步线上状态：拉未来排期 + 对账已知对象。
+   *
+   * 为什么需要「拉排期」这一步：排期不是平台独有的事 —— 内容可能是在
+   * Shopify 后台、或别的工具排上去的（实测店铺里有 172 条这样的页面）。
+   * 不拉进来，仪表盘的排期全景就是残缺的：用户明明排了 100 多条，界面写 0。
+   *
+   * 幂等：按 GID 优先匹配，重复同步只更新不新增，也不会给平台自己发过的
+   * 对象造出第二行。
+   */
+  run(): Promise<SyncReport> {
+    if (USE_MOCK) return mockDelay(mockApi.syncRun(), 900)
+    return send<SyncReport>('post', '/api/sync/run')
   },
 }

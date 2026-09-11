@@ -317,6 +317,71 @@ def test_时间格式不同不算改动():
     assert normalize_iso("") is None
 
 
+async def test_排期项不会把未来时间写进published_at(store):
+    """Shopify 对未发布的排期项也会返回一个未来的 publishedAt。
+
+    直接写进 published_at 有两个后果：时间轴把它显示成「已发布」；
+    与拉取写入的 None 冲突，导致每次对账都报「更新了 N 条」。
+    """
+    store.upsert(platform_row())
+    client = FakeClient(
+        nodes={
+            "gid://shopify/Page/9": node(
+                "gid://shopify/Page/9",
+                is_published=False,
+                published_at="2026-09-11T13:00:00Z",
+                # handle/title 要和本行一致，否则算的是「改了标题」而不是我们要测的事
+                handle="discord",
+                title="Discord 社群页",
+            )
+        }
+    )
+
+    report = await ShopifyReconciler(client=client, store=store).reconcile()
+
+    assert report.updated == 0
+    row = store.list_contents()[0]
+    assert row["published_at"] is None
+    assert row["scheduled_at"] is not None
+
+
+async def test_拉取后立刻对账不应报出任何更新(store):
+    """跨模块的一致性：拉取写进去的行，紧接着对账必须认为它是对的。
+
+    这两个模块各写各的字段，很容易对同一个「排期」给出不同表示
+    （谁写 published_at、谁写 scheduled_at）。这条用例把它们钉在一起。
+    """
+    from app.shopify.schedule_pull import SchedulePuller
+    from tests.test_schedule_pull import FakeClient as PullFakeClient
+    from tests.test_schedule_pull import page as pull_page
+
+    future = "2026-09-11T15:59:00Z"
+    await SchedulePuller(
+        client=PullFakeClient(pages=[pull_page("9", handle="discord", published_at=future)]),
+        store=store,
+    ).pull()
+
+    assert len(store.list_contents()) == 1
+
+    report = await ShopifyReconciler(
+        client=FakeClient(
+            nodes={
+                "gid://shopify/Page/9": node(
+                    "gid://shopify/Page/9",
+                    is_published=False,
+                    published_at=future,
+                    handle="discord",
+                )
+            }
+        ),
+        store=store,
+    ).reconcile()
+
+    assert report.checked == 1
+    assert report.matched == 1
+    assert report.updated == 0, "拉取与对账对同一个排期项的表示必须一致"
+
+
 def test_report_dict_shape():
     from app.shopify.reconcile import ReconcileReport
 
