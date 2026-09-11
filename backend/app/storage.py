@@ -157,7 +157,9 @@ class ContentStore:
 
         return _row_to_dict(row) if row else {}
 
-    def upsert_remote(self, record: dict[str, Any]) -> dict[str, Any]:
+    def upsert_remote(
+        self, record: dict[str, Any], *, keep_existing_provenance: bool = True
+    ) -> dict[str, Any]:
         """写入一条从 Shopify 拉回来的记录。
 
         **按 GID 优先匹配**，而不是只看 publish_key —— 否则会出现同一对象两行：
@@ -174,12 +176,17 @@ class ContentStore:
             existing = self.find_by_gid(str(gid))
             if existing is not None:
                 merged = {**record, "publish_key": existing["publish_key"]}
-                # 已有行的来源信息**优先**（不是 setdefault）：平台自己发布的行
-                # 记着「哪个 JSON 的第几条」，这比拉回来的 shopify-schedule 具体得多，
-                # 不能被覆盖掉 —— 否则用户在界面上看不到这条内容的出处。
-                for field in ("source_file", "source_index", "mode"):
-                    if existing.get(field) not in (None, ""):
-                        merged[field] = existing[field]
+                # 来源信息谁更具体，**取决于谁在写**：
+                #   - 同步拉取时已有行更具体（平台记着「哪个 JSON 的第几条」），
+                #     不能被 shopify-schedule 覆盖掉，否则界面上看不到出处
+                #   - 平台发布时相反：来写的这条才是带 JSON 出处的那个
+                # publish_key 一律沿用已有行的：换了它就不匹配任何行，upsert 会变成
+                # INSERT —— 同一个线上对象就出现两行了。GID 才是这里的身份。
+                if keep_existing_provenance:
+                    for field in ("source_file", "source_index", "mode"):
+                        if existing.get(field) not in (None, ""):
+                            merged[field] = existing[field]
+                # 否则保留 record 自己的来源信息（平台发布那条带 JSON 出处，更具体）
                 return self.upsert(merged)
 
         return self.upsert(record)

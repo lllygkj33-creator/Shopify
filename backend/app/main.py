@@ -14,7 +14,9 @@ from datetime import datetime, timezone
 import logging
 from typing import Any
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import JSONResponse
+from starlette.middleware.base import BaseHTTPMiddleware
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
@@ -127,6 +129,34 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+class ErrorCatchMiddleware(BaseHTTPMiddleware):
+    """未预期的异常也返回 JSON，而不是裸 500。
+
+    为什么不能只用 `@app.exception_handler(Exception)`：Starlette 把 Exception
+    处理器放进最外层的 ServerErrorMiddleware，而它在 CORSMiddleware **外面** ——
+    它产生的 500 不带 CORS 头，浏览器直接当成跨域失败，前端只能显示
+    「无法连接后端」，真实原因（哪个异常、哪一行）全被吞掉。实测确认过。
+    这个中间件注册在 CORS 之内，响应会经过 CORS 补上头，界面就能看到真实错误。
+    """
+
+    async def dispatch(self, request: Request, call_next):
+        try:
+            return await call_next(request)
+        except Exception as error:  # noqa: BLE001 - 兜底，见类注释
+            logging.exception(
+                "未处理的异常：%s %s", request.method, request.url.path
+            )
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "detail": f"平台内部错误（{type(error).__name__}）：{error}"
+                },
+            )
+
+
+# 注意顺序：Starlette 的 add_middleware 是 insert(0)，所以**先 add 的在外层**。
+# 这里先 add 错误兜底、后 add CORS，CORS 才是最外层（能给 500 补上 CORS 头）。
+app.add_middleware(ErrorCatchMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=app_config.env.cors_origins,
@@ -1211,7 +1241,14 @@ async def publish(payload: PublishRequest) -> PublishResponse:
                 )
             )
 
-        except (PublishError, ShopifyError) as error:
+        except Exception as error:  # noqa: BLE001
+            # 同页面分支：兜住所有异常，避免一条出错整批 500
+            if isinstance(error, (PublishError, ShopifyError)):
+                message = str(error)
+            else:
+                logging.exception("文章发布出现未预期的错误：%s", item.title)
+                message = f"平台内部错误（{type(error).__name__}）：{error}"
+
             record_publish_result(
                 {
                     "status": "failed",
@@ -1252,7 +1289,7 @@ async def publish(payload: PublishRequest) -> PublishResponse:
                     candidateTempId=item.candidateTempId,
                     status="failed",
                     title=item.title or item.handle or "(未命名)",
-                    error=str(error),
+                    error=message,
                 )
             )
 
@@ -1290,7 +1327,10 @@ def _persist(record: dict[str, Any]) -> None:
     但要留下痕迹 —— 否则仪表盘会静默变空。
     """
     try:
-        store.upsert(record)
+        # 按 GID 优先匹配：同一个线上对象可能先被同步拉进来（shopify-schedule|…），
+        # 平台再发布/更新它时必须落到**同一行**，否则列表里会出现两条一样的
+        # （实测：用户重传已排期的内容就会撞上）。
+        store.upsert_remote(record, keep_existing_provenance=False)
     except Exception as error:  # pragma: no cover - 只在磁盘/权限异常时触发
         logging.warning("写入内容库失败：%s｜记录：%s", error, record.get("publish_key"))
 
@@ -1396,6 +1436,11 @@ async def _publish_page(item: PublishItemIn, now: datetime) -> PublishResultItem
             }
         )
 
+        # 前台 URL 必须在落库**之前**算好：下面的 _persist 就要用它。
+        # 原来这行写在 _persist 之后 —— 草稿走 `None if draft` 分支所以没暴露，
+        # 非草稿一发布就 UnboundLocalError，整个批次 500。
+        public_url = full_page_url(payload_page.handle)
+
         _persist(
             {
                 "channel_id": item.channelId,
@@ -1421,8 +1466,6 @@ async def _publish_page(item: PublishItemIn, now: datetime) -> PublishResultItem
                 "mode": item.mode,
             }
         )
-
-        public_url = full_page_url(payload_page.handle)
 
         # 可选反链：页面发布成功后，往一篇已有博客文章追加幂等上下文反链。
         # 反链失败不回滚页面（页面本身是成功的），但要把原因报出来。
@@ -1463,7 +1506,17 @@ async def _publish_page(item: PublishItemIn, now: datetime) -> PublishResultItem
             backlinkError=backlink_error,
         )
 
-    except (PagePublishError, BacklinkError, ShopifyError) as error:
+    except Exception as error:  # noqa: BLE001
+        # 这里必须兜住**所有**异常，不能只列预期的那三种。
+        # 否则代码 bug（例如 UnboundLocalError）会穿透出整个发布循环 ——
+        # 一条出错整批 500，浏览器因为 500 不带 CORS 头还会把它报成
+        # 「无法连接后端」，用户既看不到真实原因，也不知道另外几条压根没被尝试。
+        if isinstance(error, (PagePublishError, BacklinkError, ShopifyError)):
+            message = str(error)
+        else:
+            logging.exception("页面发布出现未预期的错误：%s", item.title)
+            message = f"平台内部错误（{type(error).__name__}）：{error}"
+
         record_publish_result(
             {
                 "status": "failed",
@@ -1471,7 +1524,7 @@ async def _publish_page(item: PublishItemIn, now: datetime) -> PublishResultItem
                 "channel_id": item.channelId,
                 "title": item.title,
                 "handle": item.handle,
-                "error": str(error),
+                "error": message,
                 "json_file": item.sourceFile,
                 "mode": item.mode,
             }
@@ -1488,7 +1541,7 @@ async def _publish_page(item: PublishItemIn, now: datetime) -> PublishResultItem
                 "meta_description": item.metaDescription,
                 "status": "failed",
                 "scheduled_at": item.scheduledAt,
-                "error": str(error),
+                "error": message,
                 "publish_key": item.publishKey,
                 "source_file": item.sourceFile,
                 "source_index": item.sourceIndex,
@@ -1499,7 +1552,7 @@ async def _publish_page(item: PublishItemIn, now: datetime) -> PublishResultItem
             candidateTempId=item.candidateTempId,
             status="failed",
             title=item.title or item.handle or "(未命名)",
-            error=str(error),
+            error=message,
         )
 
 
