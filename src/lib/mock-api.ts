@@ -12,6 +12,7 @@
 import { CHANNELS } from '@/config/channels'
 import { isoToWallTime, wallTimeToIso } from './datetime'
 import type {
+  BlogItem,
   ContentItem,
   ContentStatus,
   DashboardStats,
@@ -24,23 +25,56 @@ import type {
 const HOUR = 3600_000
 const DAY = 24 * HOUR
 
-/** 演示用的全局设置（token 只给掩码，永不含明文） */
-const MOCK_SETTINGS: GlobalSettings = {
-  shopDomain: 'your-store.myshopify.com',
-  apiVersion: '2026-04',
-  tokenSource: 'env',
-  accessTokenMasked: 'shpat_example****0000',
-  hasAccessToken: true,
-  envVarName: 'SHOPIFY_ACCESS_TOKEN',
-  defaultAuthor: 'Author Name',
-  defaultReviewers: ['Reviewer One', 'Reviewer Two'],
-  relatedProductTitles: [
-    'ZimaCube 2 Personal Cloud Home NAS',
-    'ZimaBoard 2 - Mini Home Server for Your Big Idea',
-  ],
-  defaultTimezone: 'America/Chicago',
-  defaultPublishTime: '09:30',
+/**
+ * 演示用的全局设置。
+ *
+ * token 用 `auto`（自动续期）模式演示，并给出一个「还剩约 20 小时」的假过期时间，
+ * 好让界面上的倒计时 / 状态标识能真实展示出来。
+ * 掩码形状与真实换取结果一致（shpat_ + 8 位 + **** + 4 位）。
+ */
+function buildMockSettings(): GlobalSettings {
+  const now = Date.now()
+  return {
+    shopDomain: 'your-store.myshopify.com',
+    apiVersion: '2026-04',
+    tokenSource: 'auto',
+    accessTokenMasked: 'shpat_0123****abcd',
+    hasAccessToken: true,
+    tokenExpiresAt: new Date(now + 20 * HOUR).toISOString(),
+    tokenExpiresInSeconds: 20 * 3600,
+    tokenScope:
+      'read_content,write_content,read_products,read_metaobjects,write_metaobjects',
+    tokenLastRefreshedAt: new Date(now - 4 * HOUR).toISOString(),
+    tokenNeverExpires: false,
+    tokenError: null,
+    hasClientCredentials: true,
+    clientId: '0123456789abcdef0123456789abcdef',
+    defaultAuthor: 'Author Name',
+    defaultReviewers: ['Reviewer One', 'Reviewer Two'],
+    relatedProductTitles: [
+      'ZimaCube 2 Personal Cloud Home NAS',
+      'ZimaBoard 2 - Mini Home Server for Your Big Idea',
+    ],
+    defaultTimezone: 'Asia/Shanghai',
+    defaultPublishTime: '09:30',
+  }
 }
+
+/**
+ * 演示用博客列表。
+ *
+ * 这是**从真实店铺查询到的实际数据**（blogs query，2026-09-11），
+ * 刻意保留真实值而不是编造：栏目映射核对功能的意义就在于暴露不一致。
+ */
+const MOCK_BLOGS: BlogItem[] = [
+  { id: 'gid://shopify/Blog/1', name: 'News', handle: 'news' },
+  { id: 'gid://shopify/Blog/2', name: 'Zima Campaign Hub', handle: 'zima-campaign-hub' },
+  { id: 'gid://shopify/Blog/3', name: 'Tech & AI HUB', handle: 'tech-ai-hub' },
+  { id: 'gid://shopify/Blog/4', name: 'Support & Tips', handle: 'support-tips' },
+  { id: 'gid://shopify/Blog/5', name: 'Product Comparisons', handle: 'product-comparisons' },
+  { id: 'gid://shopify/Blog/6', name: 'Buying Guide', handle: 'buying-guide' },
+  { id: 'gid://shopify/Blog/7', name: 'NAS & Server Setup', handle: 'nas-server-setup' },
+]
 
 type Seed = {
   channelId: string
@@ -188,7 +222,7 @@ const SEEDS: Seed[] = [
 
 /** 把 seed 变成完整的 ContentItem */
 function buildItems(now = Date.now()): ContentItem[] {
-  const tz = MOCK_SETTINGS.defaultTimezone
+  const tz = settings.defaultTimezone
 
   return SEEDS.map((seed, index) => {
     const channel = CHANNELS.find((c) => c.id === seed.channelId)
@@ -223,9 +257,9 @@ function buildItems(now = Date.now()): ContentItem[] {
       summary: '演示用摘要文本。',
       metaTitle: seed.title,
       metaDescription: '演示用 meta description。',
-      author: MOCK_SETTINGS.defaultAuthor,
-      reviewer: MOCK_SETTINGS.defaultReviewers[0],
-      relatedProducts: [MOCK_SETTINGS.relatedProductTitles[0]],
+      author: settings.defaultAuthor,
+      reviewer: settings.defaultReviewers[0],
+      relatedProducts: [settings.relatedProductTitles[0]],
       tags: [channel?.name ?? 'demo'],
       sourceFile: `/demo/${channel?.defaultFolder ?? 'unknown'}/demo-batch.json`,
       sourceIndex: index,
@@ -262,7 +296,7 @@ function buildItems(now = Date.now()): ContentItem[] {
 
 /** 内存态：模块级单例，模拟后端持久化 */
 let store: ContentItem[] | null = null
-let settings: GlobalSettings = { ...MOCK_SETTINGS }
+let settings: GlobalSettings = buildMockSettings()
 
 function ensureStore(): ContentItem[] {
   if (!store) store = buildItems()
@@ -271,7 +305,36 @@ function ensureStore(): ContentItem[] {
 
 export const mockApi = {
   getSettings(): GlobalSettings {
+    // 有效期按当前时间现算，避免页面挂久了显示成「已过期」
+    if (settings.tokenExpiresInSeconds != null) {
+      const lastRefreshed = settings.tokenLastRefreshedAt
+        ? new Date(settings.tokenLastRefreshedAt).getTime()
+        : Date.now()
+      const expiresAt = lastRefreshed + 24 * HOUR
+      return {
+        ...settings,
+        tokenExpiresAt: new Date(expiresAt).toISOString(),
+        tokenExpiresInSeconds: Math.max(0, Math.round((expiresAt - Date.now()) / 1000)),
+      }
+    }
     return { ...settings }
+  },
+
+  /** 模拟「立即换新」：把有效期重置为完整 24 小时 */
+  refreshToken(): GlobalSettings {
+    settings = {
+      ...settings,
+      accessTokenMasked: `shpat_${Math.random().toString(16).slice(2, 6)}****${Math.random().toString(16).slice(2, 6)}`,
+      tokenLastRefreshedAt: new Date().toISOString(),
+      tokenExpiresInSeconds: 24 * 3600,
+      tokenScope: settings.tokenScope,
+      tokenError: null,
+    }
+    return this.getSettings()
+  },
+
+  listBlogs(): BlogItem[] {
+    return MOCK_BLOGS
   },
 
   updateSettings(patch: Partial<GlobalSettings> & { accessToken?: string }) {

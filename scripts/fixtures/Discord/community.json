@@ -1,5 +1,7 @@
 {
   "title": "Discord Community Roundup",
+  "meta title": "Discord Community Roundup",
+  "meta description": "Monthly highlights from the ZimaSpace Discord community.",
   "url": "/pages/discord-community-roundup",
   "template": "discord-page",
   "published": true,

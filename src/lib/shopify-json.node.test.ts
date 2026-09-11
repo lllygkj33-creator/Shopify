@@ -77,6 +77,9 @@ describe('parseJsonContent —— 博客文章（数组 schema）', () => {
       {
         'blog title': 'Home AI Trust Boundary',
         url: 'home-ai-trust-boundary',
+        'meta title': 'MT',
+        'meta description': 'MD',
+        summary: 'S',
         html代码: `<article><h2>a</h2><h2>b</h2><h2>c</h2><h2>d</h2></article>`,
       },
     ])
@@ -84,7 +87,8 @@ describe('parseJsonContent —— 博客文章（数组 schema）', () => {
     const [candidate] = parseJsonContent(text, 'a.json', 'tech-ai-hub').candidates
 
     expect(candidate.channelId).toBe('tech-ai-hub')
-    expect(candidate.blogName).toBe('Tech & AI Hub')
+    // 注意：店铺里的标题就是大写 HUB（已与真实店铺核对）
+    expect(candidate.blogName).toBe('Tech & AI HUB')
     // 应给出提示而不是报错：发布仍可继续
     expect(candidate.publishable).toBe(true)
     expect(
@@ -111,12 +115,23 @@ describe('parseJsonContent —— 博客文章（数组 schema）', () => {
 
     expect(candidate.publishable).toBe(false)
     const messages = candidate.issues.filter((i) => i.level === 'error').map((i) => i.message)
-    expect(messages).toHaveLength(3)
+    // 6 个字段全部必填（脚本如此），这里只确认核心三条都在
+    expect(messages).toContain('缺少文章标题')
+    expect(messages).toContain('缺少文章 handle（url）')
+    expect(messages).toContain('缺少正文 HTML')
+    expect(messages.length).toBeGreaterThanOrEqual(3)
   })
 
   it('数组里单条异常不影响其他条目', () => {
     const text = JSON.stringify([
-      { 'blog title': 'Good', url: 'good', html代码: HTML_WITH_4_H2 },
+      {
+        'blog title': 'Good',
+        url: 'good',
+        'meta title': 'MT',
+        'meta description': 'MD',
+        summary: 'S',
+        html代码: HTML_WITH_4_H2,
+      },
       { 'blog title': 'Bad', url: 'bad', html代码: '' },
     ])
 
@@ -135,7 +150,9 @@ describe('parseJsonContent —— 页面（单对象 schema）', () => {
       url: '/pages/discord-community',
       template: 'discord-page',
       published: true,
-      html: '<div>hi</div>',
+      html: '<div><h2>hi</h2></div>',
+      'meta title': 'MT',
+      'meta description': 'MD',
       images: ['a.png'],
     })
 
@@ -165,7 +182,7 @@ describe('parseJsonContent —— 页面（单对象 schema）', () => {
 
     expect(candidate.handle).toBe('/pages/my-page')
     expect(
-      candidate.issues.some((issue) => issue.message.includes('已自动补全为「/pages/my-page」'))
+      candidate.issues.some((issue) => issue.message.includes('已按裸 handle 推断'))
     ).toBe(true)
   })
 
@@ -174,16 +191,19 @@ describe('parseJsonContent —— 页面（单对象 schema）', () => {
       title: 'X',
       url: 'products/my-page',
       template: 'user-story',
-      html: '<div/>',
-      images: ['a.png'],
+      'meta title': 'MT',
+      'meta description': 'MD',
+      html: '<div><h2>h</h2></div>',
     })
 
     const [candidate] = parseJsonContent(text, 'f.json').candidates
 
-    // 不擅自改写路径前缀，只补前导斜杠，并提醒确认
-    expect(candidate.handle).toBe('/products/my-page')
+    // 页面 API 只接受裸 handle，带斜杠的路径会被正则拒绝（脚本行为）
+    expect(candidate.publishable).toBe(false)
     expect(
-      candidate.issues.some((issue) => issue.message.includes('不在 /pages/ 下'))
+      candidate.issues.some((issue) =>
+        issue.message.includes('只能包含小写字母、数字和连字符')
+      )
     ).toBe(true)
   })
 
@@ -193,8 +213,9 @@ describe('parseJsonContent —— 页面（单对象 schema）', () => {
       url: '/pages/x',
       template: 'user-story',
       published: false,
-      html: '<div/>',
-      images: [],
+      html: '<div><h2>h</h2></div>',
+      'meta title': 'MT',
+      'meta description': 'MD',
     })
 
     const [candidate] = parseJsonContent(text, 'f.json').candidates
@@ -202,7 +223,6 @@ describe('parseJsonContent —— 页面（单对象 schema）', () => {
     expect(candidate.publishable).toBe(true)
     const warnings = candidate.issues.filter((i) => i.level === 'warning').map((i) => i.field)
     expect(warnings).toContain('published')
-    expect(warnings).toContain('images')
   })
 })
 
@@ -281,5 +301,291 @@ describe('resolveBlogName', () => {
 
   it('无 class 且无栏目兜底时来源为 none', () => {
     expect(resolveBlogName('<article></article>').source).toBe('none')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// 上传阶段校验：与发布脚本的硬规则对齐
+//
+// 这些规则原本只在「点发布」时才由后端脚本报错。搬到上传阶段后，
+// 用户能在选完文件夹的那一刻就看到问题。
+// ---------------------------------------------------------------------------
+
+const PAGE_HTML_OK =
+  '<div><h2>Setup</h2><p>x</p><img src="a.png" alt="图示" title="图示"><a href="https://e.com" title="链接">l</a></div>'
+
+const COMMUNITY_SOURCE = {
+  title: 'Prowlarr + Radarr on CasaOS',
+  url: 'https://community.zimaspace.com/t/prowlarr-radarr-casaos/1234',
+  excerpt: 'How I run them.',
+  author_name: 'someuser',
+  author_avatar_url: 'https://community.zimaspace.com/user_avatar/x/45.png',
+  author_profile_url: 'https://community.zimaspace.com/u/someuser',
+}
+
+function communityPage(overrides: Record<string, unknown> = {}) {
+  return JSON.stringify({
+    title: 'Prowlarr + Radarr on CasaOS',
+    'meta title': 'Prowlarr + Radarr on CasaOS',
+    td: 'A community guide.',
+    url: '/pages/001-prowlarr-radarr-casaos',
+    template: 'community_post',
+    html: PAGE_HTML_OK,
+    community_source: COMMUNITY_SOURCE,
+    ...overrides,
+  })
+}
+
+function errorsOf(candidate: { issues: { level: string; message: string }[] }) {
+  return candidate.issues.filter((i) => i.level === 'error').map((i) => i.message)
+}
+function warningsOf(candidate: { issues: { level: string; message: string }[] }) {
+  return candidate.issues.filter((i) => i.level === 'warning').map((i) => i.message)
+}
+
+describe('上传阶段校验 —— 博客文章', () => {
+  it('meta title / description / summary 都是必填（不再是提示）', () => {
+    const raw = JSON.stringify([
+      { 'blog title': 'T', url: 'a-b', html代码: HTML_WITH_4_H2 },
+    ])
+    const [candidate] = parseJsonContent(raw, 'f.json', 'tech-ai-hub').candidates
+
+    expect(candidate.publishable).toBe(false)
+    const errors = errorsOf(candidate)
+    expect(errors).toContainEqual(expect.stringContaining('meta title'))
+    expect(errors).toContainEqual(expect.stringContaining('meta description'))
+    expect(errors).toContainEqual(expect.stringContaining('summary'))
+  })
+
+  it('meta description 超过 160 字符报错', () => {
+    const raw = JSON.stringify([
+      {
+        'blog title': 'T',
+        url: 'a-b',
+        'meta title': 'MT',
+        'meta description': 'x'.repeat(161),
+        summary: 'S',
+        html代码: HTML_WITH_4_H2,
+      },
+    ])
+    const [candidate] = parseJsonContent(raw, 'f.json', 'tech-ai-hub').candidates
+
+    expect(candidate.publishable).toBe(false)
+    expect(errorsOf(candidate)).toContainEqual(
+      expect.stringContaining('超过 160 个字符')
+    )
+  })
+
+  it('summary 超过 160 字符报错', () => {
+    const raw = JSON.stringify([
+      {
+        'blog title': 'T',
+        url: 'a-b',
+        'meta title': 'MT',
+        'meta description': 'MD',
+        summary: 'y'.repeat(161),
+        html代码: HTML_WITH_4_H2,
+      },
+    ])
+    const [candidate] = parseJsonContent(raw, 'f.json', 'tech-ai-hub').candidates
+
+    expect(errorsOf(candidate)).toContainEqual(
+      expect.stringContaining('summary 超过 160')
+    )
+  })
+
+  it('恰好 160 字符可以通过', () => {
+    const raw = JSON.stringify([
+      {
+        'blog title': 'T',
+        url: 'a-b',
+        'meta title': 'MT',
+        'meta description': 'x'.repeat(160),
+        summary: 'y'.repeat(160),
+        html代码: HTML_WITH_4_H2,
+      },
+    ])
+    const [candidate] = parseJsonContent(raw, 'f.json', 'tech-ai-hub').candidates
+
+    expect(errorsOf(candidate)).toEqual([])
+  })
+
+  it('handle 含大写或下划线报错（脚本的正则只允许小写与连字符）', () => {
+    const raw = JSON.stringify([
+      {
+        'blog title': 'T',
+        url: 'Bad_Handle',
+        'meta title': 'MT',
+        'meta description': 'MD',
+        summary: 'S',
+        html代码: HTML_WITH_4_H2,
+      },
+    ])
+    const [candidate] = parseJsonContent(raw, 'f.json', 'tech-ai-hub').candidates
+
+    expect(candidate.publishable).toBe(false)
+    expect(errorsOf(candidate)).toContainEqual(
+      expect.stringContaining('只能包含小写字母、数字和连字符')
+    )
+  })
+})
+
+describe('上传阶段校验 —— 页面正文规则', () => {
+  it('合法社区页面可以通过', () => {
+    const [candidate] = parseJsonContent(communityPage(), 'Com/a.json').candidates
+
+    expect(candidate.channelId).toBe('community-post')
+    expect(candidate.publishable).toBe(true)
+    expect(candidate.issues).toEqual([])
+    // 展示用路径带 /pages/，但后端会剥成裸 handle
+    expect(candidate.handle).toBe('/pages/001-prowlarr-radarr-casaos')
+  })
+
+  it('正文含 <h1> 报错（H1 应由 page.title 输出）', () => {
+    const [candidate] = parseJsonContent(
+      communityPage({ html: '<div><h1>T</h1><h2>S</h2></div>' }),
+      'Com/a.json'
+    ).candidates
+
+    expect(errorsOf(candidate)).toContainEqual(expect.stringContaining('<h1>'))
+  })
+
+  it('正文没有 <h2> 报错', () => {
+    const [candidate] = parseJsonContent(
+      communityPage({ html: '<div><p>no heading</p></div>' }),
+      'Com/a.json'
+    ).candidates
+
+    expect(errorsOf(candidate)).toContainEqual(
+      expect.stringContaining('至少包含一个 <h2>')
+    )
+  })
+
+  it('图片缺 alt / title 报错', () => {
+    const [candidate] = parseJsonContent(
+      communityPage({ html: '<div><h2>S</h2><img src="a.png"></div>' }),
+      'Com/a.json'
+    ).candidates
+
+    const errors = errorsOf(candidate)
+    expect(errors).toContainEqual(expect.stringContaining('alt'))
+    expect(errors).toContainEqual(expect.stringContaining('title'))
+  })
+
+  it('链接缺 title 报错', () => {
+    const [candidate] = parseJsonContent(
+      communityPage({
+        html: '<div><h2>S</h2><a href="https://e.com">no title</a></div>',
+      }),
+      'Com/a.json'
+    ).candidates
+
+    expect(errorsOf(candidate)).toContainEqual(
+      expect.stringContaining('链接缺少非空 title')
+    )
+  })
+
+  it('template 与栏目不符报错', () => {
+    // 注意：改成已知模板（如 discord-page）会让解析器改判到那个栏目，
+    // 所以要用**未登记**的模板名，才会落到栏目兜底并触发不匹配
+    const [candidate] = parseJsonContent(
+      communityPage({ template: 'some-unknown-template' }),
+      'Com/a.json'
+    ).candidates
+
+    expect(candidate.publishable).toBe(false)
+    expect(errorsOf(candidate)).toContainEqual(
+      expect.stringContaining('必须是「community_post」')
+    )
+  })
+
+  it('meta description 支持脚本里的 td 键名', () => {
+    const [candidate] = parseJsonContent(
+      communityPage({ td: 'From td field' }),
+      'Com/a.json'
+    ).candidates
+
+    expect(candidate.metaDescription).toBe('From td field')
+  })
+
+  it('缺少 meta title 报错', () => {
+    const raw = JSON.parse(communityPage({ 'meta title': '' }))
+    const [candidate] = parseJsonContent(JSON.stringify(raw), 'Com/a.json').candidates
+
+    expect(errorsOf(candidate)).toContainEqual(
+      expect.stringContaining('meta title')
+    )
+  })
+})
+
+describe('上传阶段校验 —— 来源对象', () => {
+  it('缺少 community_source 报错', () => {
+    const raw = JSON.parse(communityPage())
+    delete raw.community_source
+    const [candidate] = parseJsonContent(JSON.stringify(raw), 'Com/a.json').candidates
+
+    expect(errorsOf(candidate)).toContainEqual(
+      expect.stringContaining('community_source')
+    )
+  })
+
+  it('来源缺字段逐条报错', () => {
+    const broken = { ...COMMUNITY_SOURCE, excerpt: '' }
+    delete (broken as Record<string, unknown>)['author_name']
+    const [candidate] = parseJsonContent(
+      communityPage({ community_source: broken }),
+      'Com/a.json'
+    ).candidates
+
+    const errors = errorsOf(candidate)
+    expect(errors).toContainEqual(expect.stringContaining('author_name'))
+    expect(errors).toContainEqual(expect.stringContaining('excerpt'))
+  })
+
+  it('来源 url 必须是社区主题链接', () => {
+    const [candidate] = parseJsonContent(
+      communityPage({
+        community_source: { ...COMMUNITY_SOURCE, url: 'https://example.com/t/x' },
+      }),
+      'Com/a.json'
+    ).candidates
+
+    expect(errorsOf(candidate)).toContainEqual(
+      expect.stringContaining('完整来源链接')
+    )
+  })
+
+  it('author_profile_url 必须是用户主页链接', () => {
+    const [candidate] = parseJsonContent(
+      communityPage({
+        community_source: {
+          ...COMMUNITY_SOURCE,
+          author_profile_url: 'https://example.com/u/x',
+        },
+      }),
+      'Com/a.json'
+    ).candidates
+
+    expect(errorsOf(candidate)).toContainEqual(
+      expect.stringContaining('用户主页链接')
+    )
+  })
+
+  it('规格未核对的栏目（discord）只给提示，不阻断', () => {
+    const raw = JSON.stringify({
+      title: 'D',
+      'meta title': 'D',
+      'meta description': 'MD',
+      url: '/pages/d',
+      template: 'discord-page',
+      html: PAGE_HTML_OK,
+    })
+    const [candidate] = parseJsonContent(raw, 'Discord/a.json').candidates
+
+    expect(candidate.channelId).toBe('discord')
+    expect(candidate.publishable).toBe(true)
+    expect(warningsOf(candidate)).toContainEqual(
+      expect.stringContaining('规格尚未核对')
+    )
   })
 })

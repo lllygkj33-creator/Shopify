@@ -1,13 +1,17 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { CheckCircle2, Eye, EyeOff, Loader2, Plug, Save } from 'lucide-react'
+import { Eye, EyeOff, Loader2, Plug, Save } from 'lucide-react'
 import { useForm, useWatch } from 'react-hook-form'
 import { toast } from 'sonner'
 import { z } from 'zod'
 import { settingsApi } from '@/lib/api'
 import { TIMEZONE_OPTIONS } from '@/lib/datetime'
-import type { ConnectionCheck } from '@/types/content'
+import {
+  TOKEN_SOURCE_META,
+  type ConnectionCheck,
+  type TokenSource,
+} from '@/types/content'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -32,6 +36,8 @@ import {
 import { Separator } from '@/components/ui/separator'
 import { Textarea } from '@/components/ui/textarea'
 import { Skeleton } from '@/components/ui/skeleton'
+import { ChannelMappingCheck } from './channel-mapping-check'
+import { TokenStatusPanel } from './token-status-panel'
 
 /**
  * 全局设置（PRD §4.5 Token 统一管理）
@@ -50,7 +56,7 @@ const schema = z.object({
     .min(1, '请填写店铺域名')
     .regex(/^[a-z0-9-]+\.myshopify\.com$/i, '格式应为 xxx.myshopify.com'),
   apiVersion: z.string().min(1, '请填写 API 版本'),
-  tokenSource: z.enum(['env', 'manual']),
+  tokenSource: z.enum(['auto', 'env', 'manual']),
   accessToken: z.string().optional(),
   defaultAuthor: z.string().min(1, '请填写默认作者'),
   defaultReviewers: z.string().optional(),
@@ -84,12 +90,12 @@ export function GlobalSettingsForm() {
     defaultValues: {
       shopDomain: '',
       apiVersion: '2026-04',
-      tokenSource: 'env',
+      tokenSource: 'auto',
       accessToken: '',
       defaultAuthor: 'ZimaSpace',
       defaultReviewers: '',
       relatedProductTitles: '',
-      defaultTimezone: 'America/Chicago',
+      defaultTimezone: 'Asia/Shanghai',
       defaultPublishTime: '09:30',
     },
   })
@@ -147,6 +153,16 @@ export function GlobalSettingsForm() {
   })
 
   // 用 useWatch 订阅单个字段，避免 form.watch() 让 React Compiler 跳过记忆化
+  const refresh = useMutation({
+    mutationFn: () => settingsApi.refreshToken(),
+    onSuccess: (next) => {
+      toast.success('已换新令牌')
+      queryClient.setQueryData(['settings'], next)
+      queryClient.invalidateQueries({ queryKey: ['settings'] })
+    },
+    onError: (error: Error) => toast.error(error.message),
+  })
+
   const tokenSource = useWatch({ control: form.control, name: 'tokenSource' })
 
   if (isLoading) {
@@ -218,6 +234,18 @@ export function GlobalSettingsForm() {
             </p>
           </div>
 
+          <Alert>
+            <AlertTitle className='text-xs'>
+              注意：自动换发的 token 只有约 24 小时有效期
+            </AlertTitle>
+            <AlertDescription className='text-xs'>
+              Shopify 的 <code>client_credentials</code> 换来的 shpat_ 令牌实测
+              86398 秒（24 小时）后失效。所以平台把它当作**派生凭据**而不是配置：
+              长期保存的是 CLIENT_ID / CLIENT_SECRET，access token 在内存里缓存并在
+              到期前自动续期。请优先使用「自动续期」。
+            </AlertDescription>
+          </Alert>
+
           <FormField
             control={form.control}
             name='tokenSource'
@@ -230,37 +258,48 @@ export function GlobalSettingsForm() {
                     onValueChange={field.onChange}
                     className='gap-3'
                   >
-                    <div className='flex items-start gap-3 rounded-md border p-3'>
-                      <RadioGroupItem value='env' id='token-env' className='mt-0.5' />
-                      <div className='space-y-1'>
-                        <label htmlFor='token-env' className='text-sm font-medium'>
-                          从环境变量读取（推荐）
-                        </label>
-                        <p className='text-xs text-muted-foreground'>
-                          读取项目根目录 <code>.env</code> 中的{' '}
-                          <code>SHOPIFY_ACCESS_TOKEN</code>。Token 不落数据库、
-                          不进版本库，适合长期使用。
-                        </p>
-                      </div>
-                    </div>
-                    <div className='flex items-start gap-3 rounded-md border p-3'>
-                      <RadioGroupItem
-                        value='manual'
-                        id='token-manual'
-                        className='mt-0.5'
-                      />
-                      <div className='space-y-1'>
-                        <label
-                          htmlFor='token-manual'
-                          className='text-sm font-medium'
+                    {(['auto', 'env', 'manual'] as TokenSource[]).map((value) => {
+                      const meta = TOKEN_SOURCE_META[value]
+                      const disabled =
+                        value === 'auto' && data ? !data.hasClientCredentials : false
+                      return (
+                        <div
+                          key={value}
+                          className='flex items-start gap-3 rounded-md border p-3'
                         >
-                          在界面中手动输入
-                        </label>
-                        <p className='text-xs text-muted-foreground'>
-                          保存到本地加密配置文件，界面仅显示掩码。
-                        </p>
-                      </div>
-                    </div>
+                          <RadioGroupItem
+                            value={value}
+                            id={`token-${value}`}
+                            className='mt-0.5'
+                            disabled={disabled}
+                          />
+                          <div className='space-y-1'>
+                            <label
+                              htmlFor={`token-${value}`}
+                              className='flex items-center gap-2 text-sm font-medium'
+                            >
+                              {meta.label}
+                              {meta.autoRenew && (
+                                <Badge
+                                  variant='outline'
+                                  className='border-emerald-500/40 text-[10px] font-normal text-emerald-600'
+                                >
+                                  不会过期
+                                </Badge>
+                              )}
+                            </label>
+                            <p className='text-xs text-muted-foreground'>
+                              {meta.hint}
+                            </p>
+                            {disabled && (
+                              <p className='text-xs text-amber-600'>
+                                未检测到 CLIENT_ID / CLIENT_SECRET，请在 .env 中配置后重启后端。
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    })}
                   </RadioGroup>
                 </FormControl>
               </FormItem>
@@ -268,30 +307,12 @@ export function GlobalSettingsForm() {
           />
 
           {data && (
-            <div className='flex flex-wrap items-center gap-2 rounded-md border bg-muted/40 px-3 py-2 text-xs'>
-              <span className='text-muted-foreground'>当前生效：</span>
-              {data.hasAccessToken ? (
-                <>
-                  <Badge
-                    variant='outline'
-                    className='border-emerald-500/40 font-mono text-emerald-600'
-                  >
-                    <CheckCircle2 className='size-3' />
-                    {data.accessTokenMasked}
-                  </Badge>
-                  <span className='text-muted-foreground'>
-                    来源：
-                    {data.tokenSource === 'env'
-                      ? `环境变量 ${data.envVarName ?? 'SHOPIFY_ACCESS_TOKEN'}`
-                      : '手动配置'}
-                  </span>
-                </>
-              ) : (
-                <Badge variant='outline' className='border-amber-500/50 text-amber-600'>
-                  未配置 Token，无法发布
-                </Badge>
-              )}
-            </div>
+            <TokenStatusPanel
+              settings={data}
+              timezone={data.defaultTimezone}
+              refreshing={refresh.isPending}
+              onRefresh={() => refresh.mutate()}
+            />
           )}
 
           {tokenSource === 'manual' && (
@@ -326,8 +347,8 @@ export function GlobalSettingsForm() {
                     </div>
                   </FormControl>
                   <FormDescription>
-                    保存后不会再显示明文。若 token 已在仓库中出现过，建议在 Shopify
-                    后台重新签发。
+                    保存到本地 0600 权限文件，界面只显示掩码。若 token 已在仓库中出现过，
+                    建议在 Shopify 后台重新签发。
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -352,7 +373,9 @@ export function GlobalSettingsForm() {
             {check && (
               <span className='text-xs text-muted-foreground'>
                 {check.ok
-                  ? `店铺 ${check.shopName ?? ''} · 权限 ${check.scopes?.join(', ') || '未知'}`
+                  ? `店铺 ${check.shopName ?? ''}${check.shopDomain ? ` (${check.shopDomain})` : ''} · 权限 ${
+                      check.scopes?.join(', ') || '未知'
+                    }`
                   : `失败：${check.error}`}
               </span>
             )}
@@ -371,6 +394,21 @@ export function GlobalSettingsForm() {
               </AlertDescription>
             </Alert>
           )}
+        </section>
+
+        <Separator />
+
+        {/* ---------------- 栏目 → 博客映射自检 ---------------- */}
+        <section className='space-y-4'>
+          <div>
+            <h3 className='text-base font-medium'>栏目 → 博客映射自检</h3>
+            <p className='text-sm text-muted-foreground'>
+              把配置里的 blogName / blogHandle 与店铺实际数据逐条对比。
+              Shopify 侧的博客标题一旦被改，按标题匹配的发布器就会立刻失效，
+              所以这里提前暴露不一致。
+            </p>
+          </div>
+          <ChannelMappingCheck />
         </section>
 
         <Separator />

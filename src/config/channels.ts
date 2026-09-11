@@ -33,18 +33,57 @@ export type Channel = {
   /** 该栏目的主色，用于时间轴色块与状态标识 */
   color: string
   /**
-   * 博客文章专用：Shopify Blog 名称。
-   * GEO 的 find_blog_gid() 是按**名称**查 GID 的，不是按 handle。
+   * 博客文章专用：Shopify Blog 的**标题**。
+   *
+   * ⚠️ 下面的值都是在真实店铺上查询核对过的（blogs query，2026-09-11）。
+   * GEO 的 find_blog_gid() 用 `casefold()` 做**精确**标题匹配，匹配不上就直接
+   * 抛 RuntimeError，所以这些字符串必须与店铺一致。
+   *
+   * 已核对出的真实数据（handle → title）：
+   *   news                → News
+   *   zima-campaign-hub   → Zima Campaign Hub
+   *   tech-ai-hub         → Tech & AI HUB      （HUB 是大写）
+   *   support-tips        → Support & Tips
+   *   product-comparisons → Product Comparisons（handle 是复数）
+   *   buying-guide        → Buying Guide       （单数 Guide，不是 Guides）
+   *   nas-server-setup    → NAS & Server Setup （有 &）
    */
   blogName?: string
-  /** 博客文章专用：URL 展示用的 blog handle（/blogs/<handle>/<article>） */
+  /**
+   * 博客文章专用：URL 展示用的 blog handle（/blogs/<handle>/<article>）。
+   *
+   * 建议后端**优先按 handle 匹配**、标题匹配作为兜底：
+   * handle 在 Shopify 里是稳定且 URL 安全的，标题随时可能被运营改掉，
+   * 而标题一旦被改，按标题匹配的发布器就会立刻失效。
+   */
   blogHandle?: string
   /** 博客文章专用：正文根节点 class 兜底值（zima-<x>-article） */
   htmlClass?: string
   /** 页面专用：期望的模板后缀（JSON 内的 template 优先） */
   template?: string
-  /** 页面专用：JSON 内来源信息的键名前缀，如 com_source */
+  /** 页面专用：JSON 内来源信息的键名，如 community_source */
   sourceKey?: string
+  /** 页面专用：发布规格，用于上传阶段的即时校验 */
+  pageSpec?: PageSpec
+}
+
+/**
+ * 页面栏目的发布规格。
+ *
+ * 这些规则原本只在发布时才由后端脚本报错；放在这里是为了让用户**上传时就**
+ * 看到问题，而不是点了「发布 N 篇」才逐条失败。
+ */
+export type PageSpec = {
+  /** 要求的 templateSuffix，与 JSON 不一致即报错 */
+  template: string
+  /** 来源 metafield 的 key（namespace = custom） */
+  sourceKey: string
+  /** 来源对象里必须存在的字段；为空表示规格尚未核对，不做强校验 */
+  sourceFields?: string[]
+  sourceUrlPrefix?: string
+  authorProfileUrlPrefix?: string
+  /** 规格是否已对照真实发布脚本核对过 */
+  verified: boolean
 }
 
 /** 10 个内容栏目，顺序即菜单顺序（§3.2） */
@@ -55,7 +94,7 @@ export const CHANNELS: Channel[] = [
     defaultFolder: 'tech-ai-hub',
     contentType: 'blog_article',
     color: '#6366f1',
-    blogName: 'Tech & AI Hub',
+    blogName: 'Tech & AI HUB',
     blogHandle: 'tech-ai-hub',
     htmlClass: 'zima-tech-ai-hub-article',
   },
@@ -75,7 +114,7 @@ export const CHANNELS: Channel[] = [
     defaultFolder: 'nas-server-setup',
     contentType: 'blog_article',
     color: '#14b8a6',
-    blogName: 'NAS Server Setup',
+    blogName: 'NAS & Server Setup',
     blogHandle: 'nas-server-setup',
     htmlClass: 'zima-nas-server-setup-article',
   },
@@ -85,7 +124,7 @@ export const CHANNELS: Channel[] = [
     defaultFolder: 'buying-guide',
     contentType: 'blog_article',
     color: '#f59e0b',
-    blogName: 'Buying Guides',
+    blogName: 'Buying Guide',
     blogHandle: 'buying-guide',
     htmlClass: 'zima-buying-guide-article',
   },
@@ -96,7 +135,7 @@ export const CHANNELS: Channel[] = [
     contentType: 'blog_article',
     color: '#ec4899',
     blogName: 'Product Comparisons',
-    blogHandle: 'product-comparison',
+    blogHandle: 'product-comparisons',
     // 注意：class 用复数 comparisons，而文件夹是单数 comparison（GEO 实际如此）
     htmlClass: 'zima-product-comparisons-article',
   },
@@ -108,7 +147,24 @@ export const CHANNELS: Channel[] = [
     contentType: 'page',
     color: '#8b5cf6',
     template: 'community_post',
-    sourceKey: 'com_source',
+    // ✅ 已核对：真实脚本写的是 custom.community_source
+    sourceKey: 'community_source',
+    // ✅ 已对照 publish_community_pages.py 核对
+    pageSpec: {
+      template: 'community_post',
+      sourceKey: 'community_source',
+      sourceFields: [
+        'title',
+        'url',
+        'excerpt',
+        'author_name',
+        'author_avatar_url',
+        'author_profile_url',
+      ],
+      sourceUrlPrefix: 'https://community.zimaspace.com/t/',
+      authorProfileUrlPrefix: 'https://community.zimaspace.com/u/',
+      verified: true,
+    },
   },
   {
     id: 'discord',
@@ -119,6 +175,12 @@ export const CHANNELS: Channel[] = [
     color: '#5865f2',
     template: 'discord-page',
     sourceKey: 'discord_source',
+    // ⚠️ 规格来自 PRD，尚未用真实脚本核对 → 不做来源字段强校验
+    pageSpec: {
+      template: 'discord-page',
+      sourceKey: 'discord_source',
+      verified: false,
+    },
   },
   {
     id: 'user-story',
@@ -129,6 +191,11 @@ export const CHANNELS: Channel[] = [
     color: '#22c55e',
     template: 'user-story',
     sourceKey: 'user_source',
+    pageSpec: {
+      template: 'user-story',
+      sourceKey: 'user_source',
+      verified: false,
+    },
   },
   {
     id: 'vs',
@@ -139,6 +206,11 @@ export const CHANNELS: Channel[] = [
     color: '#ef4444',
     template: 'nas-a-vs-b',
     sourceKey: 'vs_source',
+    pageSpec: {
+      template: 'nas-a-vs-b',
+      sourceKey: 'vs_source',
+      verified: false,
+    },
   },
   {
     id: 'makerworld',
@@ -147,7 +219,12 @@ export const CHANNELS: Channel[] = [
     contentType: 'page',
     color: '#06b6d4',
     template: 'makerworld-page',
-    sourceKey: 'maker_source',
+    sourceKey: 'makerworld_source',
+    pageSpec: {
+      template: 'makerworld-page',
+      sourceKey: 'makerworld_source',
+      verified: false,
+    },
   },
 ]
 

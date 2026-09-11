@@ -213,19 +213,33 @@ try {
     console.log(`  · «${row.title}» | 目标：${row.target} | 校验：${row.check}`)
   }
   console.log(`发布按钮：${flowFacts.publishButton}`)
+  if (flowFacts.publishButton !== '发布 3 篇') {
+    problems.push(`发布按钮应统计 3 篇可发布内容，实际：${flowFacts.publishButton}`)
+  }
 
   // 断言：2 篇博客 + 1 个页面 = 3 行；且第一行正文无 class 时应回落到栏目默认博客
-  if (flowFacts.rowCount !== 3) {
-    problems.push(`上传 2 个 JSON 应解析出 3 条内容，实际 ${flowFacts.rowCount} 条`)
+  if (flowFacts.rowCount !== 4) {
+    problems.push(`上传 3 个 JSON 应解析出 4 条内容，实际 ${flowFacts.rowCount} 条`)
   }
-  if (!flowFacts.rows.some((r) => r.target.includes('Tech & AI Hub'))) {
-    problems.push('无 class 的正文没有回落到栏目默认博客 Tech & AI Hub')
+  // 注意用不区分大小写比较：店铺里的真实标题是 'Tech & AI HUB'（大写 HUB）
+  if (!flowFacts.rows.some((r) => r.target.toLowerCase().includes('tech & ai hub'))) {
+    problems.push('无 class 的正文没有回落到栏目默认博客 Tech & AI HUB')
   }
   if (!flowFacts.rows.some((r) => r.target.includes('discord-page'))) {
     problems.push('页面 JSON 没有识别出 template=discord-page')
   }
+  if (!flowFacts.rows.some((r) => r.target.includes('community_post'))) {
+    problems.push('社区页面 JSON 没有识别出 template=community_post')
+  }
   if (!flowFacts.rows.some((r) => r.check.includes('错误'))) {
     problems.push('只有 2 个 H2 且无占位符的内容应被判为错误，但没有标红')
+  }
+  // 社区页面（source 规格已核对）应当完全通过校验
+  const communityRow = flowFacts.rows.find((r) => r.target.includes('community_post'))
+  if (communityRow && !communityRow.check.includes('校验通过')) {
+    problems.push(
+      `社区页面应校验通过，实际：${communityRow.check}`
+    )
   }
 
   // 点发布，验证结果面板
@@ -251,6 +265,67 @@ try {
 }
 if (flowErrors.length > 0) problems.push(`上传流程 page errors: ${flowErrors.join(' | ')}`)
 await flow.close()
+
+// ===========================================================================
+// 设置页：令牌有效期可视 + 栏目 → 博客映射自检
+// ===========================================================================
+const settings = await context.newPage()
+const settingsErrors = []
+settings.on('pageerror', (error) => settingsErrors.push(error.message))
+try {
+  await settings.goto(`${BASE}/settings`, { waitUntil: 'networkidle' })
+  await settings.waitForSelector('text=访问 Token', { timeout: 10_000 })
+  // 演示数据有 350ms 的人为延迟，而它不是网络请求 —— networkidle 不会等它，
+  // 所以要显式等映射自检表渲染完成（加载完会显示「共 N 个博客栏目」）
+  await settings.waitForSelector('text=个博客栏目', { timeout: 10_000 })
+  await settings.waitForSelector('text=访问 Token', { timeout: 10_000 })
+
+  const facts = await settings.evaluate(() => {
+    const text = document.body.textContent ?? ''
+    const mappingRows = Array.from(document.querySelectorAll('tbody tr')).map(
+      (row) => {
+        const cells = Array.from(row.querySelectorAll('td')).map((c) =>
+          c.textContent.trim().replace(/\s+/g, ' ')
+        )
+        return cells
+      }
+    )
+    return {
+      hasRemaining: /剩余\s*\d+\s*(小时|分|天)/.test(text),
+      hasExpiryNote: text.includes('24 小时有效期'),
+      hasRefreshButton: text.includes('立即换新'),
+      hasMappingSection: text.includes('栏目 → 博客映射自检'),
+      mappingRows,
+    }
+  })
+
+  console.log('\n---------- 设置页核对 ----------')
+  console.log(`令牌剩余有效期可见：${facts.hasRemaining ? '是' : '否'}`)
+  console.log(`24 小时说明可见：${facts.hasExpiryNote ? '是' : '否'}`)
+  console.log(`「立即换新」按钮：${facts.hasRefreshButton ? '有' : '无'}`)
+  console.log(`映射自检表格：${facts.mappingRows.length} 行`)
+  for (const row of facts.mappingRows) {
+    console.log(`  · ${row[0]} | 配置 ${row[1]} / ${row[2]} | 实际 ${row[3]} | ${row[4]}`)
+  }
+
+  if (!facts.hasRemaining) problems.push('设置页没有显示令牌剩余有效期')
+  if (!facts.hasExpiryNote) problems.push('设置页没有提示 token 只有约 24 小时有效期')
+  if (!facts.hasRefreshButton) problems.push('设置页缺少「立即换新」按钮')
+  if (facts.mappingRows.length !== 5) {
+    problems.push(`映射自检应有 5 个博客栏目，实际 ${facts.mappingRows.length} 行`)
+  }
+  const broken = facts.mappingRows.filter((row) => row[4]?.includes('找不到'))
+  if (broken.length > 0) {
+    problems.push(
+      `映射自检发现 ${broken.length} 个栏目匹配不上：${broken.map((r) => r[0]).join('、')}`
+    )
+  }
+} catch (error) {
+  problems.push(`设置页核对: ${error.message}`)
+  console.log(`✗ 设置页核对失败：${error.message}`)
+}
+if (settingsErrors.length > 0) problems.push(`设置页 page errors: ${settingsErrors.join(' | ')}`)
+await settings.close()
 
 await browser.close()
 

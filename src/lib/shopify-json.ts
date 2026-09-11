@@ -169,6 +169,97 @@ export function resolveBlogName(
 // 校验
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// 发布脚本的硬性规则（放到上传阶段提前拦，避免点了发布才逐条失败）
+// ---------------------------------------------------------------------------
+
+/** 文章 handle 必须严格匹配（脚本 normalize_handle 的正则） */
+const ARTICLE_HANDLE_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
+
+/** meta description 与 summary 的长度上限（脚本硬校验） */
+const META_TEXT_MAX_LENGTH = 160
+
+/**
+ * 页面正文的硬性规则（脚本 `validate_payload()` 逐条对应）：
+ *  - 禁用 `<h1>`：H1 由 page.title / Liquid 输出
+ *  - 必须至少有一个 `<h2>`
+ *  - 每个 `<img>` 必须同时有非空 `alt` 和 `title`
+ *  - 每个 `<a>` 必须有非空 `title`
+ */
+function checkPageHtmlRules(html: string): ValidationIssue[] {
+  const issues: ValidationIssue[] = []
+  if (!html) return issues
+
+  const lower = html.toLowerCase()
+
+  if (lower.includes('<h1')) {
+    issues.push({
+      level: 'error',
+      field: 'html',
+      message: '正文包含 <h1>；H1 应由 page.title / Liquid 输出，请改用 <h2>',
+    })
+  }
+
+  if (!lower.includes('<h2')) {
+    issues.push({
+      level: 'error',
+      field: 'html',
+      message: '正文必须至少包含一个 <h2> 章节',
+    })
+  }
+
+  const images = html.match(/<img\b[^>]*>/gi) ?? []
+  images.forEach((tag, index) => {
+    if (!/\balt\s*=\s*["'][^"']+["']/i.test(tag)) {
+      issues.push({
+        level: 'error',
+        field: 'html',
+        message: `第 ${index + 1} 张图片缺少非空 alt 属性`,
+      })
+    }
+    if (!/\btitle\s*=\s*["'][^"']+["']/i.test(tag)) {
+      issues.push({
+        level: 'error',
+        field: 'html',
+        message: `第 ${index + 1} 张图片缺少非空 title 属性`,
+      })
+    }
+  })
+
+  const anchors = html.match(/<a\b[^>]*>/gi) ?? []
+  anchors.forEach((tag, index) => {
+    if (!/\btitle\s*=\s*["'][^"']+["']/i.test(tag)) {
+      issues.push({
+        level: 'error',
+        field: 'html',
+        message: `第 ${index + 1} 个链接缺少非空 title 属性`,
+      })
+    }
+  })
+
+  return issues
+}
+
+/** 页面 handle：剥掉 /pages/ 前缀后的裸 handle（API 只接受裸 handle） */
+function normalizePageHandleBare(value: string): string {
+  let handle = value.trim()
+  if (!handle) return ''
+
+  if (/^https?:\/\//i.test(handle)) {
+    try {
+      handle = new URL(handle).pathname
+    } catch {
+      // 解析失败就按原字符串继续处理
+    }
+  }
+
+  handle = handle.split('?')[0].split('#')[0]
+  handle = handle.replace(/^\/+|\/+$/g, '')
+  if (handle.startsWith('pages/')) handle = handle.slice('pages/'.length)
+
+  return handle.replace(/^\/+|\/+$/g, '')
+}
+
 /**
  * 正文占位符规则（与 GEO 一致）：
  *  - 若正文已含 `[[related_products_1]]`，无需注入。
@@ -263,24 +354,49 @@ function normalizeBlogCandidate(
   if (!html)
     issues.push({ level: 'error', field: 'html代码', message: '缺少正文 HTML' })
 
+  // 脚本把这 6 个字段全部视为必填（缺一个就整体报错），所以这里是 error
   if (!metaTitle)
     issues.push({
-      level: 'warning',
+      level: 'error',
       field: 'meta title',
-      message: '缺少 meta title，将回退使用文章标题',
+      message: '缺少 meta title（发布必填）',
     })
   if (!metaDescription)
     issues.push({
-      level: 'warning',
+      level: 'error',
       field: 'meta description',
-      message: '缺少 meta description，会影响搜索摘要展示',
+      message: '缺少 meta description（发布必填）',
     })
   if (!summary)
     issues.push({
-      level: 'warning',
+      level: 'error',
       field: 'summary',
-      message: '缺少 summary，Shopify 列表页将无摘要',
+      message: '缺少 summary（发布必填）',
     })
+
+  if (metaDescription && metaDescription.length > META_TEXT_MAX_LENGTH) {
+    issues.push({
+      level: 'error',
+      field: 'meta description',
+      message: `meta description 超过 ${META_TEXT_MAX_LENGTH} 个字符，当前 ${metaDescription.length}`,
+    })
+  }
+  if (summary && summary.length > META_TEXT_MAX_LENGTH) {
+    issues.push({
+      level: 'error',
+      field: 'summary',
+      message: `summary 超过 ${META_TEXT_MAX_LENGTH} 个字符，当前 ${summary.length}`,
+    })
+  }
+
+  // handle 正则与脚本一致：大写、下划线、中文都会被 Shopify 侧拒绝
+  if (handle && !ARTICLE_HANDLE_PATTERN.test(handle)) {
+    issues.push({
+      level: 'error',
+      field: 'url',
+      message: `handle 只能包含小写字母、数字和连字符；当前值「${handle}」`,
+    })
+  }
 
   if (rawHandle && rawHandle.startsWith('/')) {
     issues.push({
@@ -363,79 +479,177 @@ function normalizePageCandidate(
 ): ParsedCandidate {
   const issues: ValidationIssue[] = []
 
-  const title = pick(raw, 'title', 'blog title') ?? ''
-  const html = pick(raw, 'html', 'html代码', 'body_html') ?? ''
-  const rawUrl = pick(raw, 'url', 'handle') ?? ''
-  const handle = normalizePageHandle(rawUrl)
-  const template = pick(raw, 'template', 'template_suffix')
+  const spec = channel?.pageSpec
+  const expectedTemplate = spec?.template ?? channel?.template
 
-  if (!title) issues.push({ level: 'error', field: 'title', message: '缺少页面标题' })
-  if (!handle)
+  const title = pick(raw, 'title', 'page_title', 'page title', 'blog title') ?? ''
+  const html =
+    pick(raw, 'html', 'html代码', 'body', 'body_html', 'HTML', 'content') ?? ''
+  const rawUrl = pick(raw, 'url', 'handle', 'page_url', 'page url') ?? ''
+
+  // 展示用 /pages/xxx；API 只接受裸 handle，所以两者都要有
+  const handle = normalizePageHandle(rawUrl)
+  const bareHandle = normalizePageHandleBare(rawUrl)
+
+  const template =
+    pick(raw, 'template_suffix', 'template', 'templateSuffix') ??
+    expectedTemplate ??
+    ''
+
+  const metaTitle =
+    pick(raw, 'meta title', 'meta_title', 'seo title', 'seo_title') ?? ''
+  // 脚本里 meta description 的首选键名是 'td'（历史遗留），保留以兼容既有 JSON
+  const metaDescription =
+    pick(
+      raw,
+      'td',
+      'meta description',
+      'meta_description',
+      'seo description',
+      'seo_description'
+    ) ?? ''
+
+  // ---- 必填字段（脚本 require_text，全部是硬错误） ----
+  if (!title) {
+    issues.push({ level: 'error', field: 'title', message: '缺少页面标题' })
+  }
+  if (!bareHandle) {
     issues.push({
       level: 'error',
       field: 'url',
       message: '缺少页面路径（url）',
     })
-  if (!html)
+  } else if (!ARTICLE_HANDLE_PATTERN.test(bareHandle)) {
+    issues.push({
+      level: 'error',
+      field: 'url',
+      message: `路径 handle 只能包含小写字母、数字和连字符；当前值「${bareHandle}」`,
+    })
+  }
+  if (!html) {
     issues.push({ level: 'error', field: 'html', message: '缺少页面正文 HTML' })
+  }
+  if (!metaTitle) {
+    issues.push({
+      level: 'error',
+      field: 'meta title',
+      message: '缺少 meta title（发布必填）',
+    })
+  }
+  if (!metaDescription) {
+    issues.push({
+      level: 'error',
+      field: 'td / meta description',
+      message: '缺少 meta description（发布必填）',
+    })
+  }
+  if (metaDescription && metaDescription.length > META_TEXT_MAX_LENGTH) {
+    issues.push({
+      level: 'error',
+      field: 'meta description',
+      message: `meta description 超过 ${META_TEXT_MAX_LENGTH} 个字符，当前 ${metaDescription.length}`,
+    })
+  }
 
+  // 只填了裸 handle 时给出提示（路径会被推断成 /pages/<handle>）
+  if (rawUrl && !rawUrl.startsWith('/') && !/^https?:\/\//i.test(rawUrl)) {
+    issues.push({
+      level: 'warning',
+      field: 'url',
+      message: `url 不是完整路径，已按裸 handle 推断为「${handle}」`,
+    })
+  }
+
+  // ---- 模板必须与栏目一致（脚本是硬错误） ----
   if (!template) {
     issues.push({
-      level: 'warning',
+      level: 'error',
       field: 'template',
-      message: channel?.template
-        ? `JSON 未提供 template，将使用栏目默认模板「${channel.template}」`
-        : 'JSON 未提供 template，页面将使用主题默认模板',
+      message: expectedTemplate
+        ? `缺少 template，该栏目要求「${expectedTemplate}」`
+        : '缺少 template，且该栏目未登记模板规格',
     })
-  } else if (channel?.template && template !== channel.template) {
+  } else if (expectedTemplate && template !== expectedTemplate) {
     issues.push({
-      level: 'warning',
+      level: 'error',
       field: 'template',
-      message: `JSON 模板「${template}」与栏目默认模板「${channel.template}」不同，将以 JSON 为准`,
+      message: `template 必须是「${expectedTemplate}」，当前为「${template}」`,
     })
   }
 
-  if (rawUrl && !rawUrl.startsWith('/')) {
+  // ---- 正文硬规则：禁 h1 / 必须有 h2 / img alt+title / a title ----
+  issues.push(...checkPageHtmlRules(html))
+
+  // ---- 来源对象（custom.<sourceKey> json metafield） ----
+  const rawSource = channel?.sourceKey ? raw[channel.sourceKey] : undefined
+  const source =
+    rawSource && typeof rawSource === 'object' && !Array.isArray(rawSource)
+      ? (rawSource as Record<string, unknown>)
+      : undefined
+
+  if (spec?.verified) {
+    if (!source) {
+      issues.push({
+        level: 'error',
+        field: spec.sourceKey,
+        message: `缺少 ${spec.sourceKey} 来源对象（发布必填）`,
+      })
+    } else {
+      for (const field of spec.sourceFields ?? []) {
+        const value = source[field]
+        if (typeof value !== 'string' || !value.trim()) {
+          issues.push({
+            level: 'error',
+            field: `${spec.sourceKey}.${field}`,
+            message: `${spec.sourceKey}.${field} 必须是非空字符串`,
+          })
+        }
+      }
+
+      const sourceUrl = source['url']
+      if (
+        spec.sourceUrlPrefix &&
+        typeof sourceUrl === 'string' &&
+        sourceUrl.trim() &&
+        !sourceUrl.startsWith(spec.sourceUrlPrefix)
+      ) {
+        issues.push({
+          level: 'error',
+          field: `${spec.sourceKey}.url`,
+          message: `必须是完整来源链接（${spec.sourceUrlPrefix}…）`,
+        })
+      }
+
+      const profileUrl = source['author_profile_url']
+      if (
+        spec.authorProfileUrlPrefix &&
+        typeof profileUrl === 'string' &&
+        profileUrl.trim() &&
+        !profileUrl.startsWith(spec.authorProfileUrlPrefix)
+      ) {
+        issues.push({
+          level: 'error',
+          field: `${spec.sourceKey}.author_profile_url`,
+          message: `必须使用用户主页链接（${spec.authorProfileUrlPrefix}…）`,
+        })
+      }
+    }
+  } else if (channel?.sourceKey && !source) {
     issues.push({
       level: 'warning',
-      field: 'url',
-      message: `页面 url 应为完整路径，已自动补全为「${handle}」`,
-    })
-  }
-  // 页面通常挂在 /pages/ 下；不在该前缀时提醒用户确认，但不擅自改写
-  if (handle && !handle.startsWith('/pages/')) {
-    issues.push({
-      level: 'warning',
-      field: 'url',
-      message: `路径「${handle}」不在 /pages/ 下，请确认这是期望的发布路径，否则请在 JSON 中填写完整的 /pages/xxx`,
+      field: channel.sourceKey,
+      message: `缺少 ${channel.sourceKey} 来源信息；该栏目规格尚未核对，此处只做提示`,
     })
   }
 
-  // 页面 schema 里 published 字段：true 表示上线，false 表示保持草稿
+  // 页面 schema 里 published 字段（脚本会解析，但不参与请求构造）
   const published = pickRaw(raw, 'published')
   if (published === false) {
     issues.push({
       level: 'warning',
       field: 'published',
-      message: 'JSON 中 published=false，该页面将作为未发布状态创建',
-    })
-  }
-
-  // 来源信息是否随 JSON 一起提交（用于页面模板渲染）
-  if (channel?.sourceKey && raw[channel.sourceKey] === undefined) {
-    issues.push({
-      level: 'warning',
-      field: channel.sourceKey,
-      message: `缺少 ${channel.sourceKey} 来源信息，页面模板可能渲染不出引用来源`,
-    })
-  }
-
-  const imageCount = Array.isArray(raw['images']) ? raw['images'].length : 0
-  if (imageCount === 0) {
-    issues.push({
-      level: 'warning',
-      field: 'images',
-      message: 'images 为空，页面可能缺少配图',
+      message:
+        'JSON 中 published=false；实际是否上线由你在发布时选择的「发布方式」决定',
     })
   }
 
@@ -447,13 +661,13 @@ function normalizePageCandidate(
     handle,
     template,
     bodyHtml: html,
-    summary: pick(raw, 'summary', 'meta description'),
-    metaTitle: pick(raw, 'meta title', 'meta_title', 'title'),
-    metaDescription: pick(raw, 'meta description', 'meta_description'),
+    summary: metaDescription,
+    metaTitle,
+    metaDescription,
     author: pick(raw, 'author'),
-    relatedProducts: toStringArray(
-      pickRaw(raw, 'related_products', 'related products')
-    ),
+    // 页面**不使用** related_products：参考脚本刻意不写 custom.related_products，
+    // 避免清掉页面上已有的商品列表 metafield（社区文章尤其不需要）
+    source,
     sourceFile: filePath,
     sourceIndex: index,
     publishKey: `${channelId}|${basename(filePath)}|${index}|${handle}`,

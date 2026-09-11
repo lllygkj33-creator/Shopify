@@ -4,18 +4,42 @@ ZimaSpace 的 **Shopify 内容托管发布平台**：本地选文件夹 → 上�
 
 取代原先「命令行脚本 + 日期文件夹命名 + 每个脚本各自硬编码 token」的做法。
 
-> 当前状态：**前端 UI 框架已完成（M1 全部 + M2/M3/M5 的界面部分）**，后端（FastAPI）待接入。
-> 后端未接入时默认跑内置演示数据，界面完全可点；接入后改一个环境变量即可切换。
+> 当前状态：**前端 UI 框架已完成**（M1 全部 + M2/M3/M5 的界面部分）；
+> **后端已完成「配置与令牌」链路**（连接自检、24 小时令牌自动续期、栏目映射核对），
+> 发布器 / 排期 / 历史记录等待后续接口代码。
+> 前端默认跑内置演示数据，界面完全可点；接入后端后改一个环境变量即可切换。
 
 ---
 
 ## 快速开始
+
+### 前端
 
 ```bash
 pnpm install
 cp .env.example .env      # 默认 VITE_USE_MOCK=true，无需后端即可运行
 pnpm dev                  # http://localhost:5173
 ```
+
+### 后端（FastAPI）
+
+需要 **Python 3.12**（系统自带的 3.9 太旧）。macOS 上还要注意 CA 证书问题，
+详见下面「已知环境问题」。
+
+```bash
+cd backend
+python3.12 -m venv .venv
+SSL_CERT_FILE=/etc/ssl/cert.pem .venv/bin/pip install -r requirements.txt
+.venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+```
+
+跑后端测试（34 个用例，全部用 mock transport，不触网）：
+
+```bash
+cd backend && .venv/bin/python -m pytest
+```
+
+前端切到真实后端：把 `.env` 里的 `VITE_USE_MOCK` 改成 `false`。
 
 其他命令：
 
@@ -143,6 +167,94 @@ PRD §4.3 写的是「由 `html代码` 里的 class 推断博客」。但核对�
 
 ---
 
+## 令牌模型：token 是「派生凭据」，不是配置
+
+这是整个后端最需要注意的一点。
+
+Shopify 的 `client_credentials` 流程换来的 `shpat_` 令牌**只有约 24 小时有效期**。
+实测结果（对真实店铺调用）：
+
+```
+有效期    : 86398 秒 = 24.0 小时
+掩码      : shpat_0123****abcd
+授权范围  : read_content, write_content, read_products,
+            read_metaobjects, write_metaobjects, read_files, ...
+```
+
+所以正确的层次是：
+
+```
+长期凭据   client_id + client_secret   →  不变，放 .env，是唯一需要长期保存的机密
+短期凭据   access_token (24h)          →  内存缓存 + 到期前自动续期，从不落盘
+```
+
+**如果把换来的 token 当固定配置存起来**（写进 `.env` 或数据库），就会变成
+「今天能用，明天某个不确定的时刻突然 401」—— 这是最难排查的一类故障，
+而且正好破坏 PRD 里「发布失败可追溯」的目标。
+
+### 三道保险（`backend/app/shopify/token.py`）
+
+| | 机制 | 作用 |
+|---|---|---|
+| 1 | **提前刷新** | 距过期不足 30 分钟就先换新的，而不是等请求失败 |
+| 2 | **并发去重** | `asyncio.Lock` 保证同时只有一个刷新请求，批量发布不会打爆换 token 接口 |
+| 3 | **401 自愈** | 万一还是撞上 401（时钟偏差、Shopify 提前作废），客户端会作废缓存 → 换新 → **重试原请求一次** |
+
+### 三种来源（`token_source`）
+
+| 值 | 含义 | 自动续期 |
+|---|---|---|
+| `auto` ★推荐 | client_credentials 换发 | ✅ 到期前自动换 |
+| `env` | `.env` 里的静态 token（仅适合不过期的自定义应用长期 token） | ❌ |
+| `manual` | 界面手动粘贴 | ❌（若是 24h token，次日就失效） |
+
+选 `env` / `manual` 时，设置页会明确告警「该来源不会自动续期」，
+并显示**剩余有效期倒计时**，避免用户不知道当前令牌已经悄悄失效。
+
+### 一个好消息：已排期文章不受 24 小时过期影响
+
+文章是提前提交给 Shopify 的（`isPublished: false` + 未来 `publishDate`），
+到点由 **Shopify 自己**上线 —— 这一步**不需要 token**。
+只有「现在就要发」和「状态回写」依赖令牌，而它们都有 401 自愈兜底。
+
+---
+
+## 排查记录：发现的两个真实问题
+
+### ① GEO 有两个栏目实际上根本发不出去 🔴
+
+`publish_articles.py` 的 `find_blog_gid()` 用 `casefold()` 做**精确标题匹配**，
+匹配不上直接 `raise RuntimeError`。而 `GEO/config.json` 里写的名称有两个与店铺实际不符：
+
+| 栏目 | `GEO/config.json` 写的 | 店铺实际 | 结果 |
+|---|---|---|---|
+| tech-ai-hub | `Tech & AI Hub` | `Tech & AI HUB` | ✅ casefold 能匹配（HUB 大小写差异） |
+| support-tips | `Support & Tips` | `Support & Tips` | ✅ |
+| product-comparison | `Product Comparisons` | `Product Comparisons` | ✅（但 handle 是复数 `product-comparisons`） |
+| **nas-server-setup** | `NAS Server Setup` | `NAS & Server Setup` | ❌ **发不出去** |
+| **buying-guide** | `Buying Guides` | `Buying Guide` | ❌ **发不出去** |
+
+本项目已把 `src/config/channels.ts` 改成**店铺实际值**（并保留 handle），
+同时在设置页加了「栏目 → 博客映射自检」，把「配置值 vs 店铺实际值」直接摆出来，
+让这类不一致在设置页就暴露，而不是等发布失败才发现。
+
+> 顺带一个建议：**优先按 `blogHandle` 匹配，标题匹配只作兜底**。
+> handle 在 Shopify 里稳定且 URL 安全；标题随时可能被运营改掉，
+> 而标题一改，按标题匹配的发布器就会立刻失效。
+
+### ② 参考代码里的凭据是硬编码的真实值 🔴
+
+你给的 token 参考代码、以及 `GEO/.env.example`、`geo_app/app_config.json`、
+`publish_articles.py` 里都出现了**明文真实凭据**（`shpat_` / `shpss_`）。
+
+本项目的处理：**任何位置都不写入明文**，只从 `.env` 读取（`.env` 已在 `.gitignore` 中）；
+接口只回传掩码；错误信息里的密钥会被自动替换（有测试覆盖）。
+`manual` 模式落盘的文件权限收紧到 `0600`。
+
+**仍建议在 Shopify 后台轮换 `client_id` / `client_secret`。**
+
+---
+
 ## 后端接口契约
 
 后端（FastAPI）按下列接口实现即可对接。完整注释见 `src/lib/api.ts`。
@@ -153,6 +265,7 @@ PRD §4.3 写的是「由 `html代码` 里的 class 推断博客」。但核对�
 | GET | `/api/settings` | `GlobalSettings` |
 | PUT | `/api/settings` | `GlobalSettings` |
 | POST | `/api/settings/verify` | `ConnectionCheck` |
+| POST | `/api/settings/token/refresh` | `GlobalSettings`（强制换新令牌） |
 | GET | `/api/blogs` | `{ id, name, handle }[]` |
 | GET | `/api/contents?channel_id=` | `ContentItem[]` |
 | GET | `/api/contents/timeline` | `TimelineBar[]` |
@@ -225,8 +338,9 @@ PRD §4.3 写的是「由 `html代码` 里的 class 推断博客」。但核对�
 | 发布时机靠日期文件夹决定 | 确实如此；新平台由 createdAt/publishDate 驱动，已脱离文件夹 |
 | Token 分散在各脚本 | 确实如此（且 `app_config.json` 里还是明文）；新平台收敛为一处 |
 
-默认值差异也已收敛：`GEO/config.json` 用 `America/Chicago`，`geo_app/app_config.json` 用
-`Asia/Shanghai` + 23:59 —— 新平台统一由设置页的「默认时区 / 默认发布时间」决定。
+默认值差异已收敛：`GEO/config.json` 用 `America/Chicago`，`geo_app/app_config.json` 用
+`Asia/Shanghai` + 23:59 —— 新平台**统一为 `Asia/Shanghai`**，这也与店铺实际的
+`shop.ianaTimezone`（实测 `Asia/Shanghai`）一致，避免排期时间出现 13~14 小时偏移。
 
 ### ⚠️ 安全提醒
 
@@ -241,18 +355,58 @@ PRD §4.3 写的是「由 `html代码` 里的 class 推断博客」。但核对�
 | | 内容 | 状态 |
 |---|---|---|
 | M1 | UI 骨架：侧边栏 + 布局 + 主题切换 | ✅ 完成 |
-| M2 | 全局设置页、Token 统一管理、环境变量读取 | ✅ 界面完成，待接后端 |
-| M3 | 栏目发布页：文件夹选择、JSON 解析预览、发布、历史 | ✅ 界面完成，待接后端 |
+| M2 | 全局设置页、Token 统一管理、环境变量读取 | ✅ **界面 + 后端令牌链路均完成**（24h 自动续期、401 自愈、映射自检） |
+| M3 | 栏目发布页：文件夹选择、JSON 解析预览、发布、历史 | ✅ **界面 + 发布接口**（博客/页面发布器、上传阶段校验） |
 | M4 | 调度引擎（状态回写 / 重试） | ⬜ 待后端 |
 | M5 | 仪表盘时间轴可视化 | ✅ 时间轴 + 状态 + 改期弹窗完成 |
 | M6 | 打磨：错误处理、部署打包 | ⬜ 进行中 |
 
 ### 下一步待确认 / 待办
 
-- [ ] 后端 FastAPI 实现（按上面的接口契约）
+- [x] 后端「配置与令牌」链路（`/api/health`、`/api/settings`、`/api/settings/verify`、
+      `/api/settings/token/refresh`、`/api/blogs`）
+- [ ] **两个统一发布器**：博客 `articleCreate`（移植 GEO）+ 页面 `pageCreate`（全新，含 `templateSuffix`）
+- [ ] 内容与排期的持久化（SQLite，替换当前的 `data/settings.json`）
+- [ ] 按 `publishKey` 幂等去重 + 发布历史
 - [ ] 时间轴拖拽改期（PRD 列为加分项，当前用精确时间输入替代）
 - [ ] 发布进度的逐条实时回传（当前为一次性返回；如需逐条可上 SSE）
-- [ ] Token 手动输入的本地加密存储方案（`cryptography` / keyring）
+- [ ] Token 手动输入的加密存储方案（`cryptography` / keyring，目前是 0600 明文文件）
+
+---
+
+## 已知环境问题
+
+### macOS：Python 的 CA 证书缺失
+
+python.org 的官方 Python 安装包**不配置任何可信 CA 根证书** ——
+`ssl.create_default_context()` 里是 **0 个 CA**，于是 pip / urllib / requests
+都会报 `CERTIFICATE_VERIFY_FAILED`。
+
+```bash
+# 装依赖时临时指定（因为 certifi 还没装上）
+SSL_CERT_FILE=/etc/ssl/cert.pem .venv/bin/pip install -r requirements.txt
+```
+
+装完 httpx 后 certifi 就位，后续请求走 certifi 不再受影响。
+`backend/app/ssl_fix.py` 做了统一兜底（优先 certifi，其次 `/etc/ssl/cert.pem`），
+`/api/health` 会返回当前生效的 CA 文件与默认上下文的 CA 数量，便于排查。
+这与 `GEO/geo_app/ssl_fix.py` 的处理一致。
+
+### pnpm 11 的构建脚本白名单
+
+pnpm 11 默认不执行依赖的 postinstall，esbuild 因此没有可执行文件、Vite 会起不来。
+本仓库用 `pnpm-workspace.yaml` 显式放行：
+
+```yaml
+allowBuilds:
+  esbuild: true
+```
+
+### 浏览器测试
+
+模板自带的 `vitest` 是 **browser 模式**，需要下载 Chromium 才能跑 `pnpm test`。
+纯逻辑测试不受影响（走 `vitest.node.config.ts`，node 环境）。
+UI 冒烟检查 `pnpm verify:ui` 复用本机已安装的 Google Chrome，不需要下载。
 
 ---
 

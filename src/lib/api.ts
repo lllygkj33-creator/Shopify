@@ -8,6 +8,7 @@
  * │ GET    /api/settings                  → GlobalSettings              │
  * │ PUT    /api/settings                  → GlobalSettings              │
  * │ POST   /api/settings/verify           → ConnectionCheck             │
+ * │ POST   /api/settings/token/refresh    → GlobalSettings（强制换新）   │
  * │ GET    /api/blogs                     → { id, name, handle }[]      │
  * │ GET    /api/contents?channel_id=      → ContentItem[]               │
  * │ GET    /api/contents/timeline         → TimelineBar[]               │
@@ -33,6 +34,7 @@
 
 import axios, { AxiosError } from 'axios'
 import type {
+  BlogItem,
   ConnectionCheck,
   ContentItem,
   DashboardStats,
@@ -152,6 +154,29 @@ export const settingsApi = {
     if (USE_MOCK) return mockDelay(mockApi.checkConnection(), 700)
     return send<ConnectionCheck>('post', '/api/settings/verify')
   },
+
+  /**
+   * 手动强制换新令牌。
+   *
+   * 存在的意义：client_credentials 换来的 token 只有约 24 小时有效期，
+   * 后端会在到期前自动续期；这个接口用于用户想「现在立刻换成新的」的场景
+   * （例如刚更新过 client_secret、或自检报 401 之后）。
+   */
+  refreshToken(): Promise<GlobalSettings> {
+    if (USE_MOCK) return mockDelay(mockApi.refreshToken(), 600)
+    return send<GlobalSettings>('post', '/api/settings/token/refresh')
+  },
+}
+
+// ---------------------------------------------------------------------------
+// 博客（用于核对「栏目 → Shopify Blog」映射）
+// ---------------------------------------------------------------------------
+
+export const blogsApi = {
+  list(): Promise<BlogItem[]> {
+    if (USE_MOCK) return mockDelay(mockApi.listBlogs())
+    return get<BlogItem[]>('/api/blogs')
+  },
 }
 
 // ---------------------------------------------------------------------------
@@ -244,6 +269,8 @@ export const publishApi = {
         reviewer: item.candidate.reviewer,
         relatedProducts: item.candidate.relatedProducts,
         tags: item.candidate.tags,
+        // 页面栏目的来源对象（custom.<key> json metafield）
+        source: item.candidate.source,
         sourceFile: item.candidate.sourceFile,
         sourceIndex: item.candidate.sourceIndex,
       })),

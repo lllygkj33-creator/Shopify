@@ -17,6 +17,7 @@ import {
   DEFAULT_TIMEZONE,
   defaultScheduleWallTime,
   formatTimezoneOffset,
+  isPastWallTime,
   wallTimeToIso,
 } from '@/lib/datetime'
 import { parseJsonContent } from '@/lib/shopify-json'
@@ -166,6 +167,16 @@ export function ChannelPage({ channel }: ChannelPageProps) {
       plans[candidate.tempId]?.mode === 'schedule' &&
       !plans[candidate.tempId]?.wallTime
   )
+
+  /** 定时时间已经过去的条目（后端与脚本都会拒绝） */
+  const scheduleInPast = publishableSelected.filter((candidate) => {
+    const plan = plans[candidate.tempId]
+    return (
+      plan?.mode === 'schedule' &&
+      Boolean(plan.wallTime) &&
+      isPastWallTime(plan.wallTime, timezone)
+    )
+  })
 
   const toggle = (tempId: string) => {
     setSelected((prev) => {
@@ -426,7 +437,8 @@ export function ChannelPage({ channel }: ChannelPageProps) {
                       disabled={
                         publish.isPending ||
                         publishableSelected.length === 0 ||
-                        scheduleMissing
+                        scheduleMissing ||
+                        scheduleInPast.length > 0
                       }
                     >
                       {publish.isPending ? (
@@ -443,6 +455,22 @@ export function ChannelPage({ channel }: ChannelPageProps) {
                         <AlertTitle>有定时发布的内容缺少时间</AlertTitle>
                         <AlertDescription>
                           请为每一篇「定时发布」的内容填写发布时间，或改用「立即发布」。
+                        </AlertDescription>
+                      </Alert>
+                    )}
+
+                    {scheduleInPast.length > 0 && (
+                      <Alert variant='destructive'>
+                        <AlertTitle>
+                          有 {scheduleInPast.length} 篇的发布时间已经过去
+                        </AlertTitle>
+                        <AlertDescription>
+                          为避免内容立即公开，Shopify 侧不接受已过去的时间。请改到未来时间，或改用「立即发布」。
+                          <span className='mt-1 block text-xs'>
+                            {scheduleInPast
+                              .map((candidate) => candidate.title)
+                              .join('、')}
+                          </span>
                         </AlertDescription>
                       </Alert>
                     )}

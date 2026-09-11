@@ -1,6 +1,10 @@
 import { AlertCircle, AlertTriangle } from 'lucide-react'
 import type { ParsedCandidate, PublishMode } from '@/types/content'
-import { formatTimezoneOffset, wallTimeToIso } from '@/lib/datetime'
+import {
+  formatTimezoneOffset,
+  isPastWallTime,
+  wallTimeToIso,
+} from '@/lib/datetime'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -193,9 +197,18 @@ export function CandidateList({
                           className='h-8 w-[200px]'
                         />
                         {plan.wallTime && (
-                          <p className='font-mono text-[10px] text-muted-foreground'>
-                            提交值 {wallTimeToIso(plan.wallTime, timezone)}
-                          </p>
+                          <>
+                            <p className='font-mono text-[10px] text-muted-foreground'>
+                              提交值 {wallTimeToIso(plan.wallTime, timezone)}
+                            </p>
+                            {isPastWallTime(plan.wallTime, timezone) && (
+                              // 后端与脚本都禁止已过去的时间（ALLOW_PAST_SCHEDULE=False），
+                              // 这里提前标出来，避免点了发布才失败
+                              <p className='text-[10px] font-medium text-destructive'>
+                                时间已过去，无法发布
+                              </p>
+                            )}
+                          </>
                         )}
                       </div>
                     )}

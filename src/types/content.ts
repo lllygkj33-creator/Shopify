@@ -158,6 +158,13 @@ export type ParsedCandidate = {
   relatedProducts?: string[]
   tags?: string[]
 
+  /**
+   * 页面栏目的来源对象（如 `community_source`），**整对象原样透传**给后端，
+   * 后端写成 `custom.<key>` 的 json 类型 metafield。
+   * 博客文章不使用该字段。
+   */
+  source?: Record<string, unknown>
+
   sourceFile: string
   sourceIndex: number
   publishKey: string
@@ -186,19 +193,71 @@ export type ParsedFile = {
 // 全局设置（§4.5 / §6 Setting）
 // ---------------------------------------------------------------------------
 
-/** Token 来源：环境变量 .env 或 UI 手动输入 */
-export type TokenSource = 'env' | 'manual'
+/**
+ * Token 来源。
+ *
+ * ★ 关键背景：Shopify 的 `client_credentials` 换发的 shpat_ **只有约 24 小时有效期**
+ *   （实测 86398 秒）。所以 token 不是「配置」，而是**派生凭据**：
+ *     长期凭据 = client_id + client_secret（不变）
+ *     短期凭据 = access_token（24h，需自动续期）
+ *
+ * - `auto`   client_credentials 自动换发 + 到期前自动续期（推荐）
+ * - `env`    .env 里的静态 token（仅适用于不过期的自定义应用长期 token）
+ * - `manual` 界面手动粘贴的 token（若是 24h token，第二天就会失效）
+ */
+export type TokenSource = 'auto' | 'env' | 'manual'
+
+export const TOKEN_SOURCE_META: Record<
+  TokenSource,
+  { label: string; autoRenew: boolean; hint: string; warning?: string }
+> = {
+  auto: {
+    label: '自动续期（推荐）',
+    autoRenew: true,
+    hint: '用 .env 里的 CLIENT_ID / CLIENT_SECRET 换发 token，到期前自动换新，不需要人工维护。',
+  },
+  env: {
+    label: '环境变量静态 token',
+    autoRenew: false,
+    hint: '读取 .env 里的 SHOPIFY_ACCESS_TOKEN。仅适合不过期的自定义应用长期 token。',
+    warning:
+      '静态 token 不会被自动续期。如果它是 client_credentials 换来的（24 小时有效），明天会突然 401，请改用「自动续期」。',
+  },
+  manual: {
+    label: '界面手动输入',
+    autoRenew: false,
+    hint: '粘贴一个 shpat_ token，保存在本地 0600 权限文件中，界面只显示掩码。',
+    warning:
+      '手动 token 不会被自动续期。若粘贴的是 24 小时有效期的 token，次日发布就会失败。',
+  },
+}
 
 export type GlobalSettings = {
   shopDomain: string
   apiVersion: string
   tokenSource: TokenSource
-  /** 只读的掩码值，后端返回，例如 shpat_example****0000。前端永不接触明文 */
-  accessTokenMasked?: string
-  /** 当前是否已解析到可用 token（env 或 manual 任一命中） */
+
+  /** 只读掩码，例如 shpat_0123****abcd。**前端永不接触明文** */
+  accessTokenMasked?: string | null
   hasAccessToken: boolean
-  /** env 来源时，实际命中的变量名，用于在 UI 上说明「token 来自哪里」 */
-  envVarName?: string
+
+  // --- 令牌有效期（24h token 的可观测性）---
+  /** 过期时刻（ISO）。auto 模式才有值 */
+  tokenExpiresAt?: string | null
+  /** 剩余秒数，由后端计算，避免前端时钟偏差 */
+  tokenExpiresInSeconds?: number | null
+  /** Shopify 实际授予的权限 */
+  tokenScope?: string | null
+  tokenLastRefreshedAt?: string | null
+  /** env 模式的静态 token 无从得知过期时间，标记为长期有效 */
+  tokenNeverExpires: boolean
+  tokenError?: string | null
+
+  // --- 凭据配置情况 ---
+  /** 是否已配置 CLIENT_ID / CLIENT_SECRET（auto 模式的前提） */
+  hasClientCredentials: boolean
+  /** client_id 不是机密，回显便于确认配的是哪个应用 */
+  clientId?: string | null
 
   defaultAuthor: string
   defaultReviewers: string[]
@@ -206,6 +265,13 @@ export type GlobalSettings = {
   relatedProductTitles: string[]
   defaultTimezone: string
   defaultPublishTime: string
+}
+
+/** GET /api/blogs 返回：用于核对「栏目 → Shopify Blog」映射 */
+export type BlogItem = {
+  id: string
+  name: string
+  handle: string
 }
 
 export type SettingsUpdatePayload = {
@@ -225,6 +291,7 @@ export type SettingsUpdatePayload = {
 export type ConnectionCheck = {
   ok: boolean
   shopName?: string
+  shopDomain?: string
   apiVersion?: string
   scopes?: string[]
   missingScopes?: string[]

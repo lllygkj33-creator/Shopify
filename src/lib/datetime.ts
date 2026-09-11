@@ -14,19 +14,18 @@
 
 /** 常用时区候选（覆盖 Zima 团队协作场景） */
 export const TIMEZONE_OPTIONS = [
-  { value: 'America/Chicago', label: 'America/Chicago（美国中部，UTC-6/-5）' },
+  { value: 'Asia/Shanghai', label: 'Asia/Shanghai（中国标准时间，UTC+8）— 默认' },
   { value: 'America/New_York', label: 'America/New_York（美国东部，UTC-5/-4）' },
   { value: 'America/Los_Angeles', label: 'America/Los_Angeles（美国西部，UTC-8/-7）' },
   { value: 'Europe/London', label: 'Europe/London（伦敦，UTC+0/+1）' },
   { value: 'Europe/Berlin', label: 'Europe/Berlin（柏林，UTC+1/+2）' },
-  { value: 'Asia/Shanghai', label: 'Asia/Shanghai（中国标准时间，UTC+8）' },
   { value: 'Asia/Tokyo', label: 'Asia/Tokyo（日本，UTC+9）' },
   { value: 'Asia/Singapore', label: 'Asia/Singapore（新加坡，UTC+8）' },
   { value: 'Australia/Sydney', label: 'Australia/Sydney（悉尼，UTC+10/+11）' },
   { value: 'UTC', label: 'UTC（协调世界时）' },
 ]
 
-export const DEFAULT_TIMEZONE = 'America/Chicago'
+export const DEFAULT_TIMEZONE = 'Asia/Shanghai'
 
 type Parts = {
   year: number
@@ -181,6 +180,21 @@ export function defaultScheduleWallTime(
     return `${bumped.getFullYear()}-${p(bumped.getMonth() + 1)}-${p(bumped.getDate())}T${p(bumped.getHours())}:00`
   }
   return `${datePart}T${String(hh).padStart(2, '0')}:${String(rounded).padStart(2, '0')}`
+}
+
+/**
+ * 墙上时间是否已经过去。
+ *
+ * 用于发布前拦截：后端与参考脚本都禁止把已过去的时间交给 Shopify
+ * （`ALLOW_PAST_SCHEDULE = False`），在这里提前标出来，避免点了发布才失败。
+ */
+export function isPastWallTime(wallTime: string, timeZone: string): boolean {
+  if (!wallTime) return false
+  try {
+    return zonedWallTimeToDate(wallTime, timeZone).getTime() <= Date.now()
+  } catch {
+    return false
+  }
 }
 
 /** 相对时间描述，用于历史记录 */
