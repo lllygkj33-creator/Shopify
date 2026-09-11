@@ -190,6 +190,29 @@ export type ParsedCandidate = {
   duplicateOf?: string
 }
 
+/**
+ * 排期变更同步到 Shopify 侧的结果。
+ *
+ * 拆出来是必要的：本地记录与 Shopify 侧可能不一致
+ * （例如本地想改期、但 Shopify 拒绝了），这时 `warning` 会说明。
+ */
+export type ScheduleSyncResult = {
+  /** 本地没有 Shopify 对象（如发布失败的条目）时为 false，跳过同步 */
+  attempted: boolean
+  ok: boolean
+  action: 'reschedule' | 'cancel' | string
+  publishedAt?: string | null
+  isPublished?: boolean | null
+  error?: string | null
+  warning?: string | null
+}
+
+/** 改期 / 取消排期的返回：本地记录 + Shopify 同步结果 */
+export type ContentScheduleResult = {
+  content: ContentItem
+  sync: ScheduleSyncResult
+}
+
 /** 后端权威校验的单条结果（POST /api/validate） */
 export type ValidateResultItem = {
   candidateTempId: string

@@ -29,8 +29,8 @@
 | **B3** | 刷新按钮 | 重新拉时间轴 | `GET /api/contents/timeline` ✅ |
 | **B4** | 「新建排期」下拉 | 列出 10 个栏目，选中后跳转到对应栏目页 | ⚪ 纯前端路由 |
 | **B5** | 点击时间轴色块 | 打开详情弹窗（标题、栏目、状态、路径、排期时间、失败原因） | ⚪ 用 B3 已拉到的数据 |
-| **B6** | 弹窗内「**保存**」（改期） | 校验 datetime，换算成带时区偏移的 ISO 后提交 | `PATCH /api/contents/{id}` ⚠️ **已声明未实现** |
-| **B7** | 弹窗内「**取消排期**」 | 二次确认后退回草稿（不删除已创建的内容） | `DELETE /api/contents/{id}/schedule` ⚠️ **已声明未实现** |
+| **B6** | 弹窗内「**保存**」（改期） | 校验 datetime，换算成带时区偏移的 ISO 后提交 | ✅ `PATCH /api/contents/{id}` —— **同时更新本地记录与 Shopify 侧对象的 publishDate** |
+| **B7** | 弹窗内「**取消排期**」 | 二次确认后退回草稿（不删除已创建的内容） | ✅ `DELETE /api/contents/{id}/schedule` —— **并尝试撤销 Shopify 侧的排期** |
 | **B8** | 弹窗内「打开栏目页」 | 跳转 `/channels/<id>` | ⚪ 纯前端 |
 | **B9** | 弹窗内「查看线上」 | 新窗口打开已发布 URL | ⚪ 纯前端外链 |
 
@@ -129,6 +129,33 @@ Shopify 侧留作**事实校验与回填**（下一步）：导入既有内容�
 
 见 `backend/app/storage.py`。库落在 `data/zima_shopify.db`（已在 `.gitignore` 中），
 可用环境变量 `DATABASE_PATH` 覆盖（测试就指向临时文件）。
+
+### 改期 / 取消排期：必须同时改 Shopify 侧
+
+只改本地记录是不够的，而且**取消排期更危险**：
+
+| 操作 | 只改本地的后果 |
+|---|---|
+| 改期 | Shopify 侧 `publishDate` 还是旧时间 → 内容按旧时间上线，与仪表盘不符 |
+| 取消排期 | 本地显示草稿，但 Shopify 侧 `publishDate` 仍在未来 → **到点照样自动上线**，用户以为取消成功了 |
+
+所以两个接口都会调用 Shopify（`articleUpdate` / `pageUpdate`，两个 input 的
+`publishDate` 与 `isPublished` 经 Introspection 确认都是可空的）：
+- 改期 → `publishDate` 推到新时间 + `isPublished: false`
+- 取消 → `isPublished: false` + 尝试把 `publishDate` 清空
+
+**关键：改完立刻读回校验**。因为「传 `null` 能否清空 `publishDate`」没法在不碰真实内容的
+前提下预先验证，所以不假设它成功 —— 读回来判断，结果通过 `sync` 字段如实返回：
+
+| 情况 | 行为 |
+|---|---|
+| 本地没有 Shopify 对象（如发布失败过） | `sync.attempted=false`，**状态保持原样**，界面提示「需重新发布才会生效」 |
+| 同步失败 | **不写本地**（否则本地新时间、线上旧时间，比直接报错难查得多） |
+| 取消时 `publishDate` 清不掉 | `sync.ok=false` + warning「仍会到点上线」，界面用 error 级提示，持续 10 秒 |
+
+其中一条是验证时发现的真问题：没有 Shopify 对象的条目改期后**不能**标成「待发布」——
+那样仪表盘会显示成待发布，但实际上没有任何东西会去发布它，状态就成了假话。
+现在这类条目保持原状态（failed 仍是 failed），只是记下新的意图时间。
 
 ### 两个前端模式
 

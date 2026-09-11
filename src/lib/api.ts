@@ -35,6 +35,7 @@
 import axios, { AxiosError } from 'axios'
 import type {
   BlogItem,
+  ContentScheduleResult,
   TemplateList,
   ConnectionCheck,
   ValidateResultItem,
@@ -228,16 +229,28 @@ export const contentApi = {
     return get<DashboardStats>('/api/contents/stats')
   },
 
-  /** 改期：把已排期内容移动到新的时间点 */
-  reschedule(id: string, scheduledAt: string): Promise<ContentItem> {
+  /**
+   * 改期：把已排期内容移动到新的时间点。
+   *
+   * 返回里除了内容本身还有 `sync` —— 后端会**同时**把新时间推到 Shopify 侧，
+   * 只改本地会导致线上按旧时间发布。
+   */
+  reschedule(id: string, scheduledAt: string): Promise<ContentScheduleResult> {
     if (USE_MOCK) return mockDelay(mockApi.reschedule(id, scheduledAt))
-    return send<ContentItem>('patch', `/api/contents/${id}`, { scheduledAt })
+    return send<ContentScheduleResult>('patch', `/api/contents/${id}`, {
+      scheduledAt,
+    })
   },
 
-  /** 取消排期：退回草稿，不会删除已创建的内容 */
-  cancelSchedule(id: string): Promise<ContentItem> {
+  /**
+   * 取消排期：退回草稿，不会删除已创建的内容。
+   *
+   * 后端会尝试撤销 Shopify 侧的排期；若撤不掉（publishDate 清不空），
+   * 会在 `sync.warning` 里说明 —— 那种情况下内容仍会到点上线。
+   */
+  cancelSchedule(id: string): Promise<ContentScheduleResult> {
     if (USE_MOCK) return mockDelay(mockApi.cancelSchedule(id))
-    return send<ContentItem>('delete', `/api/contents/${id}/schedule`)
+    return send<ContentScheduleResult>('delete', `/api/contents/${id}/schedule`)
   },
 }
 

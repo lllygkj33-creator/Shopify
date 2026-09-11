@@ -26,6 +26,7 @@ from .shopify.backlink import (
     load_backlink,
 )
 from .shopify.client import ShopifyError, shopify_client
+from .shopify.schedule_sync import SyncResult, schedule_sync
 from .shopify.templates import TemplateList, template_service
 from .shopify.vs_resources import ResourceInjectionError, inject_resources
 from .shopify.page_publisher import (
@@ -272,6 +273,30 @@ class HistoryEntryOut(BaseModel):
 
 class ContentScheduleUpdate(BaseModel):
     scheduledAt: str
+
+
+class ScheduleSyncOut(BaseModel):
+    """排期变更同步到 Shopify 侧的结果。"""
+
+    attempted: bool
+    ok: bool
+    action: str
+    publishedAt: str | None = None
+    isPublished: bool | None = None
+    error: str | None = None
+    warning: str | None = None
+
+
+class ContentScheduleResultOut(BaseModel):
+    """改期/取消排期的结果。
+
+    拆成两段是有意的：`content` 是本地记录，`sync` 是 Shopify 侧的同步结果。
+    两者可能不一致（例如本地已更新但 Shopify 拒绝了改动），
+    这时 `sync.warning` 会说明 —— 不把这种情况伪装成完全成功。
+    """
+
+    content: ContentItemOut
+    sync: ScheduleSyncOut
 
 
 class ValidateIssue(BaseModel):
@@ -624,38 +649,88 @@ async def publish_history(
     ]
 
 
-@app.patch("/api/contents/{content_id}", response_model=ContentItemOut)
+@app.patch("/api/contents/{content_id}", response_model=ContentScheduleResultOut)
 async def reschedule_content(
     content_id: int, payload: ContentScheduleUpdate
-) -> ContentItemOut:
-    """改期。
+) -> ContentScheduleResultOut:
+    """改期：更新本地记录，**并同步到 Shopify 侧**已创建的对象。
 
-    注意：这只更新**本地排期记录**。Shopify 侧已创建对象的 publishDate
-    需要另行走 GraphQL（见 docs/ui-actions.md 的数据流说明）。
+    只改本地是不够的 —— Shopify 侧对象的 publishDate 还是旧时间，
+    内容会按旧时间上线，与仪表盘显示的不一致。
     """
+    existing = store.get(content_id)
+    if existing is None:
+        raise HTTPException(status_code=404, detail=f"未找到内容 {content_id}")
+
     try:
         value = datetime.fromisoformat(payload.scheduledAt.replace("Z", "+00:00"))
     except ValueError as error:
         raise HTTPException(status_code=422, detail="scheduledAt 不是有效的 ISO 时间") from error
 
     if value.tzinfo is None:
+        raise HTTPException(status_code=422, detail="scheduledAt 必须带时区偏移")
+
+    if value <= datetime.now(timezone.utc):
+        # 与发布路径一致（脚本的 ALLOW_PAST_SCHEDULE=False）
         raise HTTPException(
-            status_code=422, detail="scheduledAt 必须带时区偏移"
+            status_code=422,
+            detail="改期时间必须晚于当前时间；若想立即上线，请用「立即发布」重新提交",
         )
 
-    row = store.update_schedule(content_id, value.isoformat())
+    sync_result = await schedule_sync.reschedule(
+        gid=existing.get("shopify_gid") or "",
+        kind=existing.get("shopify_kind") or "",
+        scheduled_at=value,
+    )
+
+    # 同步失败时**不写本地**：否则本地显示新时间、线上按旧时间发布，
+    # 这种不一致比直接报错难查得多。
+    if sync_result.attempted and not sync_result.ok:
+        return ContentScheduleResultOut(
+            content=_to_content_item(existing),
+            sync=ScheduleSyncOut(**sync_result.to_dict()),
+        )
+
+    # 只有真的推到了 Shopify 侧，才把它标成「待发布」。
+    # 没有 Shopify 对象时保持原状态 —— 否则会显示成待发布但无人发布。
+    row = store.update_schedule(
+        content_id, value.isoformat(), mark_scheduled=sync_result.attempted
+    )
     if row is None:
         raise HTTPException(status_code=404, detail=f"未找到内容 {content_id}")
-    return _to_content_item(row)
+
+    return ContentScheduleResultOut(
+        content=_to_content_item(row),
+        sync=ScheduleSyncOut(**sync_result.to_dict()),
+    )
 
 
-@app.delete("/api/contents/{content_id}/schedule", response_model=ContentItemOut)
-async def cancel_content_schedule(content_id: int) -> ContentItemOut:
-    """取消排期，退回草稿（Shopify 上的对象不会被删除）。"""
+@app.delete(
+    "/api/contents/{content_id}/schedule", response_model=ContentScheduleResultOut
+)
+async def cancel_content_schedule(content_id: int) -> ContentScheduleResultOut:
+    """取消排期：本地退回草稿，并尝试撤销 Shopify 侧的排期。
+
+    ⚠️ 这里必须尝试同步 Shopify —— 否则本地显示草稿，但 Shopify 侧
+    publishDate 仍在未来，**到点照样自动上线**，用户以为取消成功了。
+    """
+    existing = store.get(content_id)
+    if existing is None:
+        raise HTTPException(status_code=404, detail=f"未找到内容 {content_id}")
+
+    sync_result = await schedule_sync.cancel_schedule(
+        gid=existing.get("shopify_gid") or "",
+        kind=existing.get("shopify_kind") or "",
+    )
+
     row = store.cancel_schedule(content_id)
     if row is None:
         raise HTTPException(status_code=404, detail=f"未找到内容 {content_id}")
-    return _to_content_item(row)
+
+    return ContentScheduleResultOut(
+        content=_to_content_item(row),
+        sync=ScheduleSyncOut(**sync_result.to_dict()),
+    )
 
 
 @app.post("/api/validate", response_model=ValidateResponse)

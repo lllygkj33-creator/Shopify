@@ -200,15 +200,34 @@ class ContentStore:
 
         return _row_to_dict(row) if row else {}
 
-    def update_schedule(self, content_id: int, scheduled_at: str) -> dict[str, Any] | None:
+    def update_schedule(
+        self,
+        content_id: int,
+        scheduled_at: str,
+        *,
+        mark_scheduled: bool = True,
+    ) -> dict[str, Any] | None:
+        """改排期时间。
+
+        `mark_scheduled=False` 时**保持原状态**：用于「本地有记录但 Shopify 上
+        还没有对象」的条目（例如发布失败过的）。那种情况下若把它标成 scheduled，
+        仪表盘会显示成「待发布」，但实际上没有任何东西会去发布它 —— 状态就成了谎话。
+        """
+        if mark_scheduled:
+            assignment = "scheduled_at = ?, status = 'scheduled', error = NULL"
+            params: tuple[Any, ...] = (scheduled_at, _now(), content_id)
+        else:
+            assignment = "scheduled_at = ?"
+            params = (scheduled_at, _now(), content_id)
+
         with self._cursor() as cursor:
             cursor.execute(
-                """
+                f"""
                 UPDATE content
-                   SET scheduled_at = ?, status = 'scheduled', error = NULL, updated_at = ?
+                   SET {assignment}, updated_at = ?
                  WHERE id = ?
                 """,
-                (scheduled_at, _now(), content_id),
+                params,
             )
             if cursor.rowcount == 0:
                 return None

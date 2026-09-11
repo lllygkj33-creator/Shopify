@@ -93,8 +93,19 @@ function ScheduleDialogContent({
   const reschedule = useMutation({
     mutationFn: (payload: { id: string; scheduledAt: string }) =>
       contentApi.reschedule(payload.id, payload.scheduledAt),
-    onSuccess: () => {
-      toast.success('排期已更新')
+    onSuccess: (result) => {
+      // 本地记录与 Shopify 侧是两件事，必须分开告诉用户
+      if (!result.sync.ok) {
+        toast.warning(result.sync.warning ?? result.sync.error ?? '线上排期未同步')
+      } else if (result.sync.attempted) {
+        toast.success('排期已更新，并已同步到 Shopify')
+      } else {
+        // 没有 Shopify 对象的条目（例如发布失败过的）：只记录了时间，
+        // 状态保持原样，要重新发布才会生效 —— 必须说清楚
+        toast.info('已记录新的排期时间；该条目在 Shopify 上还没有对象，需重新发布才会生效', {
+          duration: 8000,
+        })
+      }
       invalidate()
       onOpenChange(false)
     },
@@ -103,8 +114,18 @@ function ScheduleDialogContent({
 
   const cancel = useMutation({
     mutationFn: (id: string) => contentApi.cancelSchedule(id),
-    onSuccess: () => {
-      toast.success('已取消排期并退回草稿')
+    onSuccess: (result) => {
+      if (!result.sync.ok) {
+        // 最危险的一种：本地已退回草稿，但线上排期还活着 → 到点照样上线
+        toast.error(
+          result.sync.warning ?? result.sync.error ?? '线上排期未能撤销',
+          { duration: 10_000 }
+        )
+      } else if (result.sync.attempted) {
+        toast.success('已取消排期，并已撤销 Shopify 侧的排期')
+      } else {
+        toast.success('已取消排期并退回草稿')
+      }
       invalidate()
       onOpenChange(false)
     },

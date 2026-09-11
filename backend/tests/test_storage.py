@@ -223,3 +223,17 @@ def test_cancel_schedule_returns_to_draft(store):
 def test_update_schedule_on_missing_row_returns_none(store):
     assert store.update_schedule(999, "2026-12-01T00:00:00+00:00") is None
     assert store.cancel_schedule(999) is None
+
+
+def test_update_schedule_keeps_status_when_asked(store):
+    """没有 Shopify 对象时不能把它标成「待发布」，否则状态是假的。"""
+    row = store.upsert(make_record(status="failed", error="失败了"))
+    updated = store.update_schedule(
+        row["id"], "2026-12-01T00:00:00+00:00", mark_scheduled=False
+    )
+
+    assert updated is not None
+    assert updated["scheduled_at"] == "2026-12-01T00:00:00+00:00"
+    # 状态与错误都保持原样
+    assert updated["status"] == "failed"
+    assert updated["error"] == "失败了"

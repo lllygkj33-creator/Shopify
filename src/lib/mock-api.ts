@@ -491,13 +491,22 @@ export const mockApi = {
     return { ok: true, items: results }
   },
 
+  /** 演示模式：本地没有真实的 Shopify 对象，如实返回 attempted=false */
   reschedule(id: string, scheduledAt: string) {
     const item = ensureStore().find((entry) => entry.id === id)
     if (!item) throw new Error(`未找到内容 ${id}`)
     item.scheduledAt = scheduledAt
     item.status = 'scheduled'
     item.updatedAt = new Date().toISOString()
-    return item
+    return {
+      content: item,
+      sync: {
+        attempted: false,
+        ok: true,
+        action: 'reschedule',
+        warning: '演示模式：没有真实的 Shopify 对象，未做同步',
+      },
+    }
   },
 
   cancelSchedule(id: string) {
@@ -506,6 +515,14 @@ export const mockApi = {
     item.status = 'draft'
     item.scheduledAt = undefined
     item.updatedAt = new Date().toISOString()
-    return item
+    return {
+      content: item,
+      sync: {
+        attempted: false,
+        ok: true,
+        action: 'cancel',
+        warning: '演示模式：没有真实的 Shopify 对象，未做同步',
+      },
+    }
   },
 }

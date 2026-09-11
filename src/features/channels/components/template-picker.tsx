@@ -50,6 +50,8 @@ export function TemplatePicker({
             variant='outline'
             size='sm'
             role='combobox'
+            // Radix 的 Select 触发器也是 role=combobox，测试里靠它区分
+            data-testid='template-picker'
             aria-expanded={open}
             disabled={disabled}
             className='h-8 w-[210px] justify-between font-mono text-xs font-normal'

@@ -13,6 +13,20 @@
  */
 
 import { mkdir } from 'node:fs/promises'
+
+/**
+ * 打开页面并等到布局稳定。
+ *
+ * 为什么不用 `networkidle`：Google Fonts 的请求可能长时间挂起，会把
+ * networkidle 拖到超时（实测过）。改用 domcontentloaded 后，要显式等字体就绪 ——
+ * 否则字体迟到会引起布局位移，点击会落空
+ * （Playwright 报 `<html> intercepts pointer events`）。
+ */
+async function openPage(page, url) {
+  await page.goto(url, { waitUntil: 'domcontentloaded' })
+  await page.evaluate(() => document.fonts.ready)
+}
+
 import { chromium } from 'playwright'
 
 const BASE = process.argv[2] ?? 'http://localhost:5177'
@@ -44,8 +58,8 @@ for (const target of PAGES) {
   page.on('pageerror', (error) => pageErrors.push(error.message))
 
   try {
-    await page.goto(`${BASE}${target.path}`, {
-      waitUntil: 'networkidle',
+    await openPage(page, `${BASE}${target.path}`, {
+      waitUntil: 'domcontentloaded',
       timeout: 30_000,
     })
     await page.waitForSelector(`text=${target.expect}`, { timeout: 10_000 })
@@ -95,7 +109,13 @@ const page = await context.newPage()
 const dialogErrors = []
 page.on('pageerror', (error) => dialogErrors.push(error.message))
 try {
-  await page.goto(`${BASE}/`, { waitUntil: 'networkidle' })
+  await openPage(page, `${BASE}/`)
+  // 先等侧边栏渲染完再取 DOM：只等 HTML 到达的话 React 还没挂载，会读到 0 项
+  await page.waitForSelector('[data-sidebar="content"] [data-sidebar="menu-button"]', {
+    timeout: 15000,
+  })
+  // 时间轴的色块是异步查询后渲染的，取 DOM 前要等它出来
+  await page.waitForSelector('[data-testid="timeline-chip"]', { timeout: 15000 })
 
   // ---------- DOM 事实核对：把关键结构打出来，比肉眼更可靠 ----------
   const facts = await page.evaluate(() => {
@@ -194,7 +214,7 @@ const flow = await context.newPage()
 const flowErrors = []
 flow.on('pageerror', (error) => flowErrors.push(error.message))
 try {
-  await flow.goto(`${BASE}/channels/tech-ai-hub`, { waitUntil: 'networkidle' })
+  await openPage(flow, `${BASE}/channels/tech-ai-hub`)
 
   // 传一个目录：Playwright 对 webkitdirectory input 只接受目录路径，
   // 会递归收集其中的文件并带上 webkitRelativePath（与真人选文件夹一致）
@@ -327,17 +347,41 @@ const custom = await context.newPage()
 const customErrors = []
 custom.on('pageerror', (error) => customErrors.push(error.message))
 try {
-  await custom.goto(`${BASE}/channels/custom`, { waitUntil: 'networkidle' })
+  await openPage(custom, `${BASE}/channels/custom`)
+  // domcontentloaded 之后 React 还没挂载，先等页面自己的元素出现再交互
+  await custom.waitForSelector('text=默认文件夹', { timeout: 15000 })
   await custom.locator('input[type="file"]').setInputFiles('scripts/fixtures/Custom')
   await custom.waitForSelector('text=已导入', { timeout: 10_000 })
 
   // 模板选择器（role=combobox）应显示 JSON 里的模板名
-  const trigger = custom.locator('[role="combobox"]').first()
+  // 用 testid 而不是 role=combobox：Radix 的 Select（发布方式）也是那个 role
+  const trigger = custom.locator('[data-testid="template-picker"]').first()
   await trigger.waitFor({ timeout: 8_000 })
   const shown = (await trigger.textContent())?.trim()
 
-  await trigger.click()
-  const search = custom.locator('input[placeholder="搜索模板名…"]')
+  // 这个按钮在长页面靠下的表格里。Playwright 的自动滚动在这里不可靠
+  // （点击点会落到 <html> 上，报 intercepts pointer events），所以：
+  //   1. 先用原生 scrollIntoView 把它滚到视口中间
+  //   2. 常规点击失败就退回 force 点击（触发器是个普通按钮，跳过命中检测是安全的）
+  await trigger.evaluate((el) => el.scrollIntoView({ block: 'center' }))
+  await custom.waitForTimeout(400)
+
+  const openPopover = async () => {
+    try {
+      await trigger.click({ timeout: 8_000 })
+    } catch {
+      await trigger.click({ force: true, timeout: 8_000 })
+    }
+  }
+
+  await openPopover()
+  try {
+    await custom.waitForSelector('[cmdk-item]', { timeout: 6_000 })
+  } catch {
+    await openPopover()
+    await custom.waitForSelector('[cmdk-item]', { timeout: 6_000 })
+  }
+  const search = custom.locator('input[placeholder*="搜索模板名"]')
   await search.waitFor({ timeout: 8_000 })
   const optionCount = await custom.locator('[cmdk-item]').count()
 
@@ -388,7 +432,7 @@ const settings = await context.newPage()
 const settingsErrors = []
 settings.on('pageerror', (error) => settingsErrors.push(error.message))
 try {
-  await settings.goto(`${BASE}/settings`, { waitUntil: 'networkidle' })
+  await openPage(settings, `${BASE}/settings`)
   await settings.waitForSelector('text=访问 Token', { timeout: 10_000 })
   // 演示数据有 350ms 的人为延迟，而它不是网络请求 —— networkidle 不会等它，
   // 所以要显式等映射自检表渲染完成（加载完会显示「共 N 个博客栏目」）
