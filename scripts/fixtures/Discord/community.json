@@ -1,0 +1,9 @@
+{
+  "title": "Discord Community Roundup",
+  "url": "/pages/discord-community-roundup",
+  "template": "discord-page",
+  "published": true,
+  "html": "<div><h2>Highlights</h2><p>Monthly roundup.</p></div>",
+  "images": ["cover.png"],
+  "discord_source": { "channel": "#general" }
+}
