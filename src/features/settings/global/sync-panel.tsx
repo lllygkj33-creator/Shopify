@@ -115,7 +115,8 @@ function SyncResult({ report }: { report: SyncReport }) {
           <span className='text-muted-foreground'>
             · 修正 {drift} 条
             {report.updated > 0 && `（状态更新 ${report.updated}`}
-            {report.gone > 0 && `${report.updated > 0 ? '，' : '（'}线上已删除 ${report.gone}`}
+            {report.gone > 0 &&
+              `${report.updated > 0 ? '，' : '（'}线上已删除 ${report.gone}`}
             {`）`}
           </span>
         )}
