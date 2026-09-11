@@ -105,6 +105,16 @@ export type PageSpec = {
   summaryMin?: number
   /** 正文必须逐字包含的片段（用户故事的两句固定文案） */
   bodyMustContain?: string[]
+  /** 是否禁止出现 <h2>（VS 的 H2 由 Liquid 模板输出） */
+  forbidH2?: boolean
+  /** 必须各出现恰好一次的 COMPARE 标记对名称 */
+  requiredMarkerPairs?: string[]
+  /** 正文里不允许出现的占位串 */
+  forbiddenPlaceholders?: string[]
+  /** JSON 的 published 必须为 true */
+  requirePublishedTrue?: boolean
+  /** related_products 必须为空数组 */
+  requireEmptyRelatedProducts?: boolean
 
   /** 正文至少需要多少个 <h2>（社区 1 个，Discord 4 个） */
   h2Min?: number
@@ -284,10 +294,43 @@ export const CHANNELS: Channel[] = [
     contentType: 'page',
     color: '#ef4444',
     template: 'nas-a-vs-b',
+    // ✅ 已对照 publish_vs_pages.py 核对
+    //
+    // 六个栏目里最特殊：**没有来源 metafield**、**禁止 <h1> 也禁止 <h2>**
+    // （标题层级由 Liquid 模板输出）、要求 8 对 COMPARE 标记、
+    // published 必须为 true、related_products 必须为空数组。
+    // 发布前后端会把资源库里的 3 个视频 + 3 篇文章注入 RESOURCES 区块。
     pageSpec: {
       template: 'nas-a-vs-b',
-      sourceKey: 'vs_source',
-      verified: false,
+      // 空字符串 = 该栏目没有来源 metafield
+      sourceKey: '',
+      h2Min: 0,
+      forbidH2: true,
+      metaTitleMax: 65,
+      metaDescriptionMin: 120,
+      metaDescriptionMax: 170,
+      requiredMarkerPairs: [
+        'OVERVIEW',
+        'SPECS',
+        'CATEGORIES',
+        'RECOMMENDATION',
+        'SKU-FAMILY',
+        'RESOURCES',
+        'FAQ',
+        'METHODOLOGY',
+      ],
+      forbiddenPlaceholders: [
+        'YOUTUBE_URL_',
+        'YOUTUBE_VIDEO_ID_',
+        'BLOG_URL_',
+        'BLOG_COVER_IMAGE_URL_',
+        'PLACEHOLDER',
+        'TODO',
+        'Replace with',
+      ],
+      requirePublishedTrue: true,
+      requireEmptyRelatedProducts: true,
+      verified: true,
     },
   },
   {

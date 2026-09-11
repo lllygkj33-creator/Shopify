@@ -187,7 +187,11 @@ const META_TEXT_MAX_LENGTH = 160
  *  - 每个 `<img>` 必须同时有非空 `alt` 和 `title`
  *  - 每个 `<a>` 必须有非空 `title`
  */
-function checkPageHtmlRules(html: string, h2Min = 1): ValidationIssue[] {
+function checkPageHtmlRules(
+  html: string,
+  h2Min = 0,
+  forbidH2 = false
+): ValidationIssue[] {
   const issues: ValidationIssue[] = []
   if (!html) return issues
 
@@ -202,7 +206,13 @@ function checkPageHtmlRules(html: string, h2Min = 1): ValidationIssue[] {
   }
 
   const h2Count = (html.match(/<h2\b/gi) ?? []).length
-  if (h2Count < h2Min) {
+  if (forbidH2 && h2Count > 0) {
+    issues.push({
+      level: 'error',
+      field: 'html',
+      message: '正文包含 <h2>；H2 标题必须由 VS Liquid 模板输出',
+    })
+  } else if (h2Count < h2Min) {
     issues.push({
       level: 'error',
       field: 'html',
@@ -259,6 +269,17 @@ function normalizePageSource(
   }
 
   return source
+}
+
+function countOccurrences(haystack: string, needle: string): number {
+  if (!needle) return 0
+  let count = 0
+  let index = haystack.indexOf(needle)
+  while (index !== -1) {
+    count += 1
+    index = haystack.indexOf(needle, index + needle.length)
+  }
+  return count
 }
 
 function isCompleteHttpUrl(value: string): boolean {
@@ -764,7 +785,7 @@ function normalizePageCandidate(
   }
 
   // ---- 正文硬规则：禁 h1 / 至少 h2Min 个 h2 / img alt+title / a title ----
-  issues.push(...checkPageHtmlRules(html, spec?.h2Min ?? 1))
+  issues.push(...checkPageHtmlRules(html, spec?.h2Min ?? 0, spec?.forbidH2 ?? false))
 
   // 正文必须逐字包含的固定文案（用户故事要求两句固定段落）
   for (const required of spec?.bodyMustContain ?? []) {
@@ -777,6 +798,64 @@ function normalizePageCandidate(
     }
   }
 
+  // COMPARE 标记对必须各出现恰好一次（VS）
+  for (const marker of spec?.requiredMarkerPairs ?? []) {
+    const open = `<!-- COMPARE:${marker} -->`
+    const close = `<!-- /COMPARE:${marker} -->`
+    if (countOccurrences(html, open) !== 1) {
+      issues.push({
+        level: 'error',
+        field: 'html',
+        message: `${marker}：必须恰好有一个开标记 ${open}`,
+      })
+    }
+    if (countOccurrences(html, close) !== 1) {
+      issues.push({
+        level: 'error',
+        field: 'html',
+        message: `${marker}：必须恰好有一个闭标记 ${close}`,
+      })
+    }
+  }
+
+  // 未替换的占位串（VS）
+  for (const placeholder of spec?.forbiddenPlaceholders ?? []) {
+    if (html.toLowerCase().includes(placeholder.toLowerCase())) {
+      issues.push({
+        level: 'error',
+        field: 'html',
+        message: `正文包含未替换的占位串：${placeholder}`,
+      })
+    }
+  }
+
+  // published 必须为 true / related_products 必须为空（VS）
+  if (spec?.requirePublishedTrue && pickRaw(raw, 'published') === false) {
+    issues.push({
+      level: 'error',
+      field: 'published',
+      message: 'published 必须为 true（该栏目的排期接口要求）',
+    })
+  } else if (pickRaw(raw, 'published') === false) {
+    issues.push({
+      level: 'warning',
+      field: 'published',
+      message:
+        'JSON 中 published=false；实际是否上线由你在发布时选择的「发布方式」决定',
+    })
+  }
+
+  if (spec?.requireEmptyRelatedProducts) {
+    const related = pickRaw(raw, 'related_products', 'related products')
+    if (Array.isArray(related) && related.length > 0) {
+      issues.push({
+        level: 'error',
+        field: 'related_products',
+        message: 'related_products 必须为空数组；商品链接请直接写在正文里',
+      })
+    }
+  }
+
   // ---- 来源对象（custom.<sourceKey> json metafield） ----
   const rawSource = channel?.pageSpec?.sourceKey
     ? raw[channel.pageSpec.sourceKey]
@@ -784,7 +863,7 @@ function normalizePageCandidate(
   // 归一化（剥掉 Discord channel_name 的前导 '#'）后再提交给后端
   const source = normalizePageSource(rawSource, spec)
 
-  if (spec?.verified) {
+  if (spec?.verified && spec.sourceKey) {
     issues.push(...checkPageSource(source, spec))
   } else if (channel?.pageSpec?.sourceKey && !source) {
     issues.push({
@@ -800,17 +879,6 @@ function normalizePageCandidate(
     rawBacklink && typeof rawBacklink === 'object' && !Array.isArray(rawBacklink)
       ? (rawBacklink as Record<string, unknown>)
       : undefined
-
-  // 页面 schema 里 published 字段（脚本会解析，但不参与请求构造）
-  const published = pickRaw(raw, 'published')
-  if (published === false) {
-    issues.push({
-      level: 'warning',
-      field: 'published',
-      message:
-        'JSON 中 published=false；实际是否上线由你在发布时选择的「发布方式」决定',
-    })
-  }
 
   return {
     tempId: tempId(`${filePath}#${index}#${handle}`),

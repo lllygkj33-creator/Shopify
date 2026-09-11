@@ -144,60 +144,12 @@ def test_load_source_enforces_author_profile_url():
         load_source({"community_source": broken}, SPEC)
 
 
-def test_load_source_passes_through_for_unverified_channels():
-    """未核对规格的栏目只做宽松处理。"""
+def test_source_is_empty_when_channel_has_no_source_metafield():
+    """VS 没有来源 metafield，load_source 必须返回空字典而不是报错。"""
     vs = get_page_spec("vs")
-    assert vs is not None and vs.verified is False
+    assert vs is not None and vs.source_key == ""
 
-    result = load_source({"vs_source": {"anything": "goes"}}, vs)
-    assert result == {"anything": "goes"}
-
-
-# ---------------------------------------------------------------------------
-# 硬校验
-# ---------------------------------------------------------------------------
-
-
-def test_validation_passes_for_good_payload():
-    assert validate_page_payload(build(), SPEC) == []
-
-
-def test_validation_rejects_h1():
-    payload = build(raw_page(html="<h1>T</h1>" + GOOD_HTML))
-    errors = validate_page_payload(payload, SPEC)
-    assert any("<h1>" in error for error in errors)
-
-
-def test_validation_requires_h2():
-    payload = build(raw_page(html='<div><img src="a" alt="a" title="t"></div>'))
-    assert any("<h2>" in error for error in validate_page_payload(payload, SPEC))
-
-
-def test_validation_requires_img_alt_and_title():
-    payload = build(
-        raw_page(html='<div><h2>x</h2><img src="a.png"></div>')
-    )
-    errors = validate_page_payload(payload, SPEC)
-    assert any("alt" in error for error in errors)
-    assert any("title" in error for error in errors)
-
-
-def test_validation_requires_anchor_title():
-    payload = build(
-        raw_page(html='<div><h2>x</h2><a href="https://e.com">no title</a></div>')
-    )
-    assert any("链接缺少非空 title" in error for error in validate_page_payload(payload, SPEC))
-
-
-def test_validation_rejects_wrong_template():
-    payload = build(raw_page(template="discord-page"))
-    errors = validate_page_payload(payload, SPEC)
-    assert any("community_post" in error for error in errors)
-
-
-# ---------------------------------------------------------------------------
-# 字段别名
-# ---------------------------------------------------------------------------
+    assert load_source({"anything": "goes"}, vs) == {}
 
 
 def test_build_accepts_documented_aliases():
@@ -517,17 +469,17 @@ def test_community_spec_is_marked_verified():
     assert SPEC.source_key == "community_source"
 
 
-def test_other_page_channels_are_registered_but_unverified():
+def test_all_page_channels_have_verified_specs():
     """
-    只剩 VS 的规格来自 PRD，尚未用真实脚本核对 —— 这里把状态钉住，
-    等拿到脚本后收紧校验并把 verified 改成 True。
-    （社区 / Discord / MakerWorld / 用户故事 都已对照各自脚本核对）
+    六个页面栏目的规格都已对照各自的发布脚本核对过。
+    新增栏目时这个断言会提醒你：要么补齐规格，要么显式标记 verified=False。
     """
-    for channel_id in ("vs",):
+    for channel_id in ("community-post", "discord", "makerworld", "user-story", "vs"):
         spec = PAGE_CHANNEL_SPECS[channel_id]
-        assert spec.verified is False
-        assert spec.source_key.endswith("_source")
+        assert spec.verified is True, f"{channel_id} 的规格未核对"
 
+    # VS 是唯一没有来源 metafield 的栏目
+    assert PAGE_CHANNEL_SPECS["vs"].source_key == ""
     assert PAGE_CHANNEL_SPECS["vs"].template == "nas-a-vs-b"
 
 

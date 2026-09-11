@@ -178,6 +178,37 @@ class PageChannelSpec:
     body_must_contain: tuple[str, ...] = ()
     """正文必须逐字包含这些片段（用户故事要求两句固定文案）。"""
 
+    forbid_h2: bool = False
+    """是否禁止出现 <h2>（VS 页的 H2 由 Liquid 模板输出）。"""
+
+    require_meta_attribute: str = ""
+    """正文必须包含该 HTML 属性（VS 要求 data-zima-compare-meta）。"""
+
+    required_marker_pairs: tuple[str, ...] = ()
+    """必须各出现恰好一次的标记对，形如 <!-- COMPARE:NAME --> / <!-- /COMPARE:NAME -->。"""
+
+    forbidden_placeholders: tuple[str, ...] = ()
+    """正文里不允许出现的占位串（未替换的模板残留）。"""
+
+    require_published_true: bool = False
+    """JSON 的 published 必须为 true（VS 的排期接口要求）。"""
+
+    require_empty_related_products: bool = False
+    """related_products 必须为空数组（VS 不允许写商品引用 metafield）。"""
+
+    forbidden_anchor_phrases: tuple[str, ...] = ()
+    """内联链接的 anchor 文本里不允许出现的短语。"""
+
+    anchor_word_min: int = 0
+    anchor_word_max: int = 0
+    """内联链接的 anchor 英文单词数区间；0 表示不检查。"""
+
+    media_card_class: str = ""
+    """带这个 class 的链接视为媒体卡片，豁免 anchor 文本规则。"""
+
+    require_decoding_async: bool = False
+    """是否要求所有 <img> 带 decoding="async"。"""
+
     keep_source_extras: bool = False
     """是否保留来源对象里除必需字段外的其他键（Discord 脚本会保留）。"""
 
@@ -277,9 +308,65 @@ PAGE_CHANNEL_SPECS: dict[str, PageChannelSpec] = {
         # 用户故事脚本没有 meta 长度规则
         verified=True,
     ),
+    # ✅ 已对照 publish_vs_pages.py 核对
+    #
+    # 六个栏目里最特殊的一个：
+    #   - **没有来源 metafield**（只有 SEO 两个），所以 source_key 为空
+    #   - **禁止 <h1> 也禁止 <h2>**：标题层级由 Liquid 模板输出
+    #   - 必须包含 8 对 COMPARE 标记（各恰好一次）与 data-zima-compare-meta
+    #   - published 必须为 true，related_products 必须为空数组
+    #   - 内联锚文本必须 2~6 个英文单词（媒体卡片豁免）
+    #   - 图片还要求 decoding="async"
+    #   - 发布前会把资源库里的 3 个视频 + 3 篇文章注入 RESOURCES 区块
     "vs": PageChannelSpec(
         template="nas-a-vs-b",
-        source_key="vs_source",
+        source_key="",
+        h2_min=0,
+        forbid_h2=True,
+        meta_title_max=65,
+        meta_description_min=120,
+        meta_description_max=170,
+        require_meta_attribute="data-zima-compare-meta",
+        required_marker_pairs=(
+            "OVERVIEW",
+            "SPECS",
+            "CATEGORIES",
+            "RECOMMENDATION",
+            "SKU-FAMILY",
+            "RESOURCES",
+            "FAQ",
+            "METHODOLOGY",
+        ),
+        forbidden_placeholders=(
+            "YOUTUBE_URL_",
+            "YOUTUBE_VIDEO_ID_",
+            "BLOG_URL_",
+            "BLOG_COVER_IMAGE_URL_",
+            "PLACEHOLDER",
+            "TODO",
+            "Replace with",
+        ),
+        require_published_true=True,
+        require_empty_related_products=True,
+        forbidden_anchor_phrases=(
+            "documentation",
+            "document",
+            "docs",
+            "see the guide",
+            "see this guide",
+            "read the guide",
+            "read this guide",
+            "click here",
+            "learn more here",
+            "more information",
+        ),
+        anchor_word_min=2,
+        anchor_word_max=6,
+        media_card_class="zima-compare__media-item",
+        require_lazy_loading=True,
+        require_decoding_async=True,
+        enforce_anchor_rules=True,
+        verified=True,
     ),
     # ✅ 已对照 publish_maker_pages.py 核对
     #
@@ -343,6 +430,11 @@ FORBIDDEN_ANCHOR_PATTERNS = (
 NOFOLLOW_EXEMPT_HOST_SUFFIXES = ("zimaspace.com",)
 
 
+def english_word_count(text: str) -> int:
+    """统计英文/数字单词数（用于 VS 的 2~6 词锚文本规则）。"""
+    return len(re.findall(r"[A-Za-z0-9]+(?:[-'][A-Za-z0-9]+)*", text or ""))
+
+
 def strip_html_text(value: str) -> str:
     import html as html_module
 
@@ -389,6 +481,9 @@ class PagePayload:
     template_suffix: str
     summary: str = ""
     source: dict[str, str] = field(default_factory=dict)
+    related_products: list[Any] = field(default_factory=list)
+    # 资源注入的说明（VS 用，记录本次选中了哪些视频/文章）
+    resource_note: str = ""
     source_file: str = ""
     # 脚本解析了 published 但**没有**用进 create/update input；
     # 这里保留字段只是为了兼容 JSON，不参与请求构造。
@@ -493,11 +588,28 @@ def load_body_html(data: dict[str, Any], source_file: str) -> str:
     )
 
 
+def _load_related_products(data: dict[str, Any]) -> list[Any]:
+    """页面栏目的 related_products。
+
+    参考脚本都**不写** custom.related_products（避免清空已有的商品列表），
+    VS 更是要求它必须为空数组。这里只是读出来用于校验。
+    """
+    value = first_value(data, ["related_products"], [])
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        raise PagePublishError("related_products 必须是数组")
+    return value
+
+
 def load_source(data: dict[str, Any], spec: PageChannelSpec) -> dict[str, str]:
     """读取并归一化 `custom.<source_key>` 那个 JSON 对象。
 
     规则全部来自 spec（各栏目脚本的要求不同）。
     """
+    if not spec.source_key:
+        return {}
+
     source = first_value(data, [spec.source_key, f"custom.{spec.source_key}"])
 
     if isinstance(source, str):
@@ -633,9 +745,36 @@ def validate_page_payload(payload: PagePayload, spec: PageChannelSpec) -> list[s
         errors.append("正文包含 <h1>；H1 应由 page.title / Liquid 输出")
 
     h2_count = len(re.findall(r"<h2\b", payload.body_html, re.IGNORECASE))
-    if h2_count < spec.h2_min:
+    if spec.forbid_h2 and h2_count:
+        errors.append(
+            "正文包含 <h2>；H2 标题必须由 VS Liquid 模板输出"
+        )
+    elif h2_count < spec.h2_min:
         errors.append(
             f"正文必须至少包含 {spec.h2_min} 个 <h2> 章节；当前 {h2_count} 个"
+        )
+
+    if spec.require_meta_attribute and spec.require_meta_attribute not in payload.body_html:
+        errors.append(f"正文缺少 {spec.require_meta_attribute}")
+
+    for marker in spec.required_marker_pairs:
+        open_marker = f"<!-- COMPARE:{marker} -->"
+        close_marker = f"<!-- /COMPARE:{marker} -->"
+        if payload.body_html.count(open_marker) != 1:
+            errors.append(f"{marker}：必须恰好有一个开标记 {open_marker}")
+        if payload.body_html.count(close_marker) != 1:
+            errors.append(f"{marker}：必须恰好有一个闭标记 {close_marker}")
+
+    for placeholder in spec.forbidden_placeholders:
+        if placeholder.lower() in payload.body_html.lower():
+            errors.append(f"正文包含未替换的占位串：{placeholder}")
+
+    if spec.require_published_true and not payload.is_published_flag:
+        errors.append("published 必须为 true（该栏目的排期接口要求）")
+
+    if spec.require_empty_related_products and payload.related_products:
+        errors.append(
+            "related_products 必须为空数组；商品链接请直接写在正文里"
         )
 
     if payload.template_suffix != spec.template:
@@ -698,6 +837,9 @@ def validate_page_payload(payload: PagePayload, spec: PageChannelSpec) -> list[s
         if spec.require_lazy_loading and get_attr(image_tag, "loading").lower() != "lazy":
             errors.append(f'第 {index} 张图片必须使用 loading="lazy"')
 
+        if spec.require_decoding_async and get_attr(image_tag, "decoding").lower() != "async":
+            errors.append(f'第 {index} 张图片必须使用 decoding="async"')
+
     # -----------------------------------------------------------------------
     # 链接
     # -----------------------------------------------------------------------
@@ -725,7 +867,34 @@ def validate_page_payload(payload: PagePayload, spec: PageChannelSpec) -> list[s
         if not spec.enforce_anchor_rules or not href:
             continue
 
-        # 禁止的 anchor 文本
+        # 媒体卡片（资源卡片）用完整标题，豁免 anchor 文本规则
+        classes = set(get_attr(tag, "class").split())
+        is_media_card = bool(spec.media_card_class) and spec.media_card_class in classes
+
+        if not is_media_card:
+            word_count = english_word_count(anchor_text)
+            if spec.anchor_word_min and word_count < spec.anchor_word_min:
+                errors.append(
+                    f"第 {index} 个链接的 anchor 需要 "
+                    f"{spec.anchor_word_min}~{spec.anchor_word_max} 个英文单词；"
+                    f"当前 {word_count} 个：{anchor_text!r}"
+                )
+            elif spec.anchor_word_max and word_count > spec.anchor_word_max:
+                errors.append(
+                    f"第 {index} 个链接的 anchor 需要 "
+                    f"{spec.anchor_word_min}~{spec.anchor_word_max} 个英文单词；"
+                    f"当前 {word_count} 个：{anchor_text!r}"
+                )
+
+            lowered_anchor = anchor_text.lower()
+            for phrase in spec.forbidden_anchor_phrases:
+                if phrase in lowered_anchor:
+                    errors.append(
+                        f"第 {index} 个链接使用了禁止的 anchor 短语 {phrase!r}："
+                        f"{anchor_text!r}"
+                    )
+
+        # 通用反模式（MakerWorld 用的一组正则）
         for pattern in FORBIDDEN_ANCHOR_PATTERNS:
             if re.search(pattern, anchor_text, flags=re.IGNORECASE):
                 errors.append(
@@ -861,6 +1030,7 @@ def build_page_payload(
         body_html=load_body_html(raw, source_file),
         template_suffix=template_suffix,
         source=load_source(raw, spec),
+        related_products=_load_related_products(raw),
         source_file=source_file,
         is_published_flag=parse_bool(
             first_value(raw, ["published", "is_published", "isPublished"], True),
@@ -897,17 +1067,22 @@ def page_metafields(payload: PagePayload, spec: PageChannelSpec) -> list[dict[st
     刻意**不包含** `custom.related_products`：脚本里有这样一段注释——
     空或缺失的 related_products 要忽略，否则会把已有商品列表 metafield 清空。
     """
-    metafields = [
-        *seo_metafields(payload.meta_title, payload.meta_description),
-        {
-            "namespace": "custom",
-            "key": spec.source_key,
-            "type": "json",
-            "value": json.dumps(
-                payload.source, ensure_ascii=False, separators=(",", ":")
-            ),
-        },
-    ]
+    metafields = list(
+        seo_metafields(payload.meta_title, payload.meta_description)
+    )
+
+    # 有来源 metafield 的栏目才写 custom.<source_key>（VS 没有来源 metafield）
+    if spec.source_key:
+        metafields.append(
+            {
+                "namespace": "custom",
+                "key": spec.source_key,
+                "type": "json",
+                "value": json.dumps(
+                    payload.source, ensure_ascii=False, separators=(",", ":")
+                ),
+            }
+        )
 
     # 栏目专属的额外 metafield（如 MakerWorld 的 custom.maker_summary）
     for key, metafield_type, payload_attribute in spec.extra_metafields:

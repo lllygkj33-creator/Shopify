@@ -10,6 +10,7 @@
  */
 
 import { describe, expect, it } from 'vitest'
+import { CHANNELS } from '@/config/channels'
 import {
   buildPublicUrl,
   checkRelatedProductsPlaceholder,
@@ -145,16 +146,16 @@ describe('parseJsonContent —— 博客文章（数组 schema）', () => {
 
 describe('parseJsonContent —— 页面（单对象 schema）', () => {
   it('识别单对象页面并读取 template', () => {
-    // 用仍未核对规格的栏目（vs），专注验证「模板识别」本身
+    // 专注验证「模板识别」本身，不断言 publishable
+    // （各栏目校验规则不同，那是另外的用例在管）
     const text = JSON.stringify({
       title: 'A vs B',
       url: '/pages/my-vs-page',
       template: 'nas-a-vs-b',
       published: true,
-      html: '<div><h2>hi</h2></div>',
+      html: '<div>hi</div>',
       'meta title': 'MT',
       'meta description': 'MD',
-      images: ['a.png'],
     })
 
     const result = parseJsonContent(text, 'VS/f.json')
@@ -167,7 +168,6 @@ describe('parseJsonContent —— 页面（单对象 schema）', () => {
     expect(candidate.handle).toBe('/pages/my-vs-page')
     expect(candidate.template).toBe('nas-a-vs-b')
     expect(candidate.channelId).toBe('vs')
-    expect(candidate.publishable).toBe(true)
   })
 
   it('裸 handle 会补全为 /pages/ 路径并提示', () => {
@@ -208,22 +208,44 @@ describe('parseJsonContent —— 页面（单对象 schema）', () => {
     ).toBe(true)
   })
 
-  it('published=false 与 images 为空给出 warning', () => {
-    const text = JSON.stringify({
-      title: 'X',
-      url: '/pages/x',
-      template: 'nas-a-vs-b',
-      published: false,
-      html: '<div><h2>h</h2></div>',
+  it('published=false：社区只提示，VS 是硬错误', () => {
+    // 社区脚本对 published 没有强制要求 → 只是提示
+    const community = JSON.stringify({
+      title: 'Community Story',
       'meta title': 'MT',
       'meta description': 'MD',
+      url: '/pages/community-story',
+      template: 'community_post',
+      published: false,
+      html: '<div><h2>h</h2></div>',
+      community_source: COMMUNITY_SOURCE,
     })
+    const [communityCandidate] = parseJsonContent(
+      community,
+      'Com/f.json'
+    ).candidates
 
-    const [candidate] = parseJsonContent(text, 'f.json').candidates
+    expect(communityCandidate.publishable).toBe(true)
+    expect(warningsOf(communityCandidate)).toContainEqual(
+      expect.stringContaining('published=false')
+    )
 
-    expect(candidate.publishable).toBe(true)
-    const warnings = candidate.issues.filter((i) => i.level === 'warning').map((i) => i.field)
-    expect(warnings).toContain('published')
+    // VS 的排期接口要求 published 必须为 true → 硬错误
+    const vs = JSON.stringify({
+      title: 'A vs B',
+      'meta title': 'MT',
+      'meta description': 'MD',
+      url: '/pages/a-vs-b',
+      template: 'nas-a-vs-b',
+      published: false,
+      html: '<div></div>',
+    })
+    const [vsCandidate] = parseJsonContent(vs, 'VS/f.json').candidates
+
+    expect(vsCandidate.publishable).toBe(false)
+    expect(errorsOf(vsCandidate)).toContainEqual(
+      expect.stringContaining('published 必须为 true')
+    )
   })
 })
 
@@ -572,22 +594,18 @@ describe('上传阶段校验 —— 来源对象', () => {
     )
   })
 
-  it('规格未核对的栏目只给提示，不阻断', () => {
-    const raw = JSON.stringify({
-      title: 'D',
-      'meta title': 'D',
-      'meta description': 'MD',
-      url: '/pages/d',
-      template: 'nas-a-vs-b',
-      html: PAGE_HTML_OK,
-    })
-    const [candidate] = parseJsonContent(raw, 'VS/a.json').candidates
+  it('所有页面栏目都已登记并核对过规格', () => {
+    // 新增栏目时这个断言会提醒你：要么补齐规格，要么显式标记 verified: false
+    for (const channel of CHANNELS) {
+      if (channel.contentType !== 'page') continue
+      expect(channel.pageSpec, `${channel.id} 缺少 pageSpec`).toBeDefined()
+      expect(channel.pageSpec?.verified, `${channel.id} 规格未核对`).toBe(true)
+    }
 
-    expect(candidate.channelId).toBe('vs')
-    expect(candidate.publishable).toBe(true)
-    expect(warningsOf(candidate)).toContainEqual(
-      expect.stringContaining('规格尚未核对')
-    )
+    // VS 是唯一没有来源 metafield 的栏目
+    const vs = CHANNELS.find((channel) => channel.id === 'vs')
+    expect(vs?.pageSpec?.sourceKey).toBe('')
+    expect(vs?.pageSpec?.template).toBe('nas-a-vs-b')
   })
 })
 
@@ -832,5 +850,167 @@ describe('上传阶段校验 —— 用户故事', () => {
 
     expect(candidate.backlink).toBeDefined()
     expect(candidate.backlink?.['article_url']).toContain('/blogs/tech-ai-hub/')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// VS 对比页：唯一禁 H1/H2、唯一没有来源 metafield、要求 8 对标记
+// ---------------------------------------------------------------------------
+
+const VS_MARKERS = [
+  'OVERVIEW',
+  'SPECS',
+  'CATEGORIES',
+  'RECOMMENDATION',
+  'SKU-FAMILY',
+  'RESOURCES',
+  'FAQ',
+  'METHODOLOGY',
+]
+
+const VS_META_DESCRIPTION =
+  'Compare ZimaBoard 2 and ZimaBlade for a small home server: expansion, storage options, noise, and which board fits a beginner build.'
+
+function vsHtml(): string {
+  const blocks = VS_MARKERS.map((name) =>
+    name === 'RESOURCES'
+      ? '<!-- COMPARE:RESOURCES -->\n<!-- /COMPARE:RESOURCES -->'
+      : `<!-- COMPARE:${name} -->\n<p>Compare content.</p>\n<!-- /COMPARE:${name} -->`
+  )
+  return [
+    '<div class="zima-compare" data-zima-compare-meta="1">',
+    ...blocks,
+    '<p><a href="/collections/all" title="Browse all Zima hardware">browse all Zima hardware</a></p>',
+    '</div>',
+  ].join('\n')
+}
+
+function vsPage(overrides: Record<string, unknown> = {}) {
+  return JSON.stringify({
+    title: 'ZimaBoard 2 vs ZimaBlade for a Compact Home Server',
+    meta_title: 'ZimaBoard 2 vs ZimaBlade: Compact Server Pick',
+    td: VS_META_DESCRIPTION,
+    url: 'zimaboard-2-vs-zimablade',
+    template: 'nas-a-vs-b',
+    published: true,
+    related_products: [],
+    html: vsHtml(),
+    ...overrides,
+  })
+}
+
+describe('上传阶段校验 —— VS 对比页', () => {
+  it('合法 VS 页面通过（裸 handle 会有推断提示）', () => {
+    const [candidate] = parseJsonContent(vsPage(), 'VS/a.json').candidates
+
+    expect(candidate.channelId).toBe('vs')
+    expect(candidate.publishable).toBe(true)
+    expect(errorsOf(candidate)).toEqual([])
+  })
+
+  it('禁止 <h2>（H2 由 Liquid 模板输出）', () => {
+    const [candidate] = parseJsonContent(
+      vsPage({ html: vsHtml().replace('<p>Compare content.</p>', '<h2>T</h2>') }),
+      'VS/a.json'
+    ).candidates
+
+    expect(errorsOf(candidate)).toContainEqual(
+      expect.stringContaining('H2 标题必须由 VS Liquid 模板输出')
+    )
+  })
+
+  it('必须是 nas-a-vs-b 模板', () => {
+    // 未登记的模板名会让解析器回落到「当前栏目」，所以这里要传 VS 作为兜底栏目，
+    // 才能复现「在 VS 栏目页上传了一个模板写错的 JSON」这个真实场景
+    const [candidate] = parseJsonContent(
+      vsPage({ template: 'some-other-template' }),
+      'VS/a.json',
+      'vs'
+    ).candidates
+
+    expect(candidate.channelId).toBe('vs')
+    expect(errorsOf(candidate)).toContainEqual(
+      expect.stringContaining('必须是「nas-a-vs-b」')
+    )
+  })
+
+  it('缺少 COMPARE 标记对报错', () => {
+    const [candidate] = parseJsonContent(
+      vsPage({ html: vsHtml().replace('<!-- COMPARE:FAQ -->', '') }),
+      'VS/a.json'
+    ).candidates
+
+    expect(errorsOf(candidate)).toContainEqual(
+      expect.stringContaining('FAQ')
+    )
+  })
+
+  it('标记对重复报错', () => {
+    const [candidate] = parseJsonContent(
+      vsPage({ html: `${vsHtml()}\n<!-- COMPARE:SPECS -->` }),
+      'VS/a.json'
+    ).candidates
+
+    expect(errorsOf(candidate)).toContainEqual(
+      expect.stringContaining('SPECS')
+    )
+  })
+
+  it('未替换的占位串报错', () => {
+    const [candidate] = parseJsonContent(
+      vsPage({ html: vsHtml().replace('<p>Compare content.</p>', '<p>YOUTUBE_URL_1</p>') }),
+      'VS/a.json'
+    ).candidates
+
+    expect(errorsOf(candidate)).toContainEqual(
+      expect.stringContaining('占位串')
+    )
+  })
+
+  it('published 必须为 true', () => {
+    const [candidate] = parseJsonContent(
+      vsPage({ published: false }),
+      'VS/a.json'
+    ).candidates
+
+    expect(errorsOf(candidate)).toContainEqual(
+      expect.stringContaining('published 必须为 true')
+    )
+  })
+
+  it('related_products 必须为空数组', () => {
+    const [candidate] = parseJsonContent(
+      vsPage({ related_products: ['gid://shopify/Product/1'] }),
+      'VS/a.json'
+    ).candidates
+
+    expect(errorsOf(candidate)).toContainEqual(
+      expect.stringContaining('related_products 必须为空数组')
+    )
+  })
+
+  it('meta 长度受限（≤65 / 120~170）', () => {
+    const [longTitle] = parseJsonContent(
+      vsPage({ meta_title: 'x'.repeat(66) }),
+      'VS/a.json'
+    ).candidates
+    expect(errorsOf(longTitle)).toContainEqual(
+      expect.stringContaining('meta title 应在 65')
+    )
+
+    const [shortTd] = parseJsonContent(
+      vsPage({ td: 'too short' }),
+      'VS/a.json'
+    ).candidates
+    expect(errorsOf(shortTd)).toContainEqual(
+      expect.stringContaining('120~170')
+    )
+  })
+
+  it('VS 没有来源 metafield，不会误报缺少来源', () => {
+    const [candidate] = parseJsonContent(vsPage(), 'VS/a.json').candidates
+    const messages = candidate.issues.map((issue) => issue.message)
+
+    expect(messages.some((message) => message.includes('来源'))).toBe(false)
   })
 })

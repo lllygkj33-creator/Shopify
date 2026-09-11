@@ -213,13 +213,13 @@ try {
     console.log(`  · «${row.title}» | 目标：${row.target} | 校验：${row.check}`)
   }
   console.log(`发布按钮：${flowFacts.publishButton}`)
-  if (flowFacts.publishButton !== '发布 5 篇') {
-    problems.push(`发布按钮应统计 5 篇可发布内容，实际：${flowFacts.publishButton}`)
+  if (flowFacts.publishButton !== '发布 6 篇') {
+    problems.push(`发布按钮应统计 6 篇可发布内容，实际：${flowFacts.publishButton}`)
   }
 
   // 断言：2 篇博客 + 1 个页面 = 3 行；且第一行正文无 class 时应回落到栏目默认博客
-  if (flowFacts.rowCount !== 6) {
-    problems.push(`上传 5 个 JSON 应解析出 6 条内容，实际 ${flowFacts.rowCount} 条`)
+  if (flowFacts.rowCount !== 7) {
+    problems.push(`上传 6 个 JSON 应解析出 7 条内容，实际 ${flowFacts.rowCount} 条`)
   }
   // 注意用不区分大小写比较：店铺里的真实标题是 'Tech & AI HUB'（大写 HUB）
   if (!flowFacts.rows.some((r) => r.target.toLowerCase().includes('tech & ai hub'))) {
@@ -234,18 +234,23 @@ try {
   if (!flowFacts.rows.some((r) => r.check.includes('错误'))) {
     problems.push('只有 2 个 H2 且无占位符的内容应被判为错误，但没有标红')
   }
-  // 两个页面栏目的规格都已核对过，应当完全通过校验
+  // 五个页面栏目的规格都已核对过：不允许出现**错误**。
+  // 允许出现提示——例如 VS 的 fixture 用的是裸 handle（与参考脚本的示例一致），
+  // 解析器会提示「已按裸 handle 推断」，这是预期行为而不是问题。
   for (const [template, label] of [
     ['community_post', '社区页面'],
     ['discord-page', 'Discord 页面'],
     ['makerworld-page', 'MakerWorld 页面'],
     ['user-story', '用户故事'],
+    ['nas-a-vs-b', 'VS 对比页'],
   ]) {
     const row = flowFacts.rows.find((r) => r.target.includes(template))
     if (!row) {
       problems.push(`没有解析出 ${label}（template=${template}）`)
-    } else if (!row.check.includes('校验通过')) {
-      problems.push(`${label} 应校验通过，实际：${row.check}`)
+    } else if (row.check.includes('错误')) {
+      problems.push(`${label} 不应有校验错误，实际：${row.check}`)
+    } else {
+      console.log(`  ✓ ${label}：${row.check}`)
     }
   }
 

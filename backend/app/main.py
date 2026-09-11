@@ -24,6 +24,7 @@ from .shopify.backlink import (
     load_backlink,
 )
 from .shopify.client import ShopifyError, shopify_client
+from .shopify.vs_resources import ResourceInjectionError, inject_resources
 from .shopify.page_publisher import (
     PagePublishError,
     PagePublisher,
@@ -470,6 +471,10 @@ async def validate(payload: ValidateRequest) -> ValidateResponse:
                         spec=spec,
                         source_file=item.sourceFile or "",
                     )
+                    # VS 需要先注入资源区块，校验才看得到真实的最终 HTML。
+                    # 这里不抓 og:image（上传阶段几十个文件会很慢），
+                    # 封面可用性留给发布时检查。
+                    await _inject_vs_resources(page, spec, fetch_covers=False)
                     # 结构化错误（缺字段、来源不合法…）
                     issues.extend(
                         ValidateIssue(level="error", message=message)
@@ -735,6 +740,20 @@ def _parse_scheduled_at(item: PublishItemIn) -> datetime | None:
     return value
 
 
+async def _inject_vs_resources(
+    payload: Any, spec: Any, *, fetch_covers: bool
+) -> bool:
+    """对声明了 COMPARE 标记的栏目（VS）注入资源区块。返回是否注入。"""
+    if "RESOURCES" not in (spec.required_marker_pairs or ()):
+        return False
+
+    payload.body_html, note = await inject_resources(
+        payload.title, payload.body_html, fetch_covers=fetch_covers
+    )
+    payload.resource_note = note
+    return True
+
+
 async def _publish_page(item: PublishItemIn, now: datetime) -> PublishResultItem:
     """发布一条页面（社区 / Discord / 用户故事 / VS / MakerWorld）。
 
@@ -768,7 +787,13 @@ async def _publish_page(item: PublishItemIn, now: datetime) -> PublishResultItem
             source_file=item.sourceFile or "",
         )
 
-        # 与脚本一致的硬校验（禁 h1 / 必须有 h2 / img alt+title / a title / 模板一致）
+        # VS 栏目需要先把资源库里的视频/文章注入 RESOURCES 区块，
+        # 再对注入结果做校验（校验见到的是最终要发布的 HTML）。
+        # 发布时抓真实 og:image；抓不到就报错，不发布半成品。
+        if await _inject_vs_resources(payload_page, spec, fetch_covers=True):
+            pass
+
+        # 与脚本一致的硬校验
         errors = validate_page_payload(payload_page, spec)
         if errors:
             raise PagePublishError("；".join(errors))
