@@ -102,7 +102,6 @@ class RuntimeSettings:
     _FIELDS = (
         "shop_domain",
         "template_choices",
-        "last_import_at",
         "last_reconcile_at",
         "api_version",
         "token_source",
@@ -220,7 +219,7 @@ KNOWN_PAGE_TEMPLATES = (
 
 
 def touch_sync_state(key: str, value: str | None = None) -> None:
-    """记录同步时间（导入 / 对账）。"""
+    """记录同步时间（目前只有对账）。"""
     from datetime import datetime, timezone
 
     runtime.update({key: value or datetime.now(timezone.utc).isoformat()})
@@ -228,7 +227,6 @@ def touch_sync_state(key: str, value: str | None = None) -> None:
 
 def resolved_sync_state() -> dict[str, str | None]:
     return {
-        "lastImportAt": runtime.get("last_import_at"),
         "lastReconcileAt": runtime.get("last_reconcile_at"),
     }
 

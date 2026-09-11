@@ -80,7 +80,9 @@ describe('CommandMenu nested items', () => {
 
     await openCommandPalette(screen)
 
-    await userEvent.click(screen.getByRole('option', { name: 'Settings Account' }))
+    await userEvent.click(
+      screen.getByRole('option', { name: 'Settings Account' })
+    )
 
     expect(mocks.navigate).toHaveBeenCalledWith({ to: '/settings/account' })
     await expect

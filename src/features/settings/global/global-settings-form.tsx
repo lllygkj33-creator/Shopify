@@ -37,6 +37,7 @@ import { Separator } from '@/components/ui/separator'
 import { Textarea } from '@/components/ui/textarea'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ChannelMappingCheck } from './channel-mapping-check'
+import { SyncPanel } from './sync-panel'
 import { TokenStatusPanel } from './token-status-panel'
 
 /**
@@ -316,6 +317,19 @@ export function GlobalSettingsForm() {
               timezone={data.defaultTimezone}
               refreshing={refresh.isPending}
               onRefresh={() => refresh.mutate()}
+            />
+          )}
+
+          {/*
+            数据同步放在 token 之后：导入/对账都依赖凭据，凭据不对时
+            用户应该先在上面解决，再往下看到「不能点」的按钮。
+          */}
+          {data && (
+            <SyncPanel
+              hasCredentials={
+                data.hasAccessToken || data.hasClientCredentials
+              }
+              timezone={data.defaultTimezone}
             />
           )}
 

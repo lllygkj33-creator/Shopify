@@ -29,7 +29,7 @@ from .shopify.backlink import (
 )
 from .shopify.client import ShopifyError, shopify_client
 from .shopify.schedule_sync import SyncResult, schedule_sync
-from .shopify_import import ImportReport, ReconcileReport, shopify_importer
+from .shopify.reconcile import ReconcileReport, shopify_reconciler
 from .shopify.templates import TemplateList, template_service
 from .shopify.vs_resources import ResourceInjectionError, inject_resources
 from .shopify.page_publisher import (
@@ -90,7 +90,7 @@ async def _reconcile_loop(interval_minutes: int) -> None:
             continue
 
         try:
-            report = await shopify_importer.reconcile()
+            report = await shopify_reconciler.reconcile()
             if not report.error:
                 app_config.touch_sync_state("last_reconcile_at")
                 if report.updated or report.gone:
@@ -572,23 +572,11 @@ async def refresh_token() -> SettingsResponse:
 
 
 class SyncStatusOut(BaseModel):
-    lastImportAt: str | None = None
     lastReconcileAt: str | None = None
     trackedContents: int = 0
-    """本地已关联 Shopify 对象的行数（= 对账覆盖范围）"""
+    """本地已关联 Shopify 对象的行数（= 对账覆盖范围，也就是平台自己发过的条数）"""
     syncIntervalMinutes: int = 15
     hasCredentials: bool = False
-
-
-class ImportReportOut(BaseModel):
-    articlesScanned: int = 0
-    pagesScanned: int = 0
-    imported: int = 0
-    byChannel: dict[str, int] = Field(default_factory=dict)
-    byStatus: dict[str, int] = Field(default_factory=dict)
-    """未导入的归属 → 数量（让用户知道什么没进来）"""
-    skipped: dict[str, int] = Field(default_factory=dict)
-    error: str | None = None
 
 
 class ReconcileReportOut(BaseModel):
@@ -596,7 +584,6 @@ class ReconcileReportOut(BaseModel):
     matched: int = 0
     updated: int = 0
     gone: int = 0
-    remoteTotal: int = 0
     error: str | None = None
 
 
@@ -604,7 +591,6 @@ class ReconcileReportOut(BaseModel):
 async def sync_status() -> SyncStatusOut:
     state = app_config.resolved_sync_state()
     return SyncStatusOut(
-        lastImportAt=state["lastImportAt"],
         lastReconcileAt=state["lastReconcileAt"],
         trackedContents=len(store.list_with_gid()),
         syncIntervalMinutes=app_config.resolved_sync_interval_minutes(),
@@ -612,30 +598,19 @@ async def sync_status() -> SyncStatusOut:
     )
 
 
-@app.post("/api/sync/import", response_model=ImportReportOut)
-async def sync_import() -> ImportReportOut:
-    """从 Shopify 导入既有内容（幂等，可重复执行）。
-
-    为什么需要：本地库记录的是「平台自己做过什么」，而店铺里已经有大量历史内容。
-    不导入的话仪表盘第一天是空的，每个栏目的历史记录也没有既有内容。
-
-    不在平台 11 个栏目内的内容（例如 zima-campaign-hub、app-hardware-requirements）
-    **跳过但报数**，让用户知道什么没进来，而不是静默丢弃。
-    """
-    report = await shopify_importer.import_all()
-    if not report.error:
-        app_config.touch_sync_state("last_import_at")
-    return ImportReportOut(**report.to_dict())
-
-
 @app.post("/api/sync/reconcile", response_model=ReconcileReportOut)
 async def sync_reconcile() -> ReconcileReportOut:
     """用 Shopify 的真实状态对账本地记录。
 
-    到点后 Shopify 会自己把 isPublished 翻成 true，本地必须跟上；
-    也会发现后台被删除/改名/改时间的对象。
+    本地只记平台自己排期/发布的内容（用户要求「只存平台自己发布的 和未来的，
+    过去的通通不记录」），所以这里只需要核对这批对象的 GID，不拉全量历史。
+
+    要解决的三种偏差：
+      - 排期到点后 Shopify 自己上线了，本地还停在 scheduled
+      - 人在后台改了时间 / 标题 / handle
+      - 人在后台把还没到点的对象删了 —— 本地必须知道，否则用户会以为它还会发
     """
-    report = await shopify_importer.reconcile()
+    report = await shopify_reconciler.reconcile()
     if not report.error:
         app_config.touch_sync_state("last_reconcile_at")
     return ReconcileReportOut(**report.to_dict())
@@ -1090,6 +1065,8 @@ async def publish(payload: PublishRequest) -> PublishResponse:
             )
 
             blog_gid = await publisher.find_blog_gid(candidate.blog_name)
+            # 前台 URL 要用 handle，不能用博客标题（标题里有空格和 &）
+            blog_handle = await publisher.find_blog_handle(candidate.blog_name)
             author_gid = await publisher.find_person_gid(candidate.author)
             reviewer_gid = await publisher.find_person_gid(candidate.reviewer)
             product_gid = await publisher.find_product_gid(
@@ -1158,7 +1135,7 @@ async def publish(payload: PublishRequest) -> PublishResponse:
                         article.get("publishedAt") if status == "published" else None
                     ),
                     "published_url": (
-                        f"/blogs/{blog_name}/{candidate.handle}"
+                        f"/blogs/{blog_handle}/{candidate.handle}"
                         if item.mode != "draft"
                         else None
                     ),
@@ -1178,7 +1155,7 @@ async def publish(payload: PublishRequest) -> PublishResponse:
                     title=candidate.title,
                     scheduledAt=scheduled.isoformat() if scheduled else None,
                     publishedUrl=(
-                        f"/blogs/{blog_name}/{candidate.handle}"
+                        f"/blogs/{blog_handle}/{candidate.handle}"
                         if item.mode != "draft"
                         else None
                     ),

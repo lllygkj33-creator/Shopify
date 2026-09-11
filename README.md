@@ -166,7 +166,24 @@ PRD §4.3 写的是「由 `html代码` 里的 class 推断博客」。但核对�
 所以实现为：**有 class 用 class，没有则落回当前栏目的默认博客**，并在不一致时给出提示
 （见 `resolveBlogName()`）。
 
-### 5. 时间轴组件是自研的，且被隔离在一个文件里
+### 5. 本地库只记平台自己发过的内容，不镜像店铺
+
+用户明确要求：**「只存平台自己发布的 和未来的，过去的通通不记录」**。
+
+店铺里平台上线之前就存在的历史内容（实测 2748 条：1961 篇文章 + 787 个页面）
+不入库。因此没有「导入历史」这种操作，也不会出现「本地 N 条 vs 线上 M 条
+对不上」的漂移问题。
+
+需要 Shopify 侧数据的地方靠**对账**拿，而且只核对平台自己发过的对象
+（有 `shopify_gid` 的行）：用 `nodes(ids:)` 按 GID 批量直查，一次最多 250 个，
+成本不随店铺历史增长 —— 实测 2748 条的店铺也只需 1 次请求。
+
+为什么必须对账：定时发布用的是 Shopify 原生机制（`isPublished: false` +
+未来 `publishDate`），**到点由 Shopify 自己上线**。好处是本地不需要定时任务，
+服务没开也不会漏发；代价是线上发生的事本地不会自动知道，所以默认每 15 分钟
+对一次（`SYNC_INTERVAL_MINUTES`，0 = 关闭）。
+
+### 6. 时间轴组件是自研的，且被隔离在一个文件里
 
 `features/dashboard/components/timeline.tsx` 用 CSS 定位实现，零第三方依赖：
 需求很窄（每行=栏目，每块=一个时间点），重量级时间轴组件反而要迁就它的数据结构。
@@ -282,6 +299,8 @@ Shopify 的 `client_credentials` 流程换来的 `shpat_` 令牌**只有约 24 �
 | PATCH | `/api/contents/{id}` | `ContentItem`（改期） |
 | DELETE | `/api/contents/{id}/schedule` | `ContentItem`（取消排期） |
 | GET | `/api/history?channel_id=` | `PublishHistoryEntry[]` |
+| GET | `/api/sync/status` | `SyncStatus`（已关联条数 / 上次对账 / 间隔） |
+| POST | `/api/sync/reconcile` | `ReconcileReport`（按 GID 直查，不拉全量） |
 
 ### 后端必须遵守的约定
 
@@ -364,18 +383,20 @@ Shopify 的 `client_credentials` 流程换来的 `shpat_` 令牌**只有约 24 �
 |---|---|---|
 | M1 | UI 骨架：侧边栏 + 布局 + 主题切换 | ✅ 完成 |
 | M2 | 全局设置页、Token 统一管理、环境变量读取 | ✅ **界面 + 后端令牌链路均完成**（24h 自动续期、401 自愈、映射自检） |
-| M3 | 栏目发布页：文件夹选择、JSON 解析预览、发布、历史 | ✅ **界面 + 发布接口**（博客/页面发布器、上传阶段校验） |
-| M4 | 调度引擎（状态回写 / 重试） | ⬜ 待后端 |
+| M3 | 栏目发布页：文件夹选择、JSON 解析预览、发布、历史 | ✅ **界面 + 11 个栏目的发布器** |
+| M4 | 调度引擎（状态回写 / 重试） | ✅ 定时发布交给 Shopify 原生机制 + 对账回写状态 |
 | M5 | 仪表盘时间轴可视化 | ✅ 时间轴 + 状态 + 改期弹窗完成 |
-| M6 | 打磨：错误处理、部署打包 | ⬜ 进行中 |
+| M6 | 数据层：本地库 + 对账 | ✅ **只记平台自己发过的；按 GID 直查对账** |
+| M7 | 打磨：错误处理、部署打包 | ⬜ 进行中 |
 
 ### 下一步待确认 / 待办
 
-- [x] 后端「配置与令牌」链路（`/api/health`、`/api/settings`、`/api/settings/verify`、
-      `/api/settings/token/refresh`、`/api/blogs`）
-- [ ] **两个统一发布器**：博客 `articleCreate`（移植 GEO）+ 页面 `pageCreate`（全新，含 `templateSuffix`）
-- [ ] 内容与排期的持久化（SQLite，替换当前的 `data/settings.json`）
-- [ ] 按 `publishKey` 幂等去重 + 发布历史
+- [x] 后端「配置与令牌」链路（自动续期、401 自愈、手动换新）
+- [x] 内容与排期的持久化（SQLite，`publish_key` 唯一索引 + upsert 幂等）
+- [x] 11 个栏目的发布器（博客 `articleCreate` / 页面 `pageCreate` 含 `templateSuffix`）
+- [x] 发布历史 + 改期/取消排期同步到 Shopify 侧（含读回校验）
+- [x] 对账：按 GID 直查线上状态回写本地
+- [ ] 失败条目的重试按钮（`POST /api/contents/{id}/retry`）
 - [ ] 时间轴拖拽改期（PRD 列为加分项，当前用精确时间输入替代）
 - [ ] 发布进度的逐条实时回传（当前为一次性返回；如需逐条可上 SSE）
 - [ ] Token 手动输入的加密存储方案（`cryptography` / keyring，目前是 0600 明文文件）

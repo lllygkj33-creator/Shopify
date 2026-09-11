@@ -466,7 +466,8 @@ class BlogPublisher:
         self._client = client or shopify_client
         self._blogs: list[dict[str, Any]] | None = None
         self._people: list[dict[str, Any]] | None = None
-        self._blog_cache: dict[str, str] = {}
+        # 缓存整条 blog（含 handle）：title 用来匹配，handle 用来拼 URL
+        self._blog_cache: dict[str, dict[str, Any]] = {}
         self._person_cache: dict[str, str] = {}
         self._product_cache: dict[str, str] = {}
         self._cover_pool: RandomCoverImagePool | None = None
@@ -479,8 +480,14 @@ class BlogPublisher:
             self._blogs = (data.get("blogs") or {}).get("nodes") or []
         return self._blogs
 
-    async def find_blog_gid(self, blog_name: str) -> str:
-        """按**名称**查 Blog GID（casefold 精确匹配，与脚本一致）。"""
+    async def find_blog(self, blog_name: str) -> dict[str, Any]:
+        """按**名称**查 Blog（casefold 精确匹配，与脚本一致）。
+
+        返回整条记录而不只是 GID：**handle 和 title 是两回事**。
+        `title` 用于匹配（用户/JSON 里写的是 "Tech & AI HUB"），
+        而前台 URL 必须用 `handle`（`tech-ai-hub`）——
+        用 title 拼出来是 `/blogs/Tech & AI HUB/xxx`，带空格和 `&`，点开是 404。
+        """
         if blog_name in self._blog_cache:
             return self._blog_cache[blog_name]
 
@@ -489,13 +496,21 @@ class BlogPublisher:
 
         for blog in blogs:
             if str(blog.get("title", "")).strip().casefold() == expected:
-                self._blog_cache[blog_name] = blog["id"]
-                return blog["id"]
+                self._blog_cache[blog_name] = blog
+                return blog
 
         available = "\n".join(f"- {blog.get('title')}" for blog in blogs)
         raise PublishError(
             f"找不到 Shopify Blog：{blog_name}\n当前 Blog：\n{available}"
         )
+
+    async def find_blog_gid(self, blog_name: str) -> str:
+        """按名称查 Blog GID（只需要 id 的调用方用这个）。"""
+        return (await self.find_blog(blog_name))["id"]
+
+    async def find_blog_handle(self, blog_name: str) -> str:
+        """按名称查 Blog handle（拼前台 URL 用）。"""
+        return str((await self.find_blog(blog_name)).get("handle") or "")
 
     async def _load_people(self) -> list[dict[str, Any]]:
         if self._people is None:

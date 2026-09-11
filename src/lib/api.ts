@@ -48,6 +48,8 @@ import type {
   PublishResult,
   SettingsUpdatePayload,
   TimelineBar,
+    ReconcileReport,
+  SyncStatus,
 } from '@/types/content'
 import { mockApi } from './mock-api'
 
@@ -369,5 +371,32 @@ export const historyApi = {
     return get<PublishHistoryEntry[]>('/api/history', {
       channel_id: channelId,
     })
+  },
+}
+
+// ---------------------------------------------------------------------------
+// 数据同步（对账）
+// ---------------------------------------------------------------------------
+
+/**
+ * 为什么需要这一组接口。
+ *
+ * 我们的定时发布是「不发布 + 未来 publishDate」，到点由 **Shopify 自己**把
+ * isPublished 翻成 true —— 本地没有定时任务，服务没开也不会漏发，代价是
+ * 线上发生的事本地不会自动知道。不对账，界面显示的状态就是假的：
+ * 内容早发了还写「待发布」，或者人在后台删了对象而本地以为它还会发。
+ *
+ * 只对账平台自己发过的对象（有 GID 的行），不拉店铺全量历史 ——
+ * 所以对账成本不随店铺历史增长。
+ */
+export const syncApi = {
+  status(): Promise<SyncStatus> {
+    if (USE_MOCK) return mockDelay(mockApi.getSyncStatus())
+    return get<SyncStatus>('/api/sync/status')
+  },
+
+  reconcile(): Promise<ReconcileReport> {
+    if (USE_MOCK) return mockDelay(mockApi.syncReconcile(), 900)
+    return send<ReconcileReport>('post', '/api/sync/reconcile')
   },
 }

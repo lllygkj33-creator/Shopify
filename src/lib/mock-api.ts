@@ -20,6 +20,8 @@ import type {
   PublishHistoryEntry,
   PublishResult,
   TimelineBar,
+  ReconcileReport,
+  SyncStatus,
 } from '@/types/content'
 
 const HOUR = 3600_000
@@ -507,6 +509,19 @@ export const mockApi = {
         warning: '演示模式：没有真实的 Shopify 对象，未做同步',
       },
     }
+  },
+
+  getSyncStatus(): SyncStatus {
+    return {
+      lastReconcileAt: new Date(Date.now() - 12 * 60 * 1000).toISOString(),
+      trackedContents: 12,
+      syncIntervalMinutes: 15,
+      hasCredentials: true,
+    }
+  },
+
+  syncReconcile(): ReconcileReport {
+    return { checked: 12, matched: 12, updated: 0, gone: 0, error: null }
   },
 
   cancelSchedule(id: string) {

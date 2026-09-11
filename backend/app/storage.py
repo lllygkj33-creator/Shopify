@@ -12,8 +12,14 @@
 | 来源追溯 | 哪个 JSON 文件、哪个候选、`publish_key` —— Shopify 不知道 |
 | 6 个月甘特图 | 按栏目分组走 API 要几百分页请求；本地一次 SQL |
 
-Shopify 侧留作**事实校验与回填**（见 `docs/ui-actions.md` 的数据流说明）：
-导入既有内容、定时对账（到点后 Shopify 自己把 isPublished 翻成 true）。
+Shopify 侧留作**事实校验**（见 `docs/ui-actions.md` 的数据流说明）：
+定时对账，把线上真实状态同步回本地（到点后 Shopify 自己把 isPublished 翻成 true）。
+
+## 范围：只记平台自己发过的
+
+店铺里平台上线之前就存在的历史内容**不入库** —— 用户要求
+「只存平台自己发布的 和未来的，过去的通通不记录」。所以这里没有
+「导入历史内容」这种操作，也不存在本地与线上对不上的漂移问题。
 
 ## 幂等
 
@@ -150,21 +156,6 @@ class ContentStore:
             row = cursor.fetchone()
 
         return _row_to_dict(row) if row else {}
-
-    def upsert_many(self, records: list[dict[str, Any]]) -> int:
-        """批量幂等写入，**单个事务**。
-
-        导入历史内容时会有几千条 —— 逐条提交会慢到不可用（每条约一次 fsync），
-        所以这里一次性 executemany + 一次提交。
-        """
-        if not records:
-            return 0
-
-        payloads = [_build_payload(record) for record in records]
-        with self._cursor() as cursor:
-            cursor.executemany(_UPSERT_SQL, payloads)
-
-        return len(payloads)
 
     def list_with_gid(self) -> list[dict[str, Any]]:
         """所有已关联 Shopify 对象的行（对账用）。"""

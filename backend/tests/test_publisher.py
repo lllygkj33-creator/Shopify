@@ -395,6 +395,37 @@ async def test_blog_lookup_is_cached_across_calls():
     assert client.calls.count("blogs") == 1
 
 
+async def test_find_blog_handle_is_used_for_storefront_urls():
+    """前台 URL 要用 handle，不能用博客标题。
+
+    标题里有空格和 `&`（"Tech & AI HUB"），拿它拼 URL 得到
+    `/blogs/Tech & AI HUB/xxx` —— 点开是 404。handle 才是路径。
+    """
+    publisher = BlogPublisher(
+        FakeClient(
+            blogs=[
+                {"id": "gid://shopify/Blog/3", "title": "Tech & AI HUB", "handle": "tech-ai-hub"}
+            ]
+        )
+    )
+
+    assert await publisher.find_blog_handle("Tech & AI HUB") == "tech-ai-hub"
+    assert await publisher.find_blog_gid("Tech & AI HUB") == "gid://shopify/Blog/3"
+
+
+async def test_find_blog_handle_and_gid_share_one_lookup():
+    """两者查的是同一个缓存，不能各打一次接口。"""
+    client = FakeClient(
+        blogs=[{"id": "gid://shopify/Blog/3", "title": "Buying Guide", "handle": "buying-guide"}]
+    )
+    publisher = BlogPublisher(client)
+
+    await publisher.find_blog_handle("Buying Guide")
+    await publisher.find_blog_gid("Buying Guide")
+
+    assert client.calls.count("blogs") == 1
+
+
 async def test_find_person_gid_resolves_via_metaobject_definition():
     client = FakeClient(
         definitions=[

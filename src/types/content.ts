@@ -426,3 +426,37 @@ export type DashboardStats = {
   failedCount: number
   draftCount: number
 }
+
+// ---------------------------------------------------------------------------
+// 数据同步（对账）
+// ---------------------------------------------------------------------------
+
+/**
+ * 同步状态。
+ *
+ * 本地库只记**平台自己排期/发布的内容** —— 店铺里平台上线之前就存在的
+ * 历史内容不入库（用户要求「只存平台自己发布的 和未来的，过去的通通不记录」）。
+ * 所以这里的数字是「平台自己发过多少条」，不是「店铺里有多少条」。
+ */
+export type SyncStatus = {
+  /** 上次对账完成时间（ISO）；从未对账为 null */
+  lastReconcileAt?: string | null
+  /** 本地已关联 Shopify 对象的条数（= 对账覆盖范围） */
+  trackedContents: number
+  /** 后台自动对账间隔（分钟）。0 = 已关闭 */
+  syncIntervalMinutes: number
+  /** 凭据是否齐全 —— 不齐时按钮不该能点 */
+  hasCredentials: boolean
+}
+
+/** 对账结果 */
+export type ReconcileReport = {
+  /** 本地有 GID、参与对账的行数 */
+  checked: number
+  matched: number
+  /** 状态/时间/标题被线上修正过的行数 */
+  updated: number
+  /** 线上已不存在（后台被删）的行数 */
+  gone: number
+  error?: string | null
+}
