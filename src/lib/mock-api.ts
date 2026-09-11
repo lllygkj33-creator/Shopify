@@ -22,6 +22,7 @@ import type {
   SyncStatus,
 } from '@/types/content'
 import { isoToWallTime, wallTimeToIso } from './datetime'
+import { site } from '@/config/site'
 
 const HOUR = 3600_000
 const DAY = 24 * HOUR
@@ -36,7 +37,8 @@ const DAY = 24 * HOUR
 function buildMockSettings(): GlobalSettings {
   const now = Date.now()
   return {
-    shopDomain: 'your-store.myshopify.com',
+    // 演示数据也读站点配置，免得演示模式里出现两套对不上的占位域名
+    shopDomain: site.storefrontDomain,
     apiVersion: '2026-04',
     tokenSource: 'auto',
     accessTokenMasked: 'shpat_0123****abcd',
@@ -50,8 +52,10 @@ function buildMockSettings(): GlobalSettings {
     tokenError: null,
     hasClientCredentials: true,
     clientId: '0123456789abcdef0123456789abcdef',
-    defaultAuthor: 'Author Name',
-    defaultReviewers: ['Reviewer One', 'Reviewer Two'],
+    defaultAuthor: site.defaultAuthor || 'Author Name',
+    defaultReviewers: site.defaultReviewers.length
+      ? site.defaultReviewers
+      : ['Reviewer One', 'Reviewer Two'],
     relatedProductTitles: [
       'ZimaCube 2 Personal Cloud Home NAS',
       'ZimaBoard 2 - Mini Home Server for Your Big Idea',
