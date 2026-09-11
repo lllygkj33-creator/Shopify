@@ -129,25 +129,26 @@ F1「返回上一页」、F2「回到首页」—— 纯前端。
 
 按栏目差异的部分（对照各自脚本）：
 
-| 规则 | 社区 `community_post` | Discord `discord-page` | MakerWorld `makerworld-page` |
-|---|---|---|---|
-| 最少 `<h2>` 数 | **1** | **4** | **4** |
-| `meta_title` 上限 | 无限制 | **≤ 65** | **≤ 65** |
-| `meta description` | 无限制 | **120 ~ 170** | **120 ~ 170** |
-| `summary` 下限 | 无 | 无 | **≥ 80** |
-| 来源 metafield | `custom.community_source` | `custom.discord_source` | `custom.maker_source` |
-| 额外 metafield | — | — | **`custom.maker_summary`**（multi_line_text_field） |
+| 规则 | 社区 `community_post` | Discord `discord-page` | MakerWorld `makerworld-page` | 用户故事 `user-story` |
+|---|---|---|---|---|
+| 最少 `<h2>` 数 | **1** | **4** | **4** | **4** |
+| `meta_title` 上限 | 无限制 | **≤ 65** | **≤ 65** | 无限制 |
+| `meta description` | 无限制 | **120 ~ 170** | **120 ~ 170** | 无限制 |
+| `summary` 下限 | 无 | 无 | **≥ 80** | 无 |
+| 来源 metafield | `custom.community_source` | `custom.discord_source` | `custom.maker_source` | **`custom.user_info`** |
+| 额外 metafield | — | — | **`custom.maker_summary`**（multi_line_text_field） | — |
 | 来源必需字段 | `title` `url` `excerpt` `author_name` `author_avatar_url` `author_profile_url` | `title` `url` `excerpt` `starter_name` `starter_avatar_url` `channel_name` `invite_url` | `title` `url` `excerpt` `creator_name` `creator_avatar_url` `creator_profile_url` `platform` `model_id` `license` |
 | 来源 url 校验 | 前缀 `community.zimaspace.com/t/` | 正则 Discord 消息链接 | **host 必须 makerworld.com 且路径含 `/models/`** |
 | 其他来源校验 | `author_profile_url` 前缀 `/u/` | `channel_name` 剥掉 `#` | `platform` 必须 `MakerWorld`、`model_id` 纯数字 |
 | 图片规则 | `alt` + `title` | 同左 | 再加 **`alt` 长度 50~100**、**必须 `loading="lazy"`** |
 | 链接规则 | `title` | 同左 | 再加：禁止 anchor 文本（`docs`/`see…guide`/`click here`…）、内链不得 `target="_blank"`、外链必须 `_blank`+`noopener`+`noreferrer`、第三方必须 `nofollow` |
-| 正文要求 | — | — | **必须引用原始模型页 URL** |
+| 正文要求 | — | — | **必须引用原始模型页 URL** | **必须含「A Note from Zima」与「The Story Is Still Being Written」** |
+| 反链 | — | — | — | **可选：发布后往已有博客文章追加幂等上下文反链** |
 
 > 复杂的图片/链接规则只在**后端**实现（`POST /api/validate`）：前端解析后会自动调一次这个接口，
 > 把结果合并进校验列；后端不可用时退回本地规则。这样同一套规则不会在 TS 与 Python 里各写一遍后漂移。
 
-未核对规格的栏目（用户故事 / VS）只做宽松校验，来源缺失仅提示。
+未核对规格的栏目（只剩 **VS**）只做宽松校验，来源缺失仅提示。
 
 ### 权限要求（分两档）
 
@@ -181,6 +182,7 @@ F1「返回上一页」、F2「回到首页」—— 纯前端。
 | `POST /api/settings/token/refresh` | ✅ | D5 |
 | `GET /api/blogs` | ✅ | D13 |
 | `POST /api/validate` | ✅ | **C1 / C4** 上传阶段权威校验（只读，各栏目规则） |
+| （发布时内联） | ✅ | **用户故事反链**：页面发布成功后往已有博客文章追加幂等上下文反链 |
 | `GET /api/contents/stats` | 🔲 | B1 |
 | `GET /api/contents/timeline` | 🔲 | B3、B5 |
 | `GET /api/contents?channel_id=` | 🔲 | （栏目页回看已入库内容） |

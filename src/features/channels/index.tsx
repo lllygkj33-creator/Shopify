@@ -635,6 +635,19 @@ function PublishResultPanel({ result }: { result: PublishResult }) {
             </span>
             <span className='min-w-0 flex-1'>
               <span className='truncate'>{item.title}</span>
+              {item.backlinkResult && (
+                <span className='ml-2 text-muted-foreground'>
+                  反链：
+                  {item.backlinkResult === 'ADDED'
+                    ? '已追加'
+                    : '已存在，跳过'}
+                </span>
+              )}
+              {item.backlinkError && (
+                <span className='block text-amber-600'>
+                  页面已发布，但反链失败：{item.backlinkError}
+                </span>
+              )}
               {item.error && (
                 <span className='block text-destructive'>{item.error}</span>
               )}

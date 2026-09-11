@@ -145,11 +145,11 @@ describe('parseJsonContent —— 博客文章（数组 schema）', () => {
 
 describe('parseJsonContent —— 页面（单对象 schema）', () => {
   it('识别单对象页面并读取 template', () => {
-    // 用尚未核对规格的栏目（user-story），专注验证「模板识别」本身
+    // 用仍未核对规格的栏目（vs），专注验证「模板识别」本身
     const text = JSON.stringify({
-      title: 'User Story',
-      url: '/pages/my-user-story',
-      template: 'user-story',
+      title: 'A vs B',
+      url: '/pages/my-vs-page',
+      template: 'nas-a-vs-b',
       published: true,
       html: '<div><h2>hi</h2></div>',
       'meta title': 'MT',
@@ -157,16 +157,16 @@ describe('parseJsonContent —— 页面（单对象 schema）', () => {
       images: ['a.png'],
     })
 
-    const result = parseJsonContent(text, 'User/f.json')
+    const result = parseJsonContent(text, 'VS/f.json')
 
     expect(result.detected).toBe('page')
     expect(result.candidates).toHaveLength(1)
 
     const [candidate] = result.candidates
     expect(candidate.contentType).toBe('page')
-    expect(candidate.handle).toBe('/pages/my-user-story')
-    expect(candidate.template).toBe('user-story')
-    expect(candidate.channelId).toBe('user-story')
+    expect(candidate.handle).toBe('/pages/my-vs-page')
+    expect(candidate.template).toBe('nas-a-vs-b')
+    expect(candidate.channelId).toBe('vs')
     expect(candidate.publishable).toBe(true)
   })
 
@@ -212,7 +212,7 @@ describe('parseJsonContent —— 页面（单对象 schema）', () => {
     const text = JSON.stringify({
       title: 'X',
       url: '/pages/x',
-      template: 'user-story',
+      template: 'nas-a-vs-b',
       published: false,
       html: '<div><h2>h</h2></div>',
       'meta title': 'MT',
@@ -578,12 +578,12 @@ describe('上传阶段校验 —— 来源对象', () => {
       'meta title': 'D',
       'meta description': 'MD',
       url: '/pages/d',
-      template: 'user-story',
+      template: 'nas-a-vs-b',
       html: PAGE_HTML_OK,
     })
-    const [candidate] = parseJsonContent(raw, 'User/a.json').candidates
+    const [candidate] = parseJsonContent(raw, 'VS/a.json').candidates
 
-    expect(candidate.channelId).toBe('user-story')
+    expect(candidate.channelId).toBe('vs')
     expect(candidate.publishable).toBe(true)
     expect(warningsOf(candidate)).toContainEqual(
       expect.stringContaining('规格尚未核对')
@@ -714,5 +714,123 @@ describe('上传阶段校验 —— Discord 页面（更严）', () => {
     expect(errorsOf(candidate)).toContainEqual(
       expect.stringContaining('starter_name')
     )
+  })
+})
+
+
+// ---------------------------------------------------------------------------
+// 用户故事：来源叫 user_info，且正文必须包含两句固定文案
+// ---------------------------------------------------------------------------
+
+const USER_INFO = {
+  name: 'ExampleBuilder',
+  handle: 'example-builder',
+  avatar_url: 'https://community.zimaspace.com/user_avatar/x/45.png',
+  profile_url: 'https://community.zimaspace.com/u/example-builder',
+}
+
+const USER_HTML = [
+  '<div>',
+  '<h2>A Note from Zima</h2><p>We asked how it came together.</p>',
+  '<h2>Starting small</h2><p>One bay at first.</p>',
+  '<h2>Scaling up</h2><p>Then it grew.</p>',
+  '<h2>The Story Is Still Being Written</h2><p>More to come.</p>',
+  '</div>',
+].join('')
+
+function userStory(overrides: Record<string, unknown> = {}) {
+  return JSON.stringify({
+    title: 'How ExampleBuilder Built a 350 TB Array',
+    meta_title: 'User Story: A 350 TB Array',
+    td: 'A user story about scaling a ZimaBoard 2 build.',
+    url: '/pages/001-example-builder-zimaboard2-350tb',
+    template: 'user-story',
+    html: USER_HTML,
+    user_info: USER_INFO,
+    ...overrides,
+  })
+}
+
+describe('上传阶段校验 —— 用户故事', () => {
+  it('合法用户故事通过', () => {
+    const [candidate] = parseJsonContent(userStory(), 'User/a.json').candidates
+
+    expect(candidate.channelId).toBe('user-story')
+    expect(candidate.publishable).toBe(true)
+    expect(candidate.issues).toEqual([])
+  })
+
+  it('正文缺少「A Note from Zima」报错', () => {
+    const [candidate] = parseJsonContent(
+      userStory({ html: USER_HTML.replace('A Note from Zima', 'A note') }),
+      'User/a.json'
+    ).candidates
+
+    expect(errorsOf(candidate)).toContainEqual(
+      expect.stringContaining('A Note from Zima')
+    )
+  })
+
+  it('正文缺少收尾文案报错', () => {
+    const [candidate] = parseJsonContent(
+      userStory({ html: USER_HTML.replace('The Story Is Still Being Written', 'Soon') }),
+      'User/a.json'
+    ).candidates
+
+    expect(errorsOf(candidate)).toContainEqual(
+      expect.stringContaining('The Story Is Still Being Written')
+    )
+  })
+
+  it('缺少 user_info 报错（不是 user_source）', () => {
+    const raw = JSON.parse(userStory())
+    delete raw.user_info
+    const [candidate] = parseJsonContent(JSON.stringify(raw), 'User/a.json').candidates
+
+    expect(errorsOf(candidate)).toContainEqual(
+      expect.stringContaining('user_info')
+    )
+  })
+
+  it('user_info 缺 profile_url 报错', () => {
+    const broken = { ...USER_INFO } as Record<string, unknown>
+    delete broken['profile_url']
+
+    const [candidate] = parseJsonContent(
+      userStory({ user_info: broken }),
+      'User/a.json'
+    ).candidates
+
+    expect(errorsOf(candidate)).toContainEqual(
+      expect.stringContaining('profile_url')
+    )
+  })
+
+  it('H2 少于 4 个报错', () => {
+    const [candidate] = parseJsonContent(
+      userStory({ html: '<div><h2>A Note from Zima</h2></div>' }),
+      'User/a.json'
+    ).candidates
+
+    expect(errorsOf(candidate)).toContainEqual(
+      expect.stringContaining('至少包含 4 个 <h2>')
+    )
+  })
+
+  it('backlink 会被解析并带出去', () => {
+    const [candidate] = parseJsonContent(
+      userStory({
+        backlink: {
+          enabled: true,
+          article_url: 'https://shop.zimaspace.com/blogs/tech-ai-hub/user-builds-so-far',
+          lead_in: 'Read the full build story:',
+          anchor_text: 'a 350 TB array',
+        },
+      }),
+      'User/a.json'
+    ).candidates
+
+    expect(candidate.backlink).toBeDefined()
+    expect(candidate.backlink?.['article_url']).toContain('/blogs/tech-ai-hub/')
   })
 })

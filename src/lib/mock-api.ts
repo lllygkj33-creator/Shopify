@@ -431,6 +431,8 @@ export const mockApi = {
       handle: string
       channelId: string
       contentType: 'blog_article' | 'page'
+      /** 是否配置了反链（用户故事） */
+      hasBacklink?: boolean
     }[]
   ): PublishResult {
     const contents = ensureStore()
@@ -472,6 +474,8 @@ export const mockApi = {
         status,
         title: input.title,
         scheduledAt: input.scheduledAt,
+        // 模拟反链：页面类且配置了 backlink 时返回 ADDED
+        backlinkResult: input.hasBacklink ? 'ADDED' : null,
         publishedUrl: status === 'published' ? input.handle : undefined,
         shopifyId: `gid://shopify/${input.contentType === 'page' ? 'Page' : 'Article'}/${Date.now() % 100000}`,
       }

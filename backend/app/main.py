@@ -17,6 +17,12 @@ from pydantic import BaseModel, Field
 
 from . import config as app_config
 from . import ssl_fix  # noqa: F401  导入即生效（macOS CA 修复）
+from .shopify.backlink import (
+    BacklinkError,
+    BacklinkRunner,
+    BacklinkConfig,
+    load_backlink,
+)
 from .shopify.client import ShopifyError, shopify_client
 from .shopify.page_publisher import (
     PagePublishError,
@@ -148,6 +154,8 @@ class PublishItemIn(BaseModel):
     template: str | None = None
     # 页面来源对象（如 community_source），整对象透传给后端
     source: dict[str, Any] | None = None
+    # 可选：页面发布成功后往某篇博客文章追加上下文反链（用户故事用）
+    backlink: dict[str, Any] | None = None
 
     # 前置引用
     author: str | None = None
@@ -176,6 +184,9 @@ class PublishResultItem(BaseModel):
     coverImageSlot: str | None = None
     relatedProduct: str | None = None
     reviewer: str | None = None
+    """反链执行结果：ADDED / ALREADY PRESENT / None"""
+    backlinkResult: str | None = None
+    backlinkError: str | None = None
 
 
 class PublishResponse(BaseModel):
@@ -799,18 +810,48 @@ async def _publish_page(item: PublishItemIn, now: datetime) -> PublishResultItem
             }
         )
 
+        public_url = full_page_url(payload_page.handle)
+
+        # 可选反链：页面发布成功后，往一篇已有博客文章追加幂等上下文反链。
+        # 反链失败不回滚页面（页面本身是成功的），但要把原因报出来。
+        backlink_result: str | None = None
+        backlink_error: str | None = None
+        if item.backlink:
+            try:
+                config = load_backlink({"backlink": item.backlink})
+                if config is not None:
+                    backlink_result = await BacklinkRunner().ensure(
+                        page_handle=payload_page.handle,
+                        page_url=public_url,
+                        backlink=config,
+                    )
+                    if backlink_result:
+                        record_publish_result(
+                            {
+                                "status": "success",
+                                "publish_key": item.publishKey,
+                                "channel_id": item.channelId,
+                                "title": payload_page.title,
+                                "handle": payload_page.handle,
+                                "backlink": backlink_result,
+                                "backlink_article": config.article_url,
+                            }
+                        )
+            except BacklinkError as error:
+                backlink_error = str(error)
+
         return PublishResultItem(
             candidateTempId=item.candidateTempId,
             status=status,
             title=payload_page.title,
             scheduledAt=scheduled.isoformat() if scheduled else None,
-            publishedUrl=(
-                None if item.mode == "draft" else full_page_url(payload_page.handle)
-            ),
+            publishedUrl=None if item.mode == "draft" else public_url,
             shopifyId=page.get("id"),
+            backlinkResult=backlink_result,
+            backlinkError=backlink_error,
         )
 
-    except (PagePublishError, ShopifyError) as error:
+    except (PagePublishError, BacklinkError, ShopifyError) as error:
         record_publish_result(
             {
                 "status": "failed",

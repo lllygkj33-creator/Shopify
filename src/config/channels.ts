@@ -103,6 +103,8 @@ export type PageSpec = {
   sourceDigitFields?: string[]
   /** summary 最小长度；0 表示不检查 */
   summaryMin?: number
+  /** 正文必须逐字包含的片段（用户故事的两句固定文案） */
+  bodyMustContain?: string[]
 
   /** 正文至少需要多少个 <h2>（社区 1 个，Discord 4 个） */
   h2Min?: number
@@ -254,10 +256,24 @@ export const CHANNELS: Channel[] = [
     contentType: 'page',
     color: '#22c55e',
     template: 'user-story',
+    // ✅ 已对照 publish_user_stories.py 核对
+    //
+    // 与前几个的不同：来源 metafield 是 custom.user_info（字段名 name/handle/
+    // avatar_url/profile_url），且正文必须逐字包含两句固定文案。
+    // 参考脚本是「直接发布」（只用 isPublished），平台统一提供 立即/定时/草稿 三种方式。
     pageSpec: {
       template: 'user-story',
-      sourceKey: 'user_source',
-      verified: false,
+      sourceKey: 'user_info',
+      sourceFields: ['name', 'handle', 'avatar_url', 'profile_url'],
+      sourceRequiredNonEmpty: ['name', 'handle', 'profile_url'],
+      sourceHttpUrlFields: ['avatar_url', 'profile_url'],
+      bodyMustContain: [
+        'A Note from Zima',
+        'The Story Is Still Being Written',
+      ],
+      h2Min: 4,
+      // 用户故事脚本没有 meta 长度规则
+      verified: true,
     },
   },
   {

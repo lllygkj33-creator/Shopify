@@ -175,6 +175,9 @@ class PageChannelSpec:
     require_source_url_in_body: bool = False
     """正文里必须出现来源 URL（MakerWorld 要求引用原始模型页）。"""
 
+    body_must_contain: tuple[str, ...] = ()
+    """正文必须逐字包含这些片段（用户故事要求两句固定文案）。"""
+
     keep_source_extras: bool = False
     """是否保留来源对象里除必需字段外的其他键（Discord 脚本会保留）。"""
 
@@ -250,12 +253,29 @@ PAGE_CHANNEL_SPECS: dict[str, PageChannelSpec] = {
         meta_description_max=170,
         verified=True,
     ),
-    # ⚠️ 以下 2 个规格来自 PRD §3.2，**尚未**用真实脚本核对：
+    # ⚠️ 以下 1 个规格来自 PRD §3.2，**尚未**用真实脚本核对：
     #    template 与来源键名按命名规律推断，来源字段不做强校验。
-    #    拿到各自脚本后按上面两个栏目那样收紧。
+    # ✅ 已对照 publish_user_stories.py 核对
+    #
+    # 与前三个的不同：
+    #   - 来源 metafield 是 custom.user_info（字段名 name/handle/avatar_url/profile_url）
+    #   - 正文必须逐字包含两句固定文案
+    #   - 参考脚本是「直接发布」（只用 isPublished，没有 publishDate），
+    #     但平台统一提供 立即/定时/草稿三种方式，所以这里不限制发布方式
+    #   - 支持可选的反链（见 backlink.py）
     "user-story": PageChannelSpec(
         template="user-story",
-        source_key="user_source",
+        source_key="user_info",
+        source_fields=("name", "handle", "avatar_url", "profile_url"),
+        source_required_nonempty=("name", "handle", "profile_url"),
+        source_http_url_fields=("avatar_url", "profile_url"),
+        body_must_contain=(
+            "A Note from Zima",
+            "The Story Is Still Being Written",
+        ),
+        h2_min=4,
+        # 用户故事脚本没有 meta 长度规则
+        verified=True,
     ),
     "vs": PageChannelSpec(
         template="nas-a-vs-b",
@@ -752,6 +772,13 @@ def validate_page_payload(payload: PagePayload, spec: PageChannelSpec) -> list[s
                     errors.append(
                         f"第 {index} 个第三方链接必须包含 nofollow：{href}"
                     )
+
+    # -----------------------------------------------------------------------
+    # 正文必须逐字包含指定文案（用户故事的两句固定文案）
+    # -----------------------------------------------------------------------
+    for required_text in spec.body_must_contain:
+        if required_text not in payload.body_html:
+            errors.append(f"正文必须包含「{required_text}」")
 
     # -----------------------------------------------------------------------
     # 正文必须引用来源 URL（MakerWorld 要求）

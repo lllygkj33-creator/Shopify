@@ -766,6 +766,17 @@ function normalizePageCandidate(
   // ---- 正文硬规则：禁 h1 / 至少 h2Min 个 h2 / img alt+title / a title ----
   issues.push(...checkPageHtmlRules(html, spec?.h2Min ?? 1))
 
+  // 正文必须逐字包含的固定文案（用户故事要求两句固定段落）
+  for (const required of spec?.bodyMustContain ?? []) {
+    if (!html.includes(required)) {
+      issues.push({
+        level: 'error',
+        field: 'html',
+        message: `正文必须包含「${required}」`,
+      })
+    }
+  }
+
   // ---- 来源对象（custom.<sourceKey> json metafield） ----
   const rawSource = channel?.pageSpec?.sourceKey
     ? raw[channel.pageSpec.sourceKey]
@@ -782,6 +793,13 @@ function normalizePageCandidate(
       message: `缺少 ${channel.pageSpec.sourceKey} 来源信息；该栏目规格尚未核对，此处只做提示`,
     })
   }
+
+  // 可选反链：页面发布后往某篇博客文章追加幂等上下文反链
+  const rawBacklink = pickRaw(raw, 'backlink')
+  const backlink =
+    rawBacklink && typeof rawBacklink === 'object' && !Array.isArray(rawBacklink)
+      ? (rawBacklink as Record<string, unknown>)
+      : undefined
 
   // 页面 schema 里 published 字段（脚本会解析，但不参与请求构造）
   const published = pickRaw(raw, 'published')
@@ -812,8 +830,9 @@ function normalizePageCandidate(
     metaDescription,
     author: pick(raw, 'author'),
     // 页面**不使用** related_products：参考脚本刻意不写 custom.related_products，
-    // 避免清掉页面上已有的商品列表 metafield（社区文章尤其不需要）
+    // 避免清掉页面上已有的商品列表 metafield
     source,
+    backlink,
     sourceFile: filePath,
     sourceIndex: index,
     publishKey: `${channelId}|${basename(filePath)}|${index}|${handle}`,

@@ -279,6 +279,7 @@ export const publishApi = {
             handle: item.candidate.handle,
             channelId: item.candidate.channelId,
             contentType: item.candidate.contentType,
+            hasBacklink: Boolean(item.candidate.backlink),
           }))
         ),
         800
@@ -306,6 +307,8 @@ export const publishApi = {
         tags: item.candidate.tags,
         // 页面栏目的来源对象（custom.<key> json metafield）
         source: item.candidate.source,
+        // 可选反链（用户故事）
+        backlink: item.candidate.backlink,
         sourceFile: item.candidate.sourceFile,
         sourceIndex: item.candidate.sourceIndex,
       })),

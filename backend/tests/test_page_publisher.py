@@ -146,10 +146,10 @@ def test_load_source_enforces_author_profile_url():
 
 def test_load_source_passes_through_for_unverified_channels():
     """未核对规格的栏目只做宽松处理。"""
-    user_story = get_page_spec("user-story")
-    assert user_story is not None and user_story.verified is False
+    vs = get_page_spec("vs")
+    assert vs is not None and vs.verified is False
 
-    result = load_source({"user_source": {"anything": "goes"}}, user_story)
+    result = load_source({"vs_source": {"anything": "goes"}}, vs)
     assert result == {"anything": "goes"}
 
 
@@ -519,11 +519,11 @@ def test_community_spec_is_marked_verified():
 
 def test_other_page_channels_are_registered_but_unverified():
     """
-    剩余 2 个页面栏目的规格来自 PRD，尚未用真实脚本核对 —— 这里把状态钉住，
-    等拿到各自脚本后收紧校验并把 verified 改成 True。
-    （社区 / Discord / MakerWorld 都已对照各自脚本核对）
+    只剩 VS 的规格来自 PRD，尚未用真实脚本核对 —— 这里把状态钉住，
+    等拿到脚本后收紧校验并把 verified 改成 True。
+    （社区 / Discord / MakerWorld / 用户故事 都已对照各自脚本核对）
     """
-    for channel_id in ("user-story", "vs"):
+    for channel_id in ("vs",):
         spec = PAGE_CHANNEL_SPECS[channel_id]
         assert spec.verified is False
         assert spec.source_key.endswith("_source")
@@ -924,3 +924,117 @@ def test_makerworld_metafields_include_maker_summary():
     assert by_key["maker_summary"]["value"] == MAKER_SUMMARY
     # 依旧不碰 related_products
     assert "related_products" not in by_key
+
+
+# ---------------------------------------------------------------------------
+# 用户故事：来源叫 user_info，且正文必须包含两句固定文案
+# ---------------------------------------------------------------------------
+
+USER_SPEC = get_page_spec("user-story")
+assert USER_SPEC is not None
+
+USER_INFO = {
+    "name": "ExampleBuilder",
+    "handle": "example-builder",
+    "avatar_url": "https://community.zimaspace.com/user_avatar/x/45.png",
+    "profile_url": "https://community.zimaspace.com/u/example-builder",
+}
+
+USER_HTML = (
+    "<div>"
+    '<h2>A Note from Zima</h2><p>We asked how the build came together.</p>'
+    "<h2>Starting small</h2><p>It began with a single bay.</p>"
+    "<h2>Scaling to 350 TB</h2><p>Then it grew.</p>"
+    "<h2>The Story Is Still Being Written</h2><p>More to come.</p>"
+    "</div>"
+)
+
+
+def raw_user(**overrides):
+    base = {
+        "title": "How ExampleBuilder Built a 350 TB ZimaBoard 2 Array",
+        "meta_title": "User Story: A 350 TB ZimaBoard 2 Array",
+        "td": "A user story about scaling a ZimaBoard 2 build to 350 TB of storage.",
+        "url": "/pages/001-example-builder-zimaboard2-350tb",
+        "template": "user-story",
+        "html": USER_HTML,
+        "user_info": dict(USER_INFO),
+    }
+    base.update(overrides)
+    return base
+
+
+def build_user(raw=None, **kwargs):
+    return build_page_payload(
+        raw if raw is not None else raw_user(),
+        channel_id="user-story",
+        spec=USER_SPEC,
+        **kwargs,
+    )
+
+
+def test_user_story_spec_matches_script():
+    assert USER_SPEC.verified is True
+    assert USER_SPEC.template == "user-story"
+    # 脚本用的是 user_info，不是 user_source
+    assert USER_SPEC.source_key == "user_info"
+    assert USER_SPEC.h2_min == 4
+    # 用户故事脚本没有 meta 长度规则
+    assert USER_SPEC.meta_title_max == 0
+    assert USER_SPEC.summary_min == 0
+
+
+def test_user_story_valid_payload_passes():
+    assert validate_page_payload(build_user(), USER_SPEC) == []
+
+
+def test_user_story_requires_fixed_copy_in_body():
+    html = USER_HTML.replace("A Note from Zima", "A note")
+    payload = build_user(raw_user(html=html))
+    errors = validate_page_payload(payload, USER_SPEC)
+
+    assert any("A Note from Zima" in error for error in errors)
+
+
+def test_user_story_requires_closing_line():
+    html = USER_HTML.replace("The Story Is Still Being Written", "More soon")
+    payload = build_user(raw_user(html=html))
+    errors = validate_page_payload(payload, USER_SPEC)
+
+    assert any("The Story Is Still Being Written" in error for error in errors)
+
+
+def test_user_story_requires_four_h2():
+    html = "<div><h2>A Note from Zima</h2><h2>The Story Is Still Being Written</h2></div>"
+    payload = build_user(raw_user(html=html))
+    errors = validate_page_payload(payload, USER_SPEC)
+
+    assert any("至少包含 4 个 <h2>" in error for error in errors)
+
+
+def test_user_info_requires_profile_url_and_name():
+    broken = {k: v for k, v in USER_INFO.items() if k != "profile_url"}
+    with pytest.raises(PagePublishError, match="profile_url"):
+        build_user(raw_user(user_info=broken))
+
+
+def test_user_info_avatar_may_be_blank():
+    payload = build_user(raw_user(user_info={**USER_INFO, "avatar_url": ""}))
+    assert payload.source["avatar_url"] == ""
+
+
+def test_user_info_profile_url_must_be_complete_url():
+    with pytest.raises(PagePublishError, match="profile_url"):
+        build_user(
+            raw_user(user_info={**USER_INFO, "profile_url": "community.zimaspace.com/u/x"})
+        )
+
+
+def test_user_story_metafields_use_user_info():
+    metafields = page_metafields(build_user(), USER_SPEC)
+    by_key = {item["key"]: item for item in metafields}
+
+    assert set(by_key) == {"title_tag", "description_tag", "user_info"}
+    assert by_key["user_info"]["namespace"] == "custom"
+    assert by_key["user_info"]["type"] == "json"
+    assert json.loads(by_key["user_info"]["value"])["handle"] == "example-builder"

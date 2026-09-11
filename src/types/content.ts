@@ -165,6 +165,12 @@ export type ParsedCandidate = {
    */
   source?: Record<string, unknown>
 
+  /**
+   * 可选反链配置（用户故事）：页面发布成功后，往一篇已有博客文章追加
+   * 幂等的上下文反链。后端会按 marker 去重，重复运行不会追加两次。
+   */
+  backlink?: Record<string, unknown>
+
   sourceFile: string
   sourceIndex: number
   publishKey: string
@@ -321,6 +327,10 @@ export type PublishResultItem = {
   publishedUrl?: string
   shopifyId?: string
   error?: string
+  /** 反链结果：ADDED / ALREADY PRESENT */
+  backlinkResult?: string | null
+  /** 页面发布成功但反链失败时的原因（页面本身不回滚） */
+  backlinkError?: string | null
 }
 
 export type PublishResult = {

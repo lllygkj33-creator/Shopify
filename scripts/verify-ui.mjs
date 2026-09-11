@@ -213,13 +213,13 @@ try {
     console.log(`  · «${row.title}» | 目标：${row.target} | 校验：${row.check}`)
   }
   console.log(`发布按钮：${flowFacts.publishButton}`)
-  if (flowFacts.publishButton !== '发布 4 篇') {
-    problems.push(`发布按钮应统计 4 篇可发布内容，实际：${flowFacts.publishButton}`)
+  if (flowFacts.publishButton !== '发布 5 篇') {
+    problems.push(`发布按钮应统计 5 篇可发布内容，实际：${flowFacts.publishButton}`)
   }
 
   // 断言：2 篇博客 + 1 个页面 = 3 行；且第一行正文无 class 时应回落到栏目默认博客
-  if (flowFacts.rowCount !== 5) {
-    problems.push(`上传 4 个 JSON 应解析出 5 条内容，实际 ${flowFacts.rowCount} 条`)
+  if (flowFacts.rowCount !== 6) {
+    problems.push(`上传 5 个 JSON 应解析出 6 条内容，实际 ${flowFacts.rowCount} 条`)
   }
   // 注意用不区分大小写比较：店铺里的真实标题是 'Tech & AI HUB'（大写 HUB）
   if (!flowFacts.rows.some((r) => r.target.toLowerCase().includes('tech & ai hub'))) {
@@ -239,6 +239,7 @@ try {
     ['community_post', '社区页面'],
     ['discord-page', 'Discord 页面'],
     ['makerworld-page', 'MakerWorld 页面'],
+    ['user-story', '用户故事'],
   ]) {
     const row = flowFacts.rows.find((r) => r.target.includes(template))
     if (!row) {
@@ -259,6 +260,14 @@ try {
       .first()
       .textContent()
     console.log(`✓ 发布已提交，结果面板显示：${resultText?.trim()}`)
+
+    // 用户故事配置了 backlink，结果面板应显示「反链：已追加」
+    const panelText = await flow.locator('body').textContent()
+    if (panelText?.includes('反链：已追加')) {
+      console.log('✓ 反链状态已显示（ADDED）')
+    } else {
+      problems.push('用户故事的 backlink 没有在结果面板显示')
+    }
   } else {
     problems.push('没有找到「发布 N 篇」按钮，无法提交')
   }
