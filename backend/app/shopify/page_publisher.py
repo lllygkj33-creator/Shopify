@@ -34,6 +34,7 @@ from pathlib import Path
 from typing import Any
 
 from .client import ShopifyError, ShopifyGraphQLClient, shopify_client
+from .html_audit import audit_external_links
 
 # 页面 URL 用的前台域名（与 Admin API 域名不同）
 STORE_DOMAIN = "shop.zimaspace.com"
@@ -170,7 +171,14 @@ class PageChannelSpec:
     """是否要求所有 <img> 带 loading="lazy"。"""
 
     enforce_anchor_rules: bool = False
-    """是否启用链接规则（禁止的 anchor 文本、target/rel/nofollow）。"""
+    """是否启用**完整**链接规则（含禁止的 anchor 文本、站内不得开新标签页）。
+
+    MakerWorld / VS 用这一套（严格）。
+    """
+
+    enforce_link_rules: bool = False
+    """是否启用**外链规则**（所有链接要有 title；第三方外链要 _blank + noopener
+    + noreferrer + nofollow）。社区 / Discord / 用户故事用这一套。"""
 
     require_source_url_in_body: bool = False
     """正文里必须出现来源 URL（MakerWorld 要求引用原始模型页）。"""
@@ -242,6 +250,8 @@ PAGE_CHANNEL_SPECS: dict[str, PageChannelSpec] = {
         ),
         # 社区脚本只要求「至少一个 <h2>」，没有 meta 长度规则
         h2_min=1,
+        # 链接：脚本只要求非空 title；平台额外要求第三方外链安全标记
+        enforce_link_rules=True,
         verified=True,
     ),
     # ✅ 已对照 publish_discord_pages.py 核对
@@ -276,6 +286,7 @@ PAGE_CHANNEL_SPECS: dict[str, PageChannelSpec] = {
         source_field_regexes=(("url", DISCORD_MESSAGE_URL_REGEX),),
         source_http_url_fields=("url", "starter_avatar_url", "invite_url"),
         strip_hash_prefix=("channel_name",),
+        enforce_link_rules=True,
         # Discord 脚本保留来源对象里的额外键
         keep_source_extras=True,
         h2_min=4,
@@ -305,6 +316,7 @@ PAGE_CHANNEL_SPECS: dict[str, PageChannelSpec] = {
             "The Story Is Still Being Written",
         ),
         h2_min=4,
+        enforce_link_rules=True,
         # 用户故事脚本没有 meta 长度规则
         verified=True,
     ),
@@ -941,6 +953,15 @@ def validate_page_payload(payload: PagePayload, spec: PageChannelSpec) -> list[s
                     errors.append(
                         f"第 {index} 个第三方链接必须包含 nofollow：{href}"
                     )
+
+    # -----------------------------------------------------------------------
+    # 外链规则（社区 / Discord / 用户故事）：所有链接要有 title，
+    # 第三方外链要 _blank + noopener + noreferrer + nofollow
+    # -----------------------------------------------------------------------
+    if spec.enforce_link_rules:
+        errors.extend(
+            audit_external_links(payload.body_html, shop_domain=STORE_DOMAIN)
+        )
 
     # -----------------------------------------------------------------------
     # 正文必须逐字包含指定文案（用户故事的两句固定文案）

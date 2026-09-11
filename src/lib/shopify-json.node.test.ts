@@ -337,7 +337,9 @@ describe('resolveBlogName', () => {
 // ---------------------------------------------------------------------------
 
 const PAGE_HTML_OK =
-  '<div><h2>Setup</h2><p>x</p><img src="a.png" alt="图示" title="图示"><a href="https://e.com" title="链接">l</a></div>'
+  '<div><h2>Setup</h2><p>x</p><img src="a.png" alt="图示" title="图示">' +
+  // 第三方外链必须带 _blank + noopener + noreferrer + nofollow（平台外链规则）
+  '<a href="https://e.com" title="链接" target="_blank" rel="nofollow noopener noreferrer">l</a></div>'
 
 const COMMUNITY_SOURCE = {
   title: 'Prowlarr + Radarr on CasaOS',
@@ -1014,5 +1016,89 @@ describe('上传阶段校验 —— VS 对比页', () => {
     const messages = candidate.issues.map((issue) => issue.message)
 
     expect(messages.some((message) => message.includes('来源'))).toBe(false)
+  })
+})
+
+
+// ---------------------------------------------------------------------------
+// 外链规则（所有栏目共用；后端 html_audit.py 是同一套逻辑）
+// ---------------------------------------------------------------------------
+
+describe('上传阶段校验 —— 外链规则', () => {
+  function blogWithLink(anchor: string): string {
+    return JSON.stringify([
+      {
+        'blog title': 'T',
+        url: 'a-b',
+        'meta title': 'MT',
+        'meta description': 'MD',
+        summary: 'S',
+        html代码: `<article><h2>a</h2><h2>b</h2><h2>c</h2><h2>d</h2><p>${anchor}</p></article>`,
+      },
+    ])
+  }
+
+  const SAFE = 'target="_blank" rel="nofollow noopener noreferrer"'
+
+  it('相对路径与站内链接只要求 title', () => {
+    const raw = blogWithLink('<a href="/pages/x" title="Some page">some page</a>')
+    const [candidate] = parseJsonContent(raw, 'f.json', 'buying-guide').candidates
+    expect(errorsOf(candidate)).toEqual([])
+  })
+
+  it('自家域名（www.zimaspace.com）按站内处理，不强制 _blank', () => {
+    const raw = blogWithLink(
+      '<a href="https://www.zimaspace.com/docs/x" title="Docs page">docs page</a>'
+    )
+    const [candidate] = parseJsonContent(raw, 'f.json', 'buying-guide').candidates
+    expect(errorsOf(candidate)).toEqual([])
+  })
+
+  it('合规第三方外链通过', () => {
+    const raw = blogWithLink(
+      `<a href="https://hub.docker.com/_/mysql" title="Docker image page" ${SAFE}>docker image</a>`
+    )
+    const [candidate] = parseJsonContent(raw, 'f.json', 'buying-guide').candidates
+    expect(errorsOf(candidate)).toEqual([])
+  })
+
+  it('第三方外链缺 target / rel / nofollow 都被拦下', () => {
+    const raw = blogWithLink(
+      '<a href="https://example.com/x" title="Example page">example page</a>'
+    )
+    const [candidate] = parseJsonContent(raw, 'f.json', 'buying-guide').candidates
+    const errors = errorsOf(candidate)
+
+    expect(errors).toContainEqual(expect.stringContaining('target="_blank"'))
+    expect(errors).toContainEqual(expect.stringContaining('noopener'))
+    expect(errors).toContainEqual(expect.stringContaining('nofollow'))
+  })
+
+  it('缺 title 被拦下', () => {
+    const raw = blogWithLink(
+      `<a href="https://example.com/x" ${SAFE}>example page</a>`
+    )
+    const [candidate] = parseJsonContent(raw, 'f.json', 'buying-guide').candidates
+
+    expect(errorsOf(candidate)).toContainEqual(
+      expect.stringContaining('title')
+    )
+  })
+
+  it('页面栏目（社区）同样适用', () => {
+    const raw = JSON.stringify({
+      title: 'C',
+      'meta title': 'MT',
+      'meta description': 'MD',
+      url: '/pages/c',
+      template: 'community_post',
+      html: '<div><h2>h</h2><a href="https://example.com/x" title="t">link text</a></div>',
+      community_source: COMMUNITY_SOURCE,
+    })
+    const [candidate] = parseJsonContent(raw, 'Com/f.json').candidates
+
+    expect(errorsOf(candidate)).toContainEqual(
+      expect.stringContaining('target="_blank"')
+    )
   })
 })

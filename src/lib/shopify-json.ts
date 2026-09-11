@@ -282,6 +282,102 @@ function countOccurrences(haystack: string, needle: string): number {
   return count
 }
 
+/**
+ * 外链规则（所有栏目共用；后端 html_audit.py 是同一套逻辑）。
+ *
+ * - 所有链接要有非空 `title`
+ * - 相对路径 / 站内（shop.zimaspace.com）/ 自家域名（*.zimaspace.com）只要求 title
+ * - 第三方外链要有 target="_blank" + rel 含 noopener / noreferrer / nofollow
+ *
+ * 站内与自家域名不强制新标签页，所以不会误伤既有文章。
+ */
+const FIRST_PARTY_SUFFIXES = ['zimaspace.com']
+const SHOP_HOST = 'shop.zimaspace.com'
+
+function isFirstPartyHost(host: string): boolean {
+  const value = host.toLowerCase().replace(/^\.+|\.+$/g, '')
+  return FIRST_PARTY_SUFFIXES.some(
+    (suffix) => value === suffix || value.endsWith(`.${suffix}`)
+  )
+}
+
+function checkExternalLinks(html: string): ValidationIssue[] {
+  const issues: ValidationIssue[] = []
+  if (!html) return issues
+
+  const anchors = html.match(/<a\b[^>]*>/gi) ?? []
+
+  anchors.forEach((tag, index) => {
+    const position = index + 1
+    const href = getTagAttr(tag, 'href')
+    const title = getTagAttr(tag, 'title')
+
+    if (!href) {
+      issues.push({ level: 'error', field: 'html', message: `第 ${position} 个链接缺少 href` })
+      return
+    }
+    if (!title) {
+      issues.push({
+        level: 'error',
+        field: 'html',
+        message: `第 ${position} 个链接缺少非空 title 属性`,
+      })
+    }
+
+    // 相对路径 / 页内锚点
+    if (href.startsWith('/') || href.startsWith('#')) return
+    if (!/^https?:\/\//i.test(href)) return
+
+    let host: string
+    try {
+      host = new URL(href).hostname.toLowerCase()
+    } catch {
+      return
+    }
+
+    if (host === SHOP_HOST || isFirstPartyHost(host)) return
+
+    const target = (getTagAttr(tag, 'target') ?? '').toLowerCase()
+    const rel = new Set(
+      (getTagAttr(tag, 'rel') ?? '')
+        .split(/\s+/)
+        .map((token) => token.trim().toLowerCase())
+        .filter(Boolean)
+    )
+
+    if (target !== '_blank') {
+      issues.push({
+        level: 'error',
+        field: 'html',
+        message: `第 ${position} 个链接是外部链接，必须使用 target="_blank"`,
+      })
+    }
+    const missing = ['noopener', 'noreferrer'].filter((token) => !rel.has(token))
+    if (missing.length > 0) {
+      issues.push({
+        level: 'error',
+        field: 'html',
+        message: `第 ${position} 个外部链接的 rel 缺少 ${missing.join('、')}`,
+      })
+    }
+    if (!rel.has('nofollow')) {
+      issues.push({
+        level: 'error',
+        field: 'html',
+        message: `第 ${position} 个第三方链接必须包含 nofollow`,
+      })
+    }
+  })
+
+  return issues
+}
+
+/** 取标签上的属性值（单双引号都支持） */
+function getTagAttr(tag: string, attr: string): string | null {
+  const match = tag.match(new RegExp(`\\b${attr}\\s*=\\s*["']([^"']*)["']`, 'i'))
+  return match ? match[1].trim() : null
+}
+
 function isCompleteHttpUrl(value: string): boolean {
   try {
     const url = new URL(value)
@@ -585,6 +681,9 @@ function normalizeBlogCandidate(
 
   if (html) issues.push(...checkRelatedProductsPlaceholder(html))
 
+  // 外链规则（平台新增：参考博客脚本没有这一段）
+  if (html) issues.push(...checkExternalLinks(html))
+
   const resolved = resolveBlogName(html, channel)
   if (resolved.source === 'none') {
     issues.push({
@@ -778,6 +877,11 @@ function normalizePageCandidate(
         message: `summary 应至少 ${spec.summaryMin} 个字符；当前 ${summaryValue.length}`,
       })
     }
+  }
+
+  // ---- 外链规则（社区 / Discord / 用户故事）----
+  if (spec?.enforceLinkRules) {
+    issues.push(...checkExternalLinks(html))
   }
 
   // ---- 正文硬规则：禁 h1 / 至少 h2Min 个 h2 / img alt+title / a title ----

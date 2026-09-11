@@ -1,0 +1,10 @@
+[
+  {
+    "blog title": "Home Server Buying Guide for Self-Hosting Beginners",
+    "url": "home-server-self-hosting-beginners",
+    "meta title": "Home Server Guide for Self-Hosting Beginners",
+    "meta description": "Choose a first home server for self-hosting. Compare reused PCs, ZimaBlade, ZimaBoard 2, RAM, storage, networking, backups, and ownership.",
+    "summary": "Choose between reused hardware, an entry bundle, and a server-first platform by mapping the first services, data layout, network, and recovery plan.",
+    "html代码": "<article class=\"zima-buying-guide-article\">\n<p>A beginner should buy the smallest home-server platform that can run the first one to three useful services, keep their data understandable, and recover after an experiment goes wrong.</p>\n<h2>Choose the First Jobs Before Choosing the Hardware</h2>\n<p>Self-hosting beginners often start with an application list, but hardware is easier to size when the first jobs are clear.</p>\n<h2>Keep Reused Hardware as a Real Baseline</h2>\n<p>An old desktop, mini PC, or laptop can be the cheapest way to learn Linux, containers, file permissions, and local networking.</p>\n<h2>Size CPU, Memory, and Storage Around the Service Type</h2>\n<p>Light services such as ad blocking, a dashboard, file synchronization, or a small web application can run on modest hardware.</p>\n<h2>Separate Boot, Application State, Shared Data, and Backups</h2>\n<p>A beginner-friendly server should make four locations easy to explain.</p>\n<h2>Keep Networking and Remote Access Boring at First</h2>\n<p>The first server should work reliably on the local network before it is reachable from outside the home.</p>\n<h2>Match the Product and Package to Beginner Tolerance</h2>\n<p>The useful hardware paths are different.</p>\n<h2>Verify the First-Year Ownership Plan Before Checkout</h2>\n<p>Before buying, write down the first three services.</p>\n</article>"
+  }
+]

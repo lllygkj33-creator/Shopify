@@ -160,6 +160,23 @@ F1「返回上一页」、F2「回到首页」—— 纯前端。
 
 这两处的示例 JSON 都会被脚本自己的 preflight 拒掉。**如果你们的 JSON 生成器真在用示例里的模板名，那些文件现在发不出去。**
 
+### 外链规则（所有栏目共用；平台在脚本之外新增）
+
+参考的 6 个脚本里，**只有 MakerWorld 和 VS 校验链接**；社区 / Discord / 用户故事 / 博客都不校验。
+平台统一加了一条最不容易误伤的规则（`backend/app/shopify/html_audit.py`）：
+
+| 链接类型 | 判定 | 要求 |
+|---|---|---|
+| 相对路径 / 页内锚点 | `/...`、`#...` | 只要非空 `title` |
+| 站内 | host == `shop.zimaspace.com` | 只要非空 `title` |
+| 自家域名 | `*.zimaspace.com`（含 `www`） | 只要非空 `title`，**不要求 nofollow** |
+| **第三方外链** | 其余 http(s) | 必须 `target="_blank"` + `rel` 含 `noopener`、`noreferrer`、`nofollow` |
+
+关键取舍：**站内与自家域名不强制开新标签页**。这样既拦住了真正危险的外部链接，
+又不会误伤既有文章（真实样本里 `www.zimaspace.com/docs/...` 是同一标签页打开的）。
+
+MakerWorld / VS 保留更严的一套（含「站内链接不得开新标签页」），由各自 spec 控制。
+
 ### 权限要求（分两档）
 
 | 档 | 权限 | 影响 |
@@ -192,6 +209,7 @@ F1「返回上一页」、F2「回到首页」—— 纯前端。
 | `POST /api/settings/token/refresh` | ✅ | D5 |
 | `GET /api/blogs` | ✅ | D13 |
 | `POST /api/validate` | ✅ | **C1 / C4** 上传阶段权威校验（只读，各栏目规则） |
+| （发布时内联） | ✅ | **外链规则**：所有链接要有 title；第三方外链要 `_blank` + `noopener` + `noreferrer` + `nofollow` |
 | （发布时内联） | ✅ | **用户故事反链**：页面发布成功后往已有博客文章追加幂等上下文反链 |
 | `GET /api/contents/stats` | 🔲 | B1 |
 | `GET /api/contents/timeline` | 🔲 | B3、B5 |

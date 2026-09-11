@@ -32,7 +32,9 @@ assert SPEC is not None
 GOOD_HTML = (
     "<div><h2>Overview</h2>"
     '<img src="a.png" alt="A photo" title="A photo">'
-    '<a href="https://example.com" title="Example">link</a>'
+    # 第三方外链必须带 _blank + noopener + noreferrer + nofollow（平台外链规则）
+    '<a href="https://example.com" title="Example" target="_blank" '
+    'rel="nofollow noopener noreferrer">link</a>'
     "</div>"
 )
 

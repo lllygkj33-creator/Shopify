@@ -41,6 +41,7 @@ from .shopify.publisher import (
     PublishError,
     normalize_article,
     record_publish_result,
+    validate_article_html,
 )
 from .shopify.token import (
     TokenConfigError,
@@ -508,6 +509,10 @@ async def validate(payload: ValidateRequest) -> ValidateResponse:
                 )
             except PublishError as error:
                 issues.append(ValidateIssue(level="error", message=str(error)))
+
+            # 外链规则（平台新增，脚本没有这一段）
+            for message in validate_article_html(item.bodyHtml or ""):
+                issues.append(ValidateIssue(level="error", message=message))
         else:
             issues.append(
                 ValidateIssue(level="error", message=f"未知的内容类型：{item.contentType}")
@@ -612,6 +617,11 @@ async def publish(payload: PublishRequest) -> PublishResponse:
                 reviewers=reviewers,
                 product_titles=product_titles,
             )
+
+            # 外链规则：与上传阶段保持一致，避免绕过前端直接调接口发布坏标记
+            link_errors = validate_article_html(normalized["html"])
+            if link_errors:
+                raise PublishError("；".join(link_errors))
 
             assert cover_pool is not None  # 上面已保证有博客条目时必加载
             cover = cover_pool.draw()

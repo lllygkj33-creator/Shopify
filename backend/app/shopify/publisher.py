@@ -34,6 +34,7 @@ from typing import Any, Sequence
 from urllib.parse import unquote, urlparse
 
 from .. import config as app_config
+from .html_audit import audit_external_links
 from .client import (
     ShopifyError,
     ShopifyGraphQLClient,
@@ -110,6 +111,9 @@ SUMMARY_MAX_LENGTH = 160
 HANDLE_PATTERN = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*")
 
 PUBLISH_HISTORY_FILE = app_config.DATA_DIR / "publish_history.jsonl"
+
+# 前台域名（用于判断站内/外链；脚本里是 STORE_DOMAIN）
+STORE_DOMAIN = "shop.zimaspace.com"
 
 
 class PublishError(RuntimeError):
@@ -211,6 +215,20 @@ def cover_slot_from_filename(filename: str) -> str | None:
             return configured_name
 
     return None
+
+
+def validate_article_html(html: str, shop_domain: str = "") -> list[str]:
+    """博客文章的 HTML 规则。
+
+    参考脚本 `publish_articles_random_covers_fixed.py` **不校验链接**，
+    所以这一段是平台新增的：只做「外链安全标记」这一条最不容易误伤的规则
+    （所有链接要有 title；第三方外链要 _blank + noopener + noreferrer + nofollow）。
+
+    站内（shop.zimaspace.com）与自家域名（*.zimaspace.com）不强制新标签页，
+    因此不会误伤既有文章。
+    """
+    domain = shop_domain or app_config.resolved_shop_domain() or STORE_DOMAIN
+    return audit_external_links(html, shop_domain=domain)
 
 
 def normalize_product_title(title: Any) -> str:

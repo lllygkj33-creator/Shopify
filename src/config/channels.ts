@@ -107,6 +107,9 @@ export type PageSpec = {
   bodyMustContain?: string[]
   /** 是否禁止出现 <h2>（VS 的 H2 由 Liquid 模板输出） */
   forbidH2?: boolean
+  /** 是否启用外链规则（所有链接要有 title；第三方外链要 _blank + noopener
+   *  + noreferrer + nofollow）。社区 / Discord / 用户故事用这一套 */
+  enforceLinkRules?: boolean
   /** 必须各出现恰好一次的 COMPARE 标记对名称 */
   requiredMarkerPairs?: string[]
   /** 正文里不允许出现的占位串 */
@@ -210,6 +213,8 @@ export const CHANNELS: Channel[] = [
       },
       // 社区脚本只要求「至少一个 <h2>」，没有 meta 长度规则
       h2Min: 1,
+      // 链接：脚本只要求非空 title；平台额外要求第三方外链安全标记
+      enforceLinkRules: true,
       verified: true,
     },
   },
@@ -251,6 +256,7 @@ export const CHANNELS: Channel[] = [
       },
       sourceHttpUrlFields: ['url', 'starter_avatar_url', 'invite_url'],
       stripHashPrefix: ['channel_name'],
+      enforceLinkRules: true,
       h2Min: 4,
       metaTitleMax: 65,
       metaDescriptionMin: 120,
@@ -282,6 +288,7 @@ export const CHANNELS: Channel[] = [
         'The Story Is Still Being Written',
       ],
       h2Min: 4,
+      enforceLinkRules: true,
       // 用户故事脚本没有 meta 长度规则
       verified: true,
     },
