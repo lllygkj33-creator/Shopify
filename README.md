@@ -51,6 +51,7 @@ cd backend && .venv/bin/python -m pytest
 其他命令：
 
 ```bash
+pnpm assets:favicon  # 从官方 SVG 重新生成 favicon 的 PNG 回退版本
 pnpm build        # 类型检查 + 生产构建
 pnpm lint         # ESLint（含 React Compiler 规则）
 pnpm knip         # 未使用的文件 / 依赖 / 导出
@@ -378,6 +379,20 @@ Shopify 的 `client_credentials` 流程换来的 `shpat_` 令牌**只有约 24 �
 - [ ] 时间轴拖拽改期（PRD 列为加分项，当前用精确时间输入替代）
 - [ ] 发布进度的逐条实时回传（当前为一次性返回；如需逐条可上 SSE）
 - [ ] Token 手动输入的加密存储方案（`cryptography` / keyring，目前是 0600 明文文件）
+
+---
+
+## 品牌标识
+
+- **favicon**：`public/images/favicon.svg` = ZimaSpace 官网的 `favicon.svg` **原样**
+  （`#F5F5F5` 圆角底 + 黑色 mark）—— 图标需要自带背景，所以不改成透明的单色字形。
+  `favicon.png` / `favicon_light.png` 由 `pnpm assets:favicon` 从该 SVG 生成（48×48）。
+- **侧边栏标识**：`src/assets/zima-mark.tsx` —— 用同一份官方路径数据，但**去掉底块**
+  并改用 `currentColor`，跟随侧边栏主题色。若保留 #F5F5F5 底块，
+  深色主题下会变成「黑字压深底」看不清。
+
+官网的 `logo_zima.svg` **不是矢量**（base64 的 PNG 套在 SVG 壳里，438×94），
+所以没有采用；需要带字标的地方用文字即可。
 
 ---
 
