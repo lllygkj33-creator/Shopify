@@ -90,11 +90,29 @@ def resolve_page_channel(template_suffix: str | None) -> ChannelResolution:
     return ChannelResolution(channel_id)
 
 
+def channel_mismatch_error(channel_id: str, owner: str | None) -> str | None:
+    """JSON 自报的归属栏目与目标栏目不一致时，返回错误消息；一致则返回 None。
+
+    为什么要有这条规则：上传时 JSON 自己会声明归属（页面的 template、
+    文章的博客），放在 A 栏目上传却声明成 B 栏目的内容，**不能静默按 B 发**——
+    否则本地记录的栏目、用户在界面上看到的位置，和内容实际去的线上位置三者不一致。
+
+    owner 为 None（认不出的模板/博客）不算不一致：那是「不认识」，不是「属于别处」。
+    """
+    if owner and owner != channel_id:
+        return (
+            f"这份 JSON 属于「{owner}」栏目，不能在「{channel_id}」栏目上传或发布；"
+            f"请到「{owner}」栏目重新上传"
+        )
+    return None
+
+
 __all__ = [
     "BLOG_HANDLE_TO_CHANNEL",
     "EXCLUDED_TEMPLATES",
     "TEMPLATE_TO_CHANNEL",
     "ChannelResolution",
+    "channel_mismatch_error",
     "resolve_article_channel",
     "resolve_page_channel",
 ]

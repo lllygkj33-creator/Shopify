@@ -31,6 +31,7 @@ from .shopify.backlink import (
 )
 from .shopify.client import ShopifyError, shopify_client
 from .shopify.schedule_sync import SyncResult, schedule_sync
+from .shopify.channel_map import BLOG_HANDLE_TO_CHANNEL, channel_mismatch_error
 from .shopify.reconcile import shopify_reconciler
 from .shopify.schedule_pull import schedule_puller
 from .shopify.templates import TemplateList, template_service
@@ -1142,6 +1143,14 @@ async def publish(payload: PublishRequest) -> PublishResponse:
             blog_gid = await publisher.find_blog_gid(candidate.blog_name)
             # 前台 URL 要用 handle，不能用博客标题（标题里有空格和 &）
             blog_handle = await publisher.find_blog_handle(candidate.blog_name)
+
+            # 博客归属必须和上传的栏目一致：JSON 的正文 class 可能指向别的博客，
+            # 那样本地会记成 A 栏目、内容却发到 B 博客 —— 三处不一致，用户无从发现。
+            mismatch = channel_mismatch_error(
+                item.channelId, BLOG_HANDLE_TO_CHANNEL.get(blog_handle)
+            )
+            if mismatch:
+                raise PublishError(mismatch)
             author_gid = await publisher.find_person_gid(candidate.author)
             reviewer_gid = await publisher.find_person_gid(candidate.reviewer)
             product_gid = await publisher.find_product_gid(

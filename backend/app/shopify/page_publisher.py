@@ -852,9 +852,26 @@ def validate_page_payload(payload: PagePayload, spec: PageChannelSpec) -> list[s
         if not payload.template_suffix:
             errors.append("JSON 必须提供 template（该栏目模板由 JSON 指定）")
     elif payload.template_suffix != spec.template:
-        errors.append(
+        # 模板指到别的栏目时要说清「这是别处的内容」——只说
+        # 「template 必须是 'community_post'」用户不知道该怎么办
+        # channel_map 依赖本模块的 PAGE_CHANNEL_SPECS，顶层导入会成环，所以放函数里
+        from .channel_map import TEMPLATE_TO_CHANNEL, channel_mismatch_error
+
+        owner = TEMPLATE_TO_CHANNEL.get(str(payload.template_suffix))
+        current = next(
+            (cid for cid, s in PAGE_CHANNEL_SPECS.items() if s is spec), None
+        )
+        mismatch = channel_mismatch_error(current or "", owner)
+
+        # 原始的「要求什么 / 当前是什么」保留，认得出归属时再补一句
+        # 「这份属于别的栏目」—— 只说前者用户不知道该去哪儿改
+        message = (
             f"template 必须是 {spec.template!r}；当前为 {payload.template_suffix!r}"
         )
+        if mismatch:
+            message = f"{message}。{mismatch}"
+
+        errors.append(message)
 
     if spec.meta_title_max and len(payload.meta_title) > spec.meta_title_max:
         errors.append(

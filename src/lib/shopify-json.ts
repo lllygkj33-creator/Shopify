@@ -17,7 +17,6 @@
  *  4. 除 PRD 列出的字段外，还可能有 `title type` / `faq decision` /
  *     `backlink diversity` 等审计字段，需原样透传给后端，不丢弃。
  */
-
 import { CHANNELS, type Channel, type PageSpec } from '@/config/channels'
 import type {
   ParsedCandidate,
@@ -111,8 +110,7 @@ function looksLikePage(value: unknown): boolean {
 function matchBlogChannel(classNames: string[]): Channel | undefined {
   for (const className of classNames) {
     const matched = CHANNELS.find(
-      (channel) =>
-        channel.htmlClass && className.includes(channel.htmlClass)
+      (channel) => channel.htmlClass && className.includes(channel.htmlClass)
     )
     if (matched) return matched
   }
@@ -125,7 +123,8 @@ function matchPageChannel(record: RawRecord): Channel | undefined {
   if (template) {
     // 模板自由的栏目（Custom）不参与按模板匹配，否则会把别人的模板抢走
     const byTemplate = CHANNELS.find(
-      (channel) => !channel.pageSpec?.allowAnyTemplate && channel.template === template
+      (channel) =>
+        !channel.pageSpec?.allowAnyTemplate && channel.template === template
     )
     if (byTemplate) return byTemplate
   }
@@ -137,6 +136,57 @@ function matchPageChannel(record: RawRecord): Channel | undefined {
     }
   }
   return undefined
+}
+
+/** 栏目的展示名 */
+function channelLabel(channel: Channel): string {
+  return channel.nameZh ?? channel.name
+}
+
+/**
+ * 上传时这条内容归哪个栏目。
+ *
+ * **规则：JSON 自报的栏目和当前上传栏目不一致 → 按当前栏目处理并报错**，
+ * 不能静默改栏目。
+ *
+ * 原来是 `byClass?.id ?? fallbackChannelId`（页面同理），JSON 赢了：
+ * 在社区文章页上传一份 Discord 的 JSON，它会悄悄归到 Discord 栏目，
+ * 用户在列表里看到的位置、本地记的栏目、内容实际去的线上位置三者不一致，
+ * 而且没有任何提示。
+ *
+ * 返回的 mismatch 由调用方挂成 **error** 级问题 —— error 会禁用该条的勾选框，
+ * 拦在发布之前（warning 拦不住）。
+ */
+function resolveUploadChannel(
+  detected: Channel | undefined,
+  fallbackChannelId: string | undefined,
+  defaultChannelId: string
+): { channelId: string; mismatch?: string } {
+  const current = CHANNELS.find((channel) => channel.id === fallbackChannelId)
+
+  // Custom 栏目豁免：它存在的意义就是「模板由 JSON 自由指定」，
+  // 在那里上传别的栏目的模板是有意为之，不算进错栏目。
+  // 后端在该栏目的 allow_any_template 分支同样不做这个检查，两边一致。
+  if (current?.pageSpec?.allowAnyTemplate) {
+    return { channelId: current.id }
+  }
+
+  if (current && detected && detected.id !== current.id) {
+    return {
+      channelId: current.id,
+      mismatch:
+        `这份 JSON 属于「${channelLabel(detected)}」栏目，不能在` +
+        `「${channelLabel(current)}」栏目上传；请到「${channelLabel(detected)}」栏目重新上传`,
+    }
+  }
+
+  // 认不出归属时（detected 为空）沿用原来的自动判断
+  return { channelId: detected?.id ?? fallbackChannelId ?? defaultChannelId }
+}
+
+/** 把「进错栏目」挂成 error 级问题（error 才会拦住发布） */
+function mismatchIssue(mismatch: string | undefined): ValidationIssue[] {
+  return mismatch ? [{ level: 'error', field: '栏目', message: mismatch }] : []
 }
 
 /** 从正文里抽出所有 class 名 */
@@ -342,7 +392,11 @@ function checkExternalLinks(html: string): ValidationIssue[] {
     const title = getTagAttr(tag, 'title')
 
     if (!href) {
-      issues.push({ level: 'error', field: 'html', message: `第 ${position} 个链接缺少 href` })
+      issues.push({
+        level: 'error',
+        field: 'html',
+        message: `第 ${position} 个链接缺少 href`,
+      })
       return
     }
     if (!title) {
@@ -381,7 +435,9 @@ function checkExternalLinks(html: string): ValidationIssue[] {
         message: `第 ${position} 个链接是外部链接，必须使用 target="_blank"`,
       })
     }
-    const missing = ['noopener', 'noreferrer'].filter((token) => !rel.has(token))
+    const missing = ['noopener', 'noreferrer'].filter(
+      (token) => !rel.has(token)
+    )
     if (missing.length > 0) {
       issues.push({
         level: 'error',
@@ -403,7 +459,9 @@ function checkExternalLinks(html: string): ValidationIssue[] {
 
 /** 取标签上的属性值（单双引号都支持） */
 function getTagAttr(tag: string, attr: string): string | null {
-  const match = tag.match(new RegExp(`\\b${attr}\\s*=\\s*["']([^"']*)["']`, 'i'))
+  const match = tag.match(
+    new RegExp(`\\b${attr}\\s*=\\s*["']([^"']*)["']`, 'i')
+  )
   return match ? match[1].trim() : null
 }
 
@@ -478,7 +536,10 @@ function checkPageSource(
       })
     }
 
-    if ((spec.sourceHttpUrlFields ?? []).includes(name) && !isCompleteHttpUrl(trimmed)) {
+    if (
+      (spec.sourceHttpUrlFields ?? []).includes(name) &&
+      !isCompleteHttpUrl(trimmed)
+    ) {
       issues.push({
         level: 'error',
         field: field(name),
@@ -491,7 +552,9 @@ function checkPageSource(
       try {
         const host = new URL(trimmed).hostname.toLowerCase()
         const allowed = spec.sourceHostAllowlist ?? []
-        if (!allowed.some((item) => host === item || host.endsWith(`.${item}`))) {
+        if (
+          !allowed.some((item) => host === item || host.endsWith(`.${item}`))
+        ) {
           issues.push({
             level: 'error',
             field: field(name),
@@ -512,7 +575,10 @@ function checkPageSource(
       })
     }
 
-    if ((spec.sourceDigitFields ?? []).includes(name) && !/^\d+$/.test(trimmed)) {
+    if (
+      (spec.sourceDigitFields ?? []).includes(name) &&
+      !/^\d+$/.test(trimmed)
+    ) {
       issues.push({
         level: 'error',
         field: field(name),
@@ -568,7 +634,9 @@ function normalizePageHandleBare(value: string): string {
  *  - 若要注入，正文必须有 **≥ 4 个 H2**，否则 GEO 会直接抛错中断。
  * 这里提前在 UI 标红，避免发布时才炸。
  */
-export function checkRelatedProductsPlaceholder(html: string): ValidationIssue[] {
+export function checkRelatedProductsPlaceholder(
+  html: string
+): ValidationIssue[] {
   const issues: ValidationIssue[] = []
   if (/\[\[related_products_\d+\]\]/.test(html)) {
     return issues
@@ -650,9 +718,18 @@ function normalizeBlogCandidate(
   )
   const summary = pick(raw, 'summary', 'excerpt')
 
-  if (!title) issues.push({ level: 'error', field: 'blog title', message: '缺少文章标题' })
+  if (!title)
+    issues.push({
+      level: 'error',
+      field: 'blog title',
+      message: '缺少文章标题',
+    })
   if (!handle)
-    issues.push({ level: 'error', field: 'url', message: '缺少文章 handle（url）' })
+    issues.push({
+      level: 'error',
+      field: 'url',
+      message: '缺少文章 handle（url）',
+    })
   if (!html)
     issues.push({ level: 'error', field: 'html代码', message: '缺少正文 HTML' })
 
@@ -728,14 +805,6 @@ function normalizeBlogCandidate(
       message: `正文未带 zima-*-article class，已按当前栏目默认博客「${resolved.blogName}」发布`,
     })
   }
-  if (resolved.blogName && channel?.blogName && resolved.blogName !== channel.blogName) {
-    issues.push({
-      level: 'warning',
-      field: 'html代码',
-      message: `正文 class 指向「${resolved.blogName}」，与当前栏目「${channel.blogName}」不一致，将以正文 class 为准`,
-    })
-  }
-
   const author = pick(raw, 'author', '作者')
   if (!author) {
     issues.push({
@@ -787,7 +856,8 @@ function normalizePageCandidate(
   const spec = channel?.pageSpec
   const expectedTemplate = spec?.template ?? channel?.template
 
-  const title = pick(raw, 'title', 'page_title', 'page title', 'blog title') ?? ''
+  const title =
+    pick(raw, 'title', 'page_title', 'page title', 'blog title') ?? ''
   const html =
     pick(raw, 'html', 'html代码', 'body', 'body_html', 'HTML', 'content') ?? ''
   const rawUrl = pick(raw, 'url', 'handle', 'page_url', 'page url') ?? ''
@@ -893,9 +963,11 @@ function normalizePageCandidate(
   if (spec?.metaDescriptionMin || spec?.metaDescriptionMax) {
     const length = metaDescription.length
     const tooShort =
-      Boolean(spec.metaDescriptionMin) && length < (spec.metaDescriptionMin ?? 0)
+      Boolean(spec.metaDescriptionMin) &&
+      length < (spec.metaDescriptionMin ?? 0)
     const tooLong =
-      Boolean(spec.metaDescriptionMax) && length > (spec.metaDescriptionMax ?? 0)
+      Boolean(spec.metaDescriptionMax) &&
+      length > (spec.metaDescriptionMax ?? 0)
     if (tooShort || tooLong) {
       issues.push({
         level: 'error',
@@ -923,7 +995,9 @@ function normalizePageCandidate(
   }
 
   // ---- 正文硬规则：禁 h1 / 至少 h2Min 个 h2 / img alt+title / a title ----
-  issues.push(...checkPageHtmlRules(html, spec?.h2Min ?? 0, spec?.forbidH2 ?? false))
+  issues.push(
+    ...checkPageHtmlRules(html, spec?.h2Min ?? 0, spec?.forbidH2 ?? false)
+  )
 
   // 正文必须逐字包含的固定文案（用户故事要求两句固定段落）
   for (const required of spec?.bodyMustContain ?? []) {
@@ -1020,7 +1094,9 @@ function normalizePageCandidate(
   // 可选反链：页面发布后往某篇博客文章追加幂等上下文反链
   const rawBacklink = pickRaw(raw, 'backlink')
   const backlink =
-    rawBacklink && typeof rawBacklink === 'object' && !Array.isArray(rawBacklink)
+    rawBacklink &&
+    typeof rawBacklink === 'object' &&
+    !Array.isArray(rawBacklink)
       ? (rawBacklink as Record<string, unknown>)
       : undefined
 
@@ -1100,18 +1176,30 @@ export function parseJsonContent(
       try {
         const html = pick(item, 'html代码', 'html', 'body_html') ?? ''
         const byClass = matchBlogChannel(extractClassNames(html))
-        const channelId =
-          byClass?.id ??
-          fallbackChannelId ??
+        const { channelId, mismatch } = resolveUploadChannel(
+          byClass,
+          fallbackChannelId,
           CHANNELS.find((c) => c.contentType === 'blog_article')?.id ??
-          'tech-ai-hub'
-        const channel = CHANNELS.find((c) => c.id === channelId)
-        candidates.push(
-          normalizeBlogCandidate(item, filePath, index, channelId, channel)
+            'tech-ai-hub'
         )
+        const channel = CHANNELS.find((c) => c.id === channelId)
+        const candidate = normalizeBlogCandidate(
+          item,
+          filePath,
+          index,
+          channelId,
+          channel
+        )
+        candidate.issues.unshift(...mismatchIssue(mismatch))
+        candidates.push(candidate)
       } catch (error) {
         candidates.push(
-          errorCandidate(filePath, index, fallbackChannelId, (error as Error).message)
+          errorCandidate(
+            filePath,
+            index,
+            fallbackChannelId,
+            (error as Error).message
+          )
         )
       }
     })
@@ -1123,20 +1211,26 @@ export function parseJsonContent(
   if (looksLikePage(data)) {
     const record = data as RawRecord
     const byTemplate = matchPageChannel(record)
-    const channelId =
-      byTemplate?.id ??
-      fallbackChannelId ??
-      CHANNELS.find((c) => c.contentType === 'page')?.id ??
-      'community-post'
+    const { channelId, mismatch } = resolveUploadChannel(
+      byTemplate,
+      fallbackChannelId,
+      CHANNELS.find((c) => c.contentType === 'page')?.id ?? 'community-post'
+    )
     const channel = CHANNELS.find((c) => c.id === channelId)
     try {
+      const candidate = normalizePageCandidate(
+        record,
+        filePath,
+        0,
+        channelId,
+        channel
+      )
+      candidate.issues.unshift(...mismatchIssue(mismatch))
       return {
         fileName,
         filePath,
         detected: 'page',
-        candidates: [
-          normalizePageCandidate(record, filePath, 0, channelId, channel),
-        ],
+        candidates: [candidate],
       }
     } catch (error) {
       return {

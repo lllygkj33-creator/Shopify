@@ -8,9 +8,8 @@
  *  - buying-guide 的 class 是 `zima-buying-guide-article`
  *  - Product Comparisons 的 class 用复数，文件夹却是单数
  */
-
-import { describe, expect, it } from 'vitest'
 import { CHANNELS } from '@/config/channels'
+import { describe, expect, it } from 'vitest'
 import {
   buildPublicUrl,
   checkRelatedProductsPlaceholder,
@@ -61,7 +60,8 @@ describe('parseJsonContent —— 博客文章（数组 schema）', () => {
       {
         'blog title': 'X',
         url: 'x',
-        html代码: '<article class="zima-product-comparisons-article"><h2>a</h2></article>',
+        html代码:
+          '<article class="zima-product-comparisons-article"><h2>a</h2></article>',
       },
     ])
 
@@ -85,7 +85,11 @@ describe('parseJsonContent —— 博客文章（数组 schema）', () => {
       },
     ])
 
-    const [candidate] = parseJsonContent(text, 'a.json', 'tech-ai-hub').candidates
+    const [candidate] = parseJsonContent(
+      text,
+      'a.json',
+      'tech-ai-hub'
+    ).candidates
 
     expect(candidate.channelId).toBe('tech-ai-hub')
     // 注意：店铺里的标题就是大写 HUB（已与真实店铺核对）
@@ -93,7 +97,9 @@ describe('parseJsonContent —— 博客文章（数组 schema）', () => {
     // 应给出提示而不是报错：发布仍可继续
     expect(candidate.publishable).toBe(true)
     expect(
-      candidate.issues.some((issue) => issue.message.includes('未带 zima-*-article class'))
+      candidate.issues.some((issue) =>
+        issue.message.includes('未带 zima-*-article class')
+      )
     ).toBe(true)
   })
 
@@ -115,7 +121,9 @@ describe('parseJsonContent —— 博客文章（数组 schema）', () => {
     const [candidate] = parseJsonContent(text, 'f.json').candidates
 
     expect(candidate.publishable).toBe(false)
-    const messages = candidate.issues.filter((i) => i.level === 'error').map((i) => i.message)
+    const messages = candidate.issues
+      .filter((i) => i.level === 'error')
+      .map((i) => i.message)
     // 6 个字段全部必填（脚本如此），这里只确认核心三条都在
     expect(messages).toContain('缺少文章标题')
     expect(messages).toContain('缺少文章 handle（url）')
@@ -276,12 +284,16 @@ describe('parseJsonContent —— 容错', () => {
 describe('related_products 占位符规则', () => {
   it('已带占位符时无需注入，不报错', () => {
     expect(
-      checkRelatedProductsPlaceholder('<article>[[related_products_1]]</article>')
+      checkRelatedProductsPlaceholder(
+        '<article>[[related_products_1]]</article>'
+      )
     ).toHaveLength(0)
   })
 
   it('H2 少于 4 个且无占位符 → error（原脚本会直接中断）', () => {
-    const issues = checkRelatedProductsPlaceholder('<article><h2>a</h2><h2>b</h2></article>')
+    const issues = checkRelatedProductsPlaceholder(
+      '<article><h2>a</h2><h2>b</h2></article>'
+    )
 
     expect(issues).toHaveLength(1)
     expect(issues[0].level).toBe('error')
@@ -320,7 +332,9 @@ describe('handle 规范化', () => {
 
 describe('resolveBlogName', () => {
   it('有 class 时来源标记为 class', () => {
-    const result = resolveBlogName('<article class="zima-support-tips-article"></article>')
+    const result = resolveBlogName(
+      '<article class="zima-support-tips-article"></article>'
+    )
     expect(result).toEqual({ blogName: 'Support & Tips', source: 'class' })
   })
 
@@ -364,10 +378,16 @@ function communityPage(overrides: Record<string, unknown> = {}) {
 }
 
 function errorsOf(candidate: { issues: { level: string; message: string }[] }) {
-  return candidate.issues.filter((i) => i.level === 'error').map((i) => i.message)
+  return candidate.issues
+    .filter((i) => i.level === 'error')
+    .map((i) => i.message)
 }
-function warningsOf(candidate: { issues: { level: string; message: string }[] }) {
-  return candidate.issues.filter((i) => i.level === 'warning').map((i) => i.message)
+function warningsOf(candidate: {
+  issues: { level: string; message: string }[]
+}) {
+  return candidate.issues
+    .filter((i) => i.level === 'warning')
+    .map((i) => i.message)
 }
 
 describe('上传阶段校验 —— 博客文章', () => {
@@ -375,7 +395,11 @@ describe('上传阶段校验 —— 博客文章', () => {
     const raw = JSON.stringify([
       { 'blog title': 'T', url: 'a-b', html代码: HTML_WITH_4_H2 },
     ])
-    const [candidate] = parseJsonContent(raw, 'f.json', 'tech-ai-hub').candidates
+    const [candidate] = parseJsonContent(
+      raw,
+      'f.json',
+      'tech-ai-hub'
+    ).candidates
 
     expect(candidate.publishable).toBe(false)
     const errors = errorsOf(candidate)
@@ -395,7 +419,11 @@ describe('上传阶段校验 —— 博客文章', () => {
         html代码: HTML_WITH_4_H2,
       },
     ])
-    const [candidate] = parseJsonContent(raw, 'f.json', 'tech-ai-hub').candidates
+    const [candidate] = parseJsonContent(
+      raw,
+      'f.json',
+      'tech-ai-hub'
+    ).candidates
 
     expect(candidate.publishable).toBe(false)
     expect(errorsOf(candidate)).toContainEqual(
@@ -414,7 +442,11 @@ describe('上传阶段校验 —— 博客文章', () => {
         html代码: HTML_WITH_4_H2,
       },
     ])
-    const [candidate] = parseJsonContent(raw, 'f.json', 'tech-ai-hub').candidates
+    const [candidate] = parseJsonContent(
+      raw,
+      'f.json',
+      'tech-ai-hub'
+    ).candidates
 
     expect(errorsOf(candidate)).toContainEqual(
       expect.stringContaining('summary 超过 160')
@@ -432,7 +464,13 @@ describe('上传阶段校验 —— 博客文章', () => {
         html代码: HTML_WITH_4_H2,
       },
     ])
-    const [candidate] = parseJsonContent(raw, 'f.json', 'tech-ai-hub').candidates
+    // HTML_WITH_4_H2 带的是 zima-buying-guide-article，要在对应栏目里上传，
+    // 否则会命中「这份 JSON 属于别的栏目」的新规则（那是另一条用例的事）
+    const [candidate] = parseJsonContent(
+      raw,
+      'f.json',
+      'buying-guide'
+    ).candidates
 
     expect(errorsOf(candidate)).toEqual([])
   })
@@ -448,7 +486,11 @@ describe('上传阶段校验 —— 博客文章', () => {
         html代码: HTML_WITH_4_H2,
       },
     ])
-    const [candidate] = parseJsonContent(raw, 'f.json', 'tech-ai-hub').candidates
+    const [candidate] = parseJsonContent(
+      raw,
+      'f.json',
+      'tech-ai-hub'
+    ).candidates
 
     expect(candidate.publishable).toBe(false)
     expect(errorsOf(candidate)).toContainEqual(
@@ -459,7 +501,10 @@ describe('上传阶段校验 —— 博客文章', () => {
 
 describe('上传阶段校验 —— 页面正文规则', () => {
   it('合法社区页面可以通过', () => {
-    const [candidate] = parseJsonContent(communityPage(), 'Com/a.json').candidates
+    const [candidate] = parseJsonContent(
+      communityPage(),
+      'Com/a.json'
+    ).candidates
 
     expect(candidate.channelId).toBe('community-post')
     expect(candidate.publishable).toBe(true)
@@ -537,7 +582,10 @@ describe('上传阶段校验 —— 页面正文规则', () => {
 
   it('缺少 meta title 报错', () => {
     const raw = JSON.parse(communityPage({ 'meta title': '' }))
-    const [candidate] = parseJsonContent(JSON.stringify(raw), 'Com/a.json').candidates
+    const [candidate] = parseJsonContent(
+      JSON.stringify(raw),
+      'Com/a.json'
+    ).candidates
 
     expect(errorsOf(candidate)).toContainEqual(
       expect.stringContaining('meta title')
@@ -549,7 +597,10 @@ describe('上传阶段校验 —— 来源对象', () => {
   it('缺少 community_source 报错', () => {
     const raw = JSON.parse(communityPage())
     delete raw.community_source
-    const [candidate] = parseJsonContent(JSON.stringify(raw), 'Com/a.json').candidates
+    const [candidate] = parseJsonContent(
+      JSON.stringify(raw),
+      'Com/a.json'
+    ).candidates
 
     expect(errorsOf(candidate)).toContainEqual(
       expect.stringContaining('community_source')
@@ -572,7 +623,10 @@ describe('上传阶段校验 —— 来源对象', () => {
   it('来源 url 必须是社区主题链接', () => {
     const [candidate] = parseJsonContent(
       communityPage({
-        community_source: { ...COMMUNITY_SOURCE, url: 'https://example.com/t/x' },
+        community_source: {
+          ...COMMUNITY_SOURCE,
+          url: 'https://example.com/t/x',
+        },
       }),
       'Com/a.json'
     ).candidates
@@ -650,7 +704,10 @@ function discordPage(overrides: Record<string, unknown> = {}) {
 
 describe('上传阶段校验 —— Discord 页面（更严）', () => {
   it('合法 Discord 页面通过，且 channel_name 的 # 被剥掉', () => {
-    const [candidate] = parseJsonContent(discordPage(), 'Discord/a.json').candidates
+    const [candidate] = parseJsonContent(
+      discordPage(),
+      'Discord/a.json'
+    ).candidates
 
     expect(candidate.channelId).toBe('discord')
     expect(candidate.publishable).toBe(true)
@@ -698,7 +755,10 @@ describe('上传阶段校验 —— Discord 页面（更严）', () => {
   it('url 必须是 Discord 消息链接', () => {
     const [candidate] = parseJsonContent(
       discordPage({
-        discord_source: { ...DISCORD_SOURCE, url: 'https://discord.com/channels/1/2' },
+        discord_source: {
+          ...DISCORD_SOURCE,
+          url: 'https://discord.com/channels/1/2',
+        },
       }),
       'Discord/a.json'
     ).candidates
@@ -709,7 +769,8 @@ describe('上传阶段校验 —— Discord 页面（更严）', () => {
   })
 
   it('invite_url 允许为空，但非空时必须完整链接', () => {
-    const empty = parseJsonContent(discordPage(), 'Discord/a.json').candidates[0]
+    const empty = parseJsonContent(discordPage(), 'Discord/a.json')
+      .candidates[0]
     expect(empty.publishable).toBe(true)
 
     const [broken] = parseJsonContent(
@@ -738,7 +799,6 @@ describe('上传阶段校验 —— Discord 页面（更严）', () => {
     )
   })
 })
-
 
 // ---------------------------------------------------------------------------
 // 用户故事：来源叫 user_info，且正文必须包含两句固定文案
@@ -795,7 +855,9 @@ describe('上传阶段校验 —— 用户故事', () => {
 
   it('正文缺少收尾文案报错', () => {
     const [candidate] = parseJsonContent(
-      userStory({ html: USER_HTML.replace('The Story Is Still Being Written', 'Soon') }),
+      userStory({
+        html: USER_HTML.replace('The Story Is Still Being Written', 'Soon'),
+      }),
       'User/a.json'
     ).candidates
 
@@ -807,7 +869,10 @@ describe('上传阶段校验 —— 用户故事', () => {
   it('缺少 user_info 报错（不是 user_source）', () => {
     const raw = JSON.parse(userStory())
     delete raw.user_info
-    const [candidate] = parseJsonContent(JSON.stringify(raw), 'User/a.json').candidates
+    const [candidate] = parseJsonContent(
+      JSON.stringify(raw),
+      'User/a.json'
+    ).candidates
 
     expect(errorsOf(candidate)).toContainEqual(
       expect.stringContaining('user_info')
@@ -844,7 +909,8 @@ describe('上传阶段校验 —— 用户故事', () => {
       userStory({
         backlink: {
           enabled: true,
-          article_url: 'https://shop.zimaspace.com/blogs/tech-ai-hub/user-builds-so-far',
+          article_url:
+            'https://shop.zimaspace.com/blogs/tech-ai-hub/user-builds-so-far',
           lead_in: 'Read the full build story:',
           anchor_text: 'a 350 TB array',
         },
@@ -914,7 +980,9 @@ describe('上传阶段校验 —— VS 对比页', () => {
 
   it('禁止 <h2>（H2 由 Liquid 模板输出）', () => {
     const [candidate] = parseJsonContent(
-      vsPage({ html: vsHtml().replace('<p>Compare content.</p>', '<h2>T</h2>') }),
+      vsPage({
+        html: vsHtml().replace('<p>Compare content.</p>', '<h2>T</h2>'),
+      }),
       'VS/a.json'
     ).candidates
 
@@ -944,9 +1012,7 @@ describe('上传阶段校验 —— VS 对比页', () => {
       'VS/a.json'
     ).candidates
 
-    expect(errorsOf(candidate)).toContainEqual(
-      expect.stringContaining('FAQ')
-    )
+    expect(errorsOf(candidate)).toContainEqual(expect.stringContaining('FAQ'))
   })
 
   it('标记对重复报错', () => {
@@ -955,14 +1021,17 @@ describe('上传阶段校验 —— VS 对比页', () => {
       'VS/a.json'
     ).candidates
 
-    expect(errorsOf(candidate)).toContainEqual(
-      expect.stringContaining('SPECS')
-    )
+    expect(errorsOf(candidate)).toContainEqual(expect.stringContaining('SPECS'))
   })
 
   it('未替换的占位串报错', () => {
     const [candidate] = parseJsonContent(
-      vsPage({ html: vsHtml().replace('<p>Compare content.</p>', '<p>YOUTUBE_URL_1</p>') }),
+      vsPage({
+        html: vsHtml().replace(
+          '<p>Compare content.</p>',
+          '<p>YOUTUBE_URL_1</p>'
+        ),
+      }),
       'VS/a.json'
     ).candidates
 
@@ -1006,9 +1075,7 @@ describe('上传阶段校验 —— VS 对比页', () => {
       vsPage({ td: 'too short' }),
       'VS/a.json'
     ).candidates
-    expect(errorsOf(shortTd)).toContainEqual(
-      expect.stringContaining('120~170')
-    )
+    expect(errorsOf(shortTd)).toContainEqual(expect.stringContaining('120~170'))
   })
 
   it('VS 没有来源 metafield，不会误报缺少来源', () => {
@@ -1018,7 +1085,6 @@ describe('上传阶段校验 —— VS 对比页', () => {
     expect(messages.some((message) => message.includes('来源'))).toBe(false)
   })
 })
-
 
 // ---------------------------------------------------------------------------
 // 外链规则（所有栏目共用；后端 html_audit.py 是同一套逻辑）
@@ -1041,8 +1107,14 @@ describe('上传阶段校验 —— 外链规则', () => {
   const SAFE = 'target="_blank" rel="nofollow noopener noreferrer"'
 
   it('相对路径与站内链接只要求 title', () => {
-    const raw = blogWithLink('<a href="/pages/x" title="Some page">some page</a>')
-    const [candidate] = parseJsonContent(raw, 'f.json', 'buying-guide').candidates
+    const raw = blogWithLink(
+      '<a href="/pages/x" title="Some page">some page</a>'
+    )
+    const [candidate] = parseJsonContent(
+      raw,
+      'f.json',
+      'buying-guide'
+    ).candidates
     expect(errorsOf(candidate)).toEqual([])
   })
 
@@ -1050,7 +1122,11 @@ describe('上传阶段校验 —— 外链规则', () => {
     const raw = blogWithLink(
       '<a href="https://www.zimaspace.com/docs/x" title="Docs page">docs page</a>'
     )
-    const [candidate] = parseJsonContent(raw, 'f.json', 'buying-guide').candidates
+    const [candidate] = parseJsonContent(
+      raw,
+      'f.json',
+      'buying-guide'
+    ).candidates
     expect(errorsOf(candidate)).toEqual([])
   })
 
@@ -1058,7 +1134,11 @@ describe('上传阶段校验 —— 外链规则', () => {
     const raw = blogWithLink(
       `<a href="https://hub.docker.com/_/mysql" title="Docker image page" ${SAFE}>docker image</a>`
     )
-    const [candidate] = parseJsonContent(raw, 'f.json', 'buying-guide').candidates
+    const [candidate] = parseJsonContent(
+      raw,
+      'f.json',
+      'buying-guide'
+    ).candidates
     expect(errorsOf(candidate)).toEqual([])
   })
 
@@ -1066,7 +1146,11 @@ describe('上传阶段校验 —— 外链规则', () => {
     const raw = blogWithLink(
       '<a href="https://example.com/x" title="Example page">example page</a>'
     )
-    const [candidate] = parseJsonContent(raw, 'f.json', 'buying-guide').candidates
+    const [candidate] = parseJsonContent(
+      raw,
+      'f.json',
+      'buying-guide'
+    ).candidates
     const errors = errorsOf(candidate)
 
     expect(errors).toContainEqual(expect.stringContaining('target="_blank"'))
@@ -1078,11 +1162,13 @@ describe('上传阶段校验 —— 外链规则', () => {
     const raw = blogWithLink(
       `<a href="https://example.com/x" ${SAFE}>example page</a>`
     )
-    const [candidate] = parseJsonContent(raw, 'f.json', 'buying-guide').candidates
+    const [candidate] = parseJsonContent(
+      raw,
+      'f.json',
+      'buying-guide'
+    ).candidates
 
-    expect(errorsOf(candidate)).toContainEqual(
-      expect.stringContaining('title')
-    )
+    expect(errorsOf(candidate)).toContainEqual(expect.stringContaining('title'))
   })
 
   it('页面栏目（社区）同样适用', () => {
@@ -1164,7 +1250,10 @@ describe('上传阶段校验 —— Custom 文章（模板自由）', () => {
   })
 
   it('来源是可选的：没有也不报错、不提示', () => {
-    const [candidate] = parseJsonContent(customPage(), 'Custom/a.json').candidates
+    const [candidate] = parseJsonContent(
+      customPage(),
+      'Custom/a.json'
+    ).candidates
 
     expect(candidate.sourceKey).toBe('')
     expect(candidate.issues).toEqual([])
@@ -1183,8 +1272,10 @@ describe('上传阶段校验 —— Custom 文章（模板自由）', () => {
     expect(errors).toContainEqual(expect.stringContaining('target="_blank"'))
   })
 
-  it('不会抢走固定栏目的模板匹配', () => {
-    // 一个 community_post 的 JSON 即使从 Custom 栏目页上传，也应按模板落到社区栏目
+  it('Custom 页上传固定栏目的模板 → 留在 Custom，不报错也不抢走', () => {
+    // Custom 栏目存在的意义就是「模板由 JSON 自由指定」，所以别的栏目的模板
+    // 在这里是有意为之，不算进错栏目；也不该自动换到 community-post
+    // （那样用户选 Custom 就没意义了）。后端 allow_any_template 分支同样不检查。
     const raw = JSON.stringify({
       title: 'C',
       'meta title': 'MT',
@@ -1194,8 +1285,129 @@ describe('上传阶段校验 —— Custom 文章（模板自由）', () => {
       html: '<div><h2>h</h2></div>',
       community_source: COMMUNITY_SOURCE,
     })
-    const [candidate] = parseJsonContent(raw, 'Custom/f.json', 'custom').candidates
+    const [candidate] = parseJsonContent(
+      raw,
+      'Custom/f.json',
+      'custom'
+    ).candidates
+
+    expect(candidate.channelId).toBe('custom')
+    expect(errorsOf(candidate)).toEqual([])
+  })
+})
+
+describe('上传栏目与 JSON 归属不一致 → 直接报错', () => {
+  /** 一份合法的社区文章 JSON（在 community-post 栏目里能通过全部校验） */
+  function communityPageRaw() {
+    return JSON.stringify({
+      title: 'C',
+      'meta title': 'MT',
+      'meta description': 'MD',
+      url: '/pages/c',
+      template: 'community_post',
+      html: '<div><h2>h</h2></div>',
+      community_source: COMMUNITY_SOURCE,
+    })
+  }
+
+  it('页面：社区文章的 JSON 在 Discord 栏目页上传', () => {
+    const [candidate] = parseJsonContent(
+      communityPageRaw(),
+      'f.json',
+      'discord'
+    ).candidates
+
+    // 留在上传的栏目里，错误出现在用户操作的那一页
+    expect(candidate.channelId).toBe('discord')
+
+    // 校验用的是**当前栏目**的规格，所以除了归属错误还会有规格错误；
+    // 这里只要求归属那一条在里面
+    const message = errorsOf(candidate).join('；')
+    expect(message).toContain('社区文章')
+    expect(message).toContain('Discord 文章')
+  })
+
+  it('页面：同一份 JSON 在对应栏目上传不报归属错误', () => {
+    const [candidate] = parseJsonContent(
+      communityPageRaw(),
+      'f.json',
+      'community-post'
+    ).candidates
 
     expect(candidate.channelId).toBe('community-post')
+    expect(errorsOf(candidate)).toEqual([])
+  })
+
+  it('文章：Buying Guide 的 class 在 Tech & AI Hub 页上传', () => {
+    const raw = JSON.stringify([
+      {
+        'blog title': 'T',
+        url: 'a-b',
+        'meta title': 'MT',
+        'meta description': 'MD',
+        summary: 'S',
+        html代码: HTML_WITH_4_H2, // zima-buying-guide-article
+      },
+    ])
+    const [candidate] = parseJsonContent(
+      raw,
+      'f.json',
+      'tech-ai-hub'
+    ).candidates
+
+    expect(candidate.channelId).toBe('tech-ai-hub')
+    expect(errorsOf(candidate).join('；')).toContain('Buying Guides')
+  })
+
+  it('归属一致不报错', () => {
+    const raw = JSON.stringify([
+      {
+        'blog title': 'T',
+        url: 'a-b',
+        'meta title': 'MT',
+        'meta description': 'MD',
+        summary: 'S',
+        html代码: HTML_WITH_4_H2,
+      },
+    ])
+    const [candidate] = parseJsonContent(
+      raw,
+      'f.json',
+      'buying-guide'
+    ).candidates
+
+    expect(errorsOf(candidate)).toEqual([])
+  })
+
+  it('认不出归属不报错（那是"不认识"，不是"属于别处"）', () => {
+    const raw = JSON.stringify([
+      {
+        'blog title': 'T',
+        url: 'a-b',
+        'meta title': 'MT',
+        'meta description': 'MD',
+        summary: 'S',
+        html代码: '<article><h2>A</h2><h2>B</h2><h2>C</h2><h2>D</h2></article>',
+      },
+    ])
+    const [candidate] = parseJsonContent(
+      raw,
+      'f.json',
+      'tech-ai-hub'
+    ).candidates
+
+    expect(errorsOf(candidate)).toEqual([])
+  })
+
+  it('没指定当前栏目（无 fallback）时不做判断', () => {
+    const [candidate] = parseJsonContent(
+      communityPageRaw(),
+      'f.json',
+      undefined
+    ).candidates
+
+    // 没有"当前栏目"就无从比较，沿用自动识别
+    expect(candidate.channelId).toBe('community-post')
+    expect(errorsOf(candidate)).toEqual([])
   })
 })

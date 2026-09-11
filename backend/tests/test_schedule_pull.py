@@ -25,6 +25,7 @@ import pytest
 from app.shopify.channel_map import (
     BLOG_HANDLE_TO_CHANNEL,
     TEMPLATE_TO_CHANNEL,
+    channel_mismatch_error,
     resolve_article_channel,
     resolve_page_channel,
 )
@@ -258,6 +259,27 @@ async def test_pull_surfaces_api_error_without_writing(store):
 # ---------------------------------------------------------------------------
 # 归属映射（与前端栏目配置交叉校验）
 # ---------------------------------------------------------------------------
+
+
+def test_channel_mismatch_error_names_both_channels():
+    """JSON 自报的栏目与目标栏目不一致时要给出可执行的错误。
+
+    只说「template 必须是 'community_post'」用户不知道该去哪儿改；
+    要说清「这份属于哪个栏目」。
+    """
+    message = channel_mismatch_error("community-post", "discord")
+
+    assert message is not None
+    assert "discord" in message  # 这份 JSON 属于哪
+    assert "community-post" in message  # 现在在哪个栏目
+
+
+def test_channel_mismatch_error_is_none_when_consistent_or_unknown():
+    # 一致 → 不报
+    assert channel_mismatch_error("discord", "discord") is None
+    # 认不出归属是「不认识」，不是「属于别处」，不能拦
+    assert channel_mismatch_error("discord", None) is None
+    assert channel_mismatch_error("discord", "") is None
 
 
 def test_blog_handles_map_to_platform_channels():
