@@ -21,6 +21,13 @@ cp .env.example .env      # 默认 VITE_USE_MOCK=true，无需后端即可运行
 pnpm dev                  # http://localhost:5173
 ```
 
+前端有两种模式：
+
+```bash
+pnpm dev        # 演示模式：用内置演示数据，不需要后端
+pnpm dev:real   # 真实模式：读后端真实数据（.env.real，默认指向 127.0.0.1:8000）
+```
+
 ### 后端（FastAPI）
 
 需要 **Python 3.12**（系统自带的 3.9 太旧）。macOS 上还要注意 CA 证书问题，

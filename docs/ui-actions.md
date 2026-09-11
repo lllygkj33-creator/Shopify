@@ -97,6 +97,55 @@ F1「返回上一页」、F2「回到首页」—— 纯前端。
 
 ---
 
+## 数据层（SQLite）
+
+### 为什么本地存，而不是每次去 Shopify 拉
+
+实测确认 Shopify 侧能读到排期（`articles` / `pages` 的 `published_at` + `isPublished`
++ `templateSuffix`，日期筛选 `published_at:>DATE` 与游标分页都已验证可用），
+但**不能当唯一数据源**：
+
+| 需求 | 为什么必须本地存 |
+|---|---|
+| 发布失败 | Shopify 里**根本不存在**这条记录；PRD §5 要「失败可重试并记录原因」 |
+| 草稿 vs 已排期 | 两边都是 `isPublished:false`；本地有明确 status |
+| 来源追溯 | 哪个 JSON 文件、哪个候选、`publish_key` —— Shopify 不知道 |
+| 6 个月甘特图 | 按栏目分组走 API 要几百分页请求；本地一次 SQL |
+
+Shopify 侧留作**事实校验与回填**（下一步）：导入既有内容让仪表盘第一天就有数据、
+定时对账（到点后 Shopify 自己把 `isPublished` 翻成 true）。
+
+### 幂等
+
+`publish_key` 上有唯一索引，写入是 upsert：
+
+- 同一篇文章重复提交 → 更新同一行，不产生重复
+- 失败后重试 → 更新同一行（错误被清空、状态变回 scheduled）
+- `created_at` 在更新时保留
+
+`publish_key` 缺失时用 `channel_id|handle` 兜底，保证仍有唯一约束保护。
+
+### 表结构
+
+见 `backend/app/storage.py`。库落在 `data/zima_shopify.db`（已在 `.gitignore` 中），
+可用环境变量 `DATABASE_PATH` 覆盖（测试就指向临时文件）。
+
+### 两个前端模式
+
+| 命令 | 数据来源 | 用途 |
+|---|---|---|
+| `pnpm dev` | 内置演示数据（`mock-api.ts`） | 界面与校验逻辑的日常开发 |
+| `pnpm dev:real` | 后端真实数据（`.env.real`） | 端到端联调 |
+
+对应的验收脚本：
+
+| 命令 | 跑在哪个模式 | 验什么 |
+|---|---|---|
+| `pnpm verify:ui` | 演示模式 | UI 渲染、侧边栏、解析校验、选择器、无运行时报错 |
+| `pnpm verify:real` | 真实模式 | 「演示模式角标消失」、统计卡与库一致、历史记录读到真实数据 |
+
+---
+
 ## 上传阶段校验规则（脚本的真实硬约束）
 
 这些规则原本只在「点发布」时才报错。现在选完文件夹就能看到，`publishable=false` 的条目
@@ -251,13 +300,13 @@ MakerWorld / VS 保留更严的一套（含「站内链接不得开新标签页�
 | `POST /api/validate` | ✅ | **C1 / C4** 上传阶段权威校验（只读，各栏目规则） |
 | （发布时内联） | ✅ | **外链规则**：所有链接要有 title；第三方外链要 `_blank` + `noopener` + `noreferrer` + `nofollow` |
 | （发布时内联） | ✅ | **用户故事反链**：页面发布成功后往已有博客文章追加幂等上下文反链 |
-| `GET /api/contents/stats` | 🔲 | B1 |
-| `GET /api/contents/timeline` | 🔲 | B3、B5 |
-| `GET /api/contents?channel_id=` | 🔲 | （栏目页回看已入库内容） |
+| `GET /api/contents/stats` | ✅ | B1 |
+| `GET /api/contents/timeline` | ✅（支持 `?start=&end=` 窗口过滤） | B3、B5 |
+| `GET /api/contents?channel_id=` | ✅ | （栏目页回看已入库内容） |
 | `POST /api/publish` | ✅ 博客 + 页面 | **C11** |
-| `PATCH /api/contents/{id}` | 🔲 | B6 |
-| `DELETE /api/contents/{id}/schedule` | 🔲 | B7 |
-| `GET /api/history?channel_id=` | 🔲 | C13 |
+| `PATCH /api/contents/{id}` | ✅ | B6（改期） |
+| `DELETE /api/contents/{id}/schedule` | ✅ | B7（取消排期→退回草稿） |
+| `GET /api/history?channel_id=` | ✅ | C13 |
 | `POST /api/parse`（可选） | 🔲 | C1 后端权威解析 |
 
 ---

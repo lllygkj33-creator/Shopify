@@ -5,11 +5,13 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:real": "vite --mode real",
     "build": "tsc -b && vite build",
     "typecheck": "tsc -b",
     "lint": "eslint .",
     "preview": "vite preview",
     "verify:ui": "node scripts/verify-ui.mjs",
+    "verify:real": "node scripts/verify-real-backend.mjs",
     "format:check": "prettier --check .",
     "format": "prettier --write .",
     "knip": "knip",

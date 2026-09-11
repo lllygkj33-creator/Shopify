@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import logging
 from typing import Any
 
 from fastapi import FastAPI, HTTPException
@@ -16,6 +17,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from . import config as app_config
+from .storage import store
 from . import ssl_fix  # noqa: F401  导入即生效（macOS CA 修复）
 from .shopify.backlink import (
     BacklinkError,
@@ -200,6 +202,76 @@ class PublishResultItem(BaseModel):
 class PublishResponse(BaseModel):
     ok: bool
     items: list[PublishResultItem]
+
+
+class ContentItemOut(BaseModel):
+    """与前端 ContentItem 对齐。"""
+
+    id: str
+    channelId: str
+    contentType: str
+    title: str
+    handle: str
+    blogName: str | None = None
+    template: str | None = None
+    bodyHtml: str = ""
+    summary: str | None = None
+    metaTitle: str | None = None
+    metaDescription: str | None = None
+    author: str | None = None
+    reviewer: str | None = None
+    relatedProducts: list[str] = Field(default_factory=list)
+    tags: list[str] = Field(default_factory=list)
+    sourceFile: str | None = None
+    sourceIndex: int | None = None
+    publishKey: str | None = None
+    status: str
+    scheduledAt: str | None = None
+    publishedAt: str | None = None
+    publishedUrl: str | None = None
+    shopifyId: str | None = None
+    error: str | None = None
+    createdAt: str
+    updatedAt: str
+
+
+class TimelineBarOut(BaseModel):
+    id: str
+    channelId: str
+    title: str
+    handle: str
+    status: str
+    contentType: str
+    scheduledAt: str | None = None
+    publishedAt: str | None = None
+    publishedUrl: str | None = None
+    error: str | None = None
+
+
+class DashboardStatsOut(BaseModel):
+    scheduledCount: int = 0
+    publishedCount: int = 0
+    failedCount: int = 0
+    draftCount: int = 0
+
+
+class HistoryEntryOut(BaseModel):
+    id: str
+    channelId: str
+    title: str
+    handle: str
+    status: str
+    publishKey: str | None = None
+    scheduledAt: str | None = None
+    publishedAt: str | None = None
+    publishedUrl: str | None = None
+    shopifyId: str | None = None
+    error: str | None = None
+    recordedAt: str
+
+
+class ContentScheduleUpdate(BaseModel):
+    scheduledAt: str
 
 
 class ValidateIssue(BaseModel):
@@ -456,6 +528,136 @@ async def list_blogs() -> list[BlogItem]:
     ]
 
 
+def _to_content_item(row: dict[str, Any]) -> ContentItemOut:
+    return ContentItemOut(
+        id=str(row["id"]),
+        channelId=row["channel_id"],
+        contentType=row["content_type"],
+        title=row["title"],
+        handle=row["handle"],
+        blogName=row.get("blog_name"),
+        template=row.get("template"),
+        bodyHtml=row.get("body_html") or "",
+        summary=row.get("summary"),
+        metaTitle=row.get("meta_title"),
+        metaDescription=row.get("meta_description"),
+        author=row.get("author"),
+        reviewer=row.get("reviewer"),
+        relatedProducts=row.get("related_products") or [],
+        tags=row.get("tags") or [],
+        sourceFile=row.get("source_file"),
+        sourceIndex=row.get("source_index"),
+        publishKey=row.get("publish_key"),
+        status=row["status"],
+        scheduledAt=row.get("scheduled_at"),
+        publishedAt=row.get("published_at"),
+        publishedUrl=row.get("published_url"),
+        shopifyId=row.get("shopify_gid"),
+        error=row.get("error"),
+        createdAt=row["created_at"],
+        updatedAt=row["updated_at"],
+    )
+
+
+@app.get("/api/contents", response_model=list[ContentItemOut])
+async def list_contents(
+    channel_id: str | None = None, limit: int = 500
+) -> list[ContentItemOut]:
+    """列出已入库的内容（含草稿与失败）。"""
+    return [
+        _to_content_item(row)
+        for row in store.list_contents(channel_id=channel_id, limit=limit)
+    ]
+
+
+@app.get("/api/contents/timeline", response_model=list[TimelineBarOut])
+async def contents_timeline(
+    start: str | None = None, end: str | None = None
+) -> list[TimelineBarOut]:
+    """排期时间轴（仪表盘用）。
+
+    `start` / `end` 可选，用于按窗口过滤（不传就是全量，前端自己算坐标）。
+    """
+    return [
+        TimelineBarOut(
+            id=str(row["id"]),
+            channelId=row["channel_id"],
+            title=row["title"],
+            handle=row["handle"],
+            status=row["status"],
+            contentType=row["content_type"],
+            scheduledAt=row.get("scheduled_at"),
+            publishedAt=row.get("published_at"),
+            publishedUrl=row.get("published_url"),
+            error=row.get("error"),
+        )
+        for row in store.timeline(start=start, end=end)
+    ]
+
+
+@app.get("/api/contents/stats", response_model=DashboardStatsOut)
+async def contents_stats() -> DashboardStatsOut:
+    return DashboardStatsOut(**store.stats())
+
+
+@app.get("/api/history", response_model=list[HistoryEntryOut])
+async def publish_history(
+    channel_id: str | None = None, limit: int = 200
+) -> list[HistoryEntryOut]:
+    """发布历史（排除纯草稿）。"""
+    return [
+        HistoryEntryOut(
+            id=str(row["id"]),
+            channelId=row["channel_id"],
+            title=row["title"],
+            handle=row["handle"],
+            status=row["status"],
+            publishKey=row.get("publish_key"),
+            scheduledAt=row.get("scheduled_at"),
+            publishedAt=row.get("published_at"),
+            publishedUrl=row.get("published_url"),
+            shopifyId=row.get("shopify_gid"),
+            error=row.get("error"),
+            recordedAt=row["updated_at"],
+        )
+        for row in store.history(channel_id=channel_id, limit=limit)
+    ]
+
+
+@app.patch("/api/contents/{content_id}", response_model=ContentItemOut)
+async def reschedule_content(
+    content_id: int, payload: ContentScheduleUpdate
+) -> ContentItemOut:
+    """改期。
+
+    注意：这只更新**本地排期记录**。Shopify 侧已创建对象的 publishDate
+    需要另行走 GraphQL（见 docs/ui-actions.md 的数据流说明）。
+    """
+    try:
+        value = datetime.fromisoformat(payload.scheduledAt.replace("Z", "+00:00"))
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail="scheduledAt 不是有效的 ISO 时间") from error
+
+    if value.tzinfo is None:
+        raise HTTPException(
+            status_code=422, detail="scheduledAt 必须带时区偏移"
+        )
+
+    row = store.update_schedule(content_id, value.isoformat())
+    if row is None:
+        raise HTTPException(status_code=404, detail=f"未找到内容 {content_id}")
+    return _to_content_item(row)
+
+
+@app.delete("/api/contents/{content_id}/schedule", response_model=ContentItemOut)
+async def cancel_content_schedule(content_id: int) -> ContentItemOut:
+    """取消排期，退回草稿（Shopify 上的对象不会被删除）。"""
+    row = store.cancel_schedule(content_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail=f"未找到内容 {content_id}")
+    return _to_content_item(row)
+
+
 @app.post("/api/validate", response_model=ValidateResponse)
 async def validate(payload: ValidateRequest) -> ValidateResponse:
     """上传阶段的**权威**校验（对应前端 C1/C4）。
@@ -601,12 +803,26 @@ async def publish(payload: PublishRequest) -> PublishResponse:
             continue
 
         if item.contentType != "blog_article":
+            message = f"未知的内容类型：{item.contentType}"
+            _persist(
+                {
+                    "channel_id": item.channelId,
+                    "content_type": item.contentType,
+                    "title": item.title or "",
+                    "handle": item.handle or "",
+                    "status": "failed",
+                    "error": message,
+                    "publish_key": item.publishKey,
+                    "source_file": item.sourceFile,
+                    "mode": item.mode,
+                }
+            )
             results.append(
                 PublishResultItem(
                     candidateTempId=item.candidateTempId,
                     status="failed",
                     title=item.title or item.handle or "(未命名)",
-                    error=f"未知的内容类型：{item.contentType}",
+                    error=message,
                 )
             )
             continue
@@ -714,6 +930,40 @@ async def publish(payload: PublishRequest) -> PublishResponse:
                 }
             )
 
+            _persist(
+                {
+                    "channel_id": item.channelId,
+                    "content_type": "blog_article",
+                    "title": candidate.title,
+                    "handle": candidate.handle,
+                    "blog_name": candidate.blog_name,
+                    "body_html": candidate.html,
+                    "summary": candidate.summary,
+                    "meta_title": candidate.meta_title,
+                    "meta_description": candidate.meta_description,
+                    "author": candidate.author,
+                    "reviewer": candidate.reviewer,
+                    "related_products": [candidate.related_product_title],
+                    "tags": candidate.tags,
+                    "status": status,
+                    "scheduled_at": scheduled.isoformat() if scheduled else None,
+                    "published_at": (
+                        article.get("publishedAt") if status == "published" else None
+                    ),
+                    "published_url": (
+                        f"/blogs/{blog_name}/{candidate.handle}"
+                        if item.mode != "draft"
+                        else None
+                    ),
+                    "shopify_gid": article.get("id"),
+                    "shopify_kind": "Article",
+                    "publish_key": candidate.publish_key or item.publishKey,
+                    "source_file": candidate.source_file,
+                    "source_index": candidate.source_index,
+                    "mode": item.mode,
+                }
+            )
+
             results.append(
                 PublishResultItem(
                     candidateTempId=item.candidateTempId,
@@ -742,6 +992,29 @@ async def publish(payload: PublishRequest) -> PublishResponse:
                     "handle": item.handle,
                     "error": str(error),
                     "json_file": item.sourceFile,
+                    "mode": item.mode,
+                }
+            )
+            _persist(
+                {
+                    "channel_id": item.channelId,
+                    "content_type": "blog_article",
+                    "title": item.title or "",
+                    "handle": item.handle or "",
+                    "blog_name": item.blogName,
+                    "body_html": item.bodyHtml or "",
+                    "summary": item.summary,
+                    "meta_title": item.metaTitle,
+                    "meta_description": item.metaDescription,
+                    "author": item.author,
+                    "reviewer": item.reviewer,
+                    "tags": item.tags,
+                    "status": "failed",
+                    "scheduled_at": item.scheduledAt,
+                    "error": str(error),
+                    "publish_key": item.publishKey,
+                    "source_file": item.sourceFile,
+                    "source_index": item.sourceIndex,
                     "mode": item.mode,
                 }
             )
@@ -779,6 +1052,18 @@ def _parse_scheduled_at(item: PublishItemIn) -> datetime | None:
             "否则无法判断真实发布时间。"
         )
     return value
+
+
+def _persist(record: dict[str, Any]) -> None:
+    """把发布结果写进本地库。
+
+    落库失败**不影响**已经完成的发布（Shopify 上的对象已经创建了），
+    但要留下痕迹 —— 否则仪表盘会静默变空。
+    """
+    try:
+        store.upsert(record)
+    except Exception as error:  # pragma: no cover - 只在磁盘/权限异常时触发
+        logging.warning("写入内容库失败：%s｜记录：%s", error, record.get("publish_key"))
 
 
 async def _inject_vs_resources(
@@ -882,6 +1167,32 @@ async def _publish_page(item: PublishItemIn, now: datetime) -> PublishResultItem
             }
         )
 
+        _persist(
+            {
+                "channel_id": item.channelId,
+                "content_type": "page",
+                "title": payload_page.title,
+                "handle": payload_page.handle,
+                "template": payload_page.template_suffix,
+                "body_html": payload_page.body_html,
+                "summary": payload_page.summary,
+                "meta_title": payload_page.meta_title,
+                "meta_description": payload_page.meta_description,
+                "status": status,
+                "scheduled_at": scheduled.isoformat() if scheduled else None,
+                "published_at": (
+                    page.get("publishedAt") if status == "published" else None
+                ),
+                "published_url": None if item.mode == "draft" else public_url,
+                "shopify_gid": page.get("id"),
+                "shopify_kind": "Page",
+                "publish_key": item.publishKey,
+                "source_file": item.sourceFile,
+                "source_index": item.sourceIndex,
+                "mode": item.mode,
+            }
+        )
+
         public_url = full_page_url(payload_page.handle)
 
         # 可选反链：页面发布成功后，往一篇已有博客文章追加幂等上下文反链。
@@ -933,6 +1244,25 @@ async def _publish_page(item: PublishItemIn, now: datetime) -> PublishResultItem
                 "handle": item.handle,
                 "error": str(error),
                 "json_file": item.sourceFile,
+                "mode": item.mode,
+            }
+        )
+        _persist(
+            {
+                "channel_id": item.channelId,
+                "content_type": "page",
+                "title": item.title or "",
+                "handle": item.handle or "",
+                "template": item.template,
+                "body_html": item.bodyHtml or "",
+                "meta_title": item.metaTitle,
+                "meta_description": item.metaDescription,
+                "status": "failed",
+                "scheduled_at": item.scheduledAt,
+                "error": str(error),
+                "publish_key": item.publishKey,
+                "source_file": item.sourceFile,
+                "source_index": item.sourceIndex,
                 "mode": item.mode,
             }
         )
