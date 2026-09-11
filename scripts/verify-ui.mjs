@@ -114,8 +114,9 @@ try {
   await page.waitForSelector('[data-sidebar="content"] [data-sidebar="menu-button"]', {
     timeout: 15000,
   })
-  // 时间轴的色块是异步查询后渲染的，取 DOM 前要等它出来
-  await page.waitForSelector('[data-testid="timeline-chip"]', { timeout: 15000 })
+  // 时间轴的内容块是异步查询后渲染的，取 DOM 前要等它出来。
+  // 注意现在每格聚合成一个块（块上写条数），展开块才有单项清单。
+  await page.waitForSelector('[data-testid="timeline-bucket"]', { timeout: 15000 })
 
   // ---------- DOM 事实核对：把关键结构打出来，比肉眼更可靠 ----------
   const facts = await page.evaluate(() => {
@@ -136,23 +137,25 @@ try {
         return `${label}=${value}`
       })
 
-    const chips = Array.from(
-      document.querySelectorAll('[data-testid="timeline-chip"]')
+    const buckets = Array.from(
+      document.querySelectorAll('[data-testid="timeline-bucket"]')
     )
-    const chipInfo = chips.map((chip) => ({
-      status: chip.getAttribute('data-status'),
-      left: chip.style.left,
-      top: chip.style.top,
-      color: chip.style.color,
-      label: text(chip),
+    const bucketInfo = buckets.map((bucket) => ({
+      status: bucket.getAttribute('data-status'),
+      count: bucket.getAttribute('data-count'),
+      tick: bucket.getAttribute('data-tick-index'),
+      label: text(bucket),
     }))
 
     return {
       navLabels,
       statCards,
-      chipCount: chips.length,
-      chipInfo: chipInfo.slice(0, 6),
-      rowCount: document.querySelectorAll('[data-testid="timeline-chip"]').length,
+      bucketCount: buckets.length,
+      bucketInfo: bucketInfo.slice(0, 8),
+      scheduledTotal: buckets.reduce(
+        (sum, bucket) => sum + Number(bucket.getAttribute('data-count') ?? 0),
+        0
+      ),
       hasTodayMarker: Boolean(
         document.querySelector('.bg-destructive\\/60')
       ),
@@ -164,17 +167,19 @@ try {
   console.log('\n---------- DOM 核对 ----------')
   console.log(`侧边栏项（${facts.navLabels.length}）：${facts.navLabels.join(' / ')}`)
   console.log(`统计卡：${facts.statCards.join('  ')}`)
-  console.log(`时间轴色块：${facts.chipCount} 个`)
-  for (const chip of facts.chipInfo) {
+  console.log(
+    `时间轴内容块：${facts.bucketCount} 个（条数合计 ${facts.scheduledTotal}）`
+  )
+  for (const bucket of facts.bucketInfo) {
     console.log(
-      `  · [${chip.status}] left=${chip.left} top=${chip.top} color=${chip.color} «${chip.label}»`
+      `  · [${bucket.status}] 第 ${bucket.tick} 格 ${bucket.count} 条 «${bucket.label}»`
     )
   }
   console.log(`今天标记线：${facts.hasTodayMarker ? '有' : '无'}`)
   console.log(`页面横向溢出：${facts.bodyOverflowX ? '是（需检查）' : '否'}`)
 
-  if (facts.chipCount === 0) {
-    problems.push('时间轴上没有任何色块，排期数据可能没渲染出来')
+  if (facts.bucketCount === 0) {
+    problems.push('时间轴上没有任何内容块，排期数据可能没渲染出来')
   }
   if (facts.navLabels.length !== 13) {
     problems.push(
@@ -186,10 +191,12 @@ try {
     problems.push(`Custom 文章应排在仪表盘之后第一位，实际第 2 项是「${facts.navLabels[1]}」`)
   }
 
-  // ---------- 交互：点开色块 → 详情弹窗 ----------
-  const chip = page.locator('[data-testid="timeline-chip"]').first()
-  if (await chip.count()) {
-    await chip.click()
+  // ---------- 交互：展开内容块 → 点单项 → 详情弹窗 ----------
+  const bucket = page.locator('[data-testid="timeline-bucket"]').first()
+  if (await bucket.count()) {
+    await bucket.click() // 点击也能展开（触屏/键盘用不了悬停）
+    await page.waitForSelector('[data-testid="timeline-chip"]', { timeout: 8000 })
+    await page.locator('[data-testid="timeline-chip"]').first().click()
     await page.waitForSelector('text=排期时间', { timeout: 8000 })
     await page.screenshot({ path: `${OUT_DIR}/schedule-dialog.png` })
     const dialogTitle = await page

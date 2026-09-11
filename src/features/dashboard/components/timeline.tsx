@@ -1,8 +1,11 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import {
   addDays,
   addMonths,
   addWeeks,
+  differenceInCalendarDays,
+  differenceInCalendarMonths,
+  differenceInCalendarWeeks,
   differenceInMinutes,
   endOfMonth,
   format,
@@ -19,17 +22,34 @@ import {
 } from '@/types/content'
 import { isoToWallTime } from '@/lib/datetime'
 import { cn } from '@/lib/utils'
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
 
 /**
  * 排期时间轴（会议室预定式甘特图）
  *
- * 设计取舍：
- *  - **自研 CSS 定位实现，零第三方依赖**。原因是这里的需求很窄（每行=栏目，
- *    每块=一个时间点），用重量级时间轴组件反而要迁就它的数据结构与样式。
- *    整个时间轴被隔离在这一个文件里，将来若要换成 Planby 等成熟组件，
- *    只需替换本组件，页面与数据结构都不受影响。
+ * ## 设计取舍
+ *
+ *  - **自研 CSS 定位实现，零第三方依赖**。需求很窄（每行=栏目，每格=一个时间单位），
+ *    用重量级时间轴组件反而要迁就它的数据结构。整个时间轴隔离在这一个文件里，
+ *    将来要换 Planby 之类只需替换本组件。
  *  - 颜色用**内联样式**而非 Tailwind 动态类名：栏目颜色是运行时数据，
- *    Tailwind 无法静态提取 `bg-[${color}]` 这类拼接类名。
+ *    Tailwind 无法静态提取 `bg-[${color}]` 这种拼接类名。
+ *
+ * ## 为什么按「格」聚合，不逐个画
+ *
+ * 原来每个内容画一个色块，重叠时最多铺 3 道、其余折成「+N」。实测真实用量下
+ * 这个画法不可用：community-post 一个栏目在**同一天**就排了 108 条
+ * （时间几乎相同），结果一行只看得见 3 个，其余全进「+150」。
+ *
+ * 现在每个时间单位（日视图=1 天，周视图=1 周，月视图=1 个月）**只画一个块**，
+ * 块上写条数、块内用一条细条表示状态构成。鼠标悬停或点击展开该格的完整清单，
+ * 清单里每一项仍可点开原有的排期详情弹窗。
+ *
+ * 信息量没有减少（条数直接写在块上），但行高固定、不再有「看不见的 N 条」。
  */
 
 type TimelineProps = {
@@ -39,136 +59,161 @@ type TimelineProps = {
   onSelect: (bar: TimelineBar) => void
 }
 
+type Tick = { label: string; sublabel?: string; isToday: boolean }
+
 type Window = {
   start: Date
   end: Date
-  ticks: { label: string; sublabel?: string; isToday: boolean }[]
+  ticks: Tick[]
   unitCount: number
+  /** 一「格」代表多长时间 —— 决定内容落在哪一格 */
+  unit: 'day' | 'week' | 'month'
+  /** 这一格的中文量词，用于「108 条」这种文案 */
+  unitLabel: string
 }
 
 function buildWindow(scale: TimelineScale, now: Date): Window {
   if (scale === 'day') {
-    // 未来 7 天，每列 1 天
+    // 未来 7 天，每格 1 天
     const start = startOfDay(now)
-    const ticks = Array.from({ length: 7 }, (_, index) => {
-      const date = addDays(start, index)
-      return {
-        label: format(date, 'MM-dd'),
-        sublabel: format(date, 'EEE'),
-        isToday: index === 0,
-      }
-    })
-    return { start, end: addDays(start, 7), ticks, unitCount: 7 }
+    const ticks = Array.from({ length: 7 }, (_, index) => ({
+      label: format(addDays(start, index), 'MM-dd'),
+      sublabel: format(addDays(start, index), 'EEE'),
+      isToday: index === 0,
+    }))
+    return {
+      start,
+      end: addDays(start, 7),
+      ticks,
+      unitCount: 7,
+      unit: 'day',
+      unitLabel: '今天',
+    }
   }
 
   if (scale === 'week') {
-    // 未来 5 周，每列 1 周
+    // 未来 5 周，每格 1 周
     const start = startOfWeek(now, { weekStartsOn: 1 })
-    const ticks = Array.from({ length: 5 }, (_, index) => {
-      const date = addWeeks(start, index)
-      return {
-        label: `${format(date, 'MM-dd')} 起`,
-        sublabel: `第 ${index + 1} 周`,
-        isToday: index === 0,
-      }
-    })
-    return { start, end: addWeeks(start, 5), ticks, unitCount: 5 }
+    const ticks = Array.from({ length: 5 }, (_, index) => ({
+      label: `${format(addWeeks(start, index), 'MM-dd')} 起`,
+      sublabel: `第 ${index + 1} 周`,
+      isToday: index === 0,
+    }))
+    return {
+      start,
+      end: addWeeks(start, 5),
+      ticks,
+      unitCount: 5,
+      unit: 'week',
+      unitLabel: '本周',
+    }
   }
 
-  // 未来 6 个月，每列 1 个月
+  // 未来 6 个月，每格 1 个月
   const start = startOfMonth(now)
-  const ticks = Array.from({ length: 6 }, (_, index) => {
-    const date = addMonths(start, index)
-    return {
-      label: format(date, 'yyyy-MM'),
-      sublabel: format(date, 'MMM'),
-      isToday: index === 0,
-    }
-  })
-  return { start, end: endOfMonth(addMonths(start, 5)), ticks, unitCount: 6 }
+  const ticks = Array.from({ length: 6 }, (_, index) => ({
+    label: format(addMonths(start, index), 'yyyy-MM'),
+    sublabel: format(addMonths(start, index), 'MMM'),
+    isToday: index === 0,
+  }))
+  return {
+    start,
+    end: endOfMonth(addMonths(start, 5)),
+    ticks,
+    unitCount: 6,
+    unit: 'month',
+    unitLabel: '本月',
+  }
 }
 
-/** 把时间点换算成轨道内的百分比位置 */
+/** 内容落在哪一格 */
+function bucketIndexOf(time: Date, window: Window): number {
+  const raw =
+    window.unit === 'day'
+      ? differenceInCalendarDays(time, window.start)
+      : window.unit === 'week'
+        ? differenceInCalendarWeeks(time, window.start, { weekStartsOn: 1 })
+        : differenceInCalendarMonths(time, window.start)
+
+  return Math.min(window.unitCount - 1, Math.max(0, raw))
+}
+
+/** 把时间点换算成轨道内的百分比位置（「现在」标记线用） */
 function positionPercent(time: Date, window: Window): number {
   const total = differenceInMinutes(window.end, window.start)
   const offset = differenceInMinutes(time, window.start)
   return Math.min(100, Math.max(0, (offset / total) * 100))
 }
 
-/**
- * 同一行内的防重叠分道：
- * 若与前一块在这个百分比窗口内重叠，就换到下一道。
- * 阈值用百分比近似（块宽约 9%），足够避免视觉压盖。
- */
-const BAR_WIDTH_PERCENT = 9
-const LANE_GAP_PERCENT = 1.5
-
-function assignLanes(items: { bar: TimelineBar; percent: number }[]) {
-  const lanes: number[] = []
-  const result: { bar: TimelineBar; percent: number; lane: number }[] = []
-
-  for (const item of items) {
-    let lane = 0
-    while (
-      lanes[lane] !== undefined &&
-      item.percent - lanes[lane] < BAR_WIDTH_PERCENT + LANE_GAP_PERCENT
-    ) {
-      lane += 1
-    }
-    lanes[lane] = item.percent
-    result.push({ ...item, lane })
-  }
-
-  return result
+type Bucket = {
+  index: number
+  count: number
+  bars: TimelineBar[]
+  /** 状态 → 条数，用于块内的构成细条 */
+  composition: [ContentStatus, number][]
+  dominant: ContentStatus
 }
-
-// 每行最多显示的道数，超出则提示「+N」
-const MAX_LANES = 3
 
 export function Timeline({ bars, scale, timezone, onSelect }: TimelineProps) {
   /**
    * 时间窗口只在切换粒度时重算。
    * `new Date()` 放在 useMemo 内部，避免每次渲染都生成新对象导致 memo 失效。
-   * 代价是页面长时间挂着跨过午夜时窗口不会自动前移——刷新即恢复，
+   * 代价是页面长时间挂着跨过午夜时窗口不会自动前移 —— 刷新即恢复，
    * 对本地单机工具来说可以接受。
    */
   const window = useMemo(() => buildWindow(scale, new Date()), [scale])
 
-  /** 按栏目分组，并计算位置与分道 */
+  /** 按栏目分组，再按「格」聚合 */
   const rows = useMemo(() => {
     return CHANNELS.map((channel) => {
-      const channelBars = bars
-        .filter((bar) => bar.channelId === channel.id)
-        .map((bar) => {
-          const iso = bar.scheduledAt ?? bar.publishedAt
-          const time = iso ? new Date(iso) : null
-          if (!time || Number.isNaN(time.getTime())) return null
-          // 当前视图窗口之外的排期不画，否则会全部堆在左右边界上误导判断
-          if (time < window.start || time >= window.end) return null
-          return { bar, percent: positionPercent(time, window) }
-        })
-        .filter((entry): entry is { bar: TimelineBar; percent: number } =>
-          Boolean(entry)
-        )
-        .sort((a, b) => a.percent - b.percent)
+      const buckets = new Map<number, TimelineBar[]>()
 
-      const laidOut = assignLanes(channelBars)
-      const hidden = laidOut.filter((entry) => entry.lane >= MAX_LANES).length
+      for (const bar of bars) {
+        if (bar.channelId !== channel.id) continue
+        const iso = bar.scheduledAt ?? bar.publishedAt
+        const time = iso ? new Date(iso) : null
+        if (!time || Number.isNaN(time.getTime())) continue
+        // 窗口之外的不画 —— 否则会全部堆在两端边界上误导判断
+        if (time < window.start || time >= window.end) continue
+
+        const index = bucketIndexOf(time, window)
+        const list = buckets.get(index)
+        if (list) list.push(bar)
+        else buckets.set(index, [bar])
+      }
+
+      const cells: Bucket[] = Array.from(buckets.entries())
+        .map(([index, list]) => {
+          const counts = new Map<ContentStatus, number>()
+          for (const bar of list) {
+            counts.set(bar.status, (counts.get(bar.status) ?? 0) + 1)
+          }
+          const composition = [...counts.entries()].sort((a, b) => b[1] - a[1])
+
+          return {
+            index,
+            count: list.length,
+            bars: [...list].sort((a, b) => {
+              const left = a.scheduledAt ?? a.publishedAt ?? ''
+              const right = b.scheduledAt ?? b.publishedAt ?? ''
+              return left.localeCompare(right)
+            }),
+            composition,
+            dominant: composition[0][0],
+          }
+        })
+        .sort((a, b) => a.index - b.index)
 
       return {
         channel,
-        entries: laidOut.filter((entry) => entry.lane < MAX_LANES),
-        laneCount: Math.min(
-          MAX_LANES,
-          Math.max(1, ...laidOut.map((entry) => entry.lane + 1))
-        ),
-        hidden,
+        cells,
+        total: cells.reduce((sum, cell) => sum + cell.count, 0),
       }
     })
   }, [bars, window])
 
   // 「现在」标记线的位置，只在窗口变化时重算
-  const todayPercent = useMemo(
+  const nowPercent = useMemo(
     () => positionPercent(new Date(), window),
     [window]
   )
@@ -219,12 +264,9 @@ export function Timeline({ bars, scale, timezone, onSelect }: TimelineProps) {
               <span className='truncate text-sm'>
                 {row.channel.nameZh ?? row.channel.name}
               </span>
-              {row.hidden > 0 && (
-                <span
-                  className='ms-auto text-[10px] text-muted-foreground'
-                  title={`另有 ${row.hidden} 条排期重叠未显示`}
-                >
-                  +{row.hidden}
+              {row.total > 0 && (
+                <span className='ms-auto shrink-0 font-mono text-[10px] text-muted-foreground'>
+                  {row.total}
                 </span>
               )}
             </div>
@@ -241,43 +283,50 @@ export function Timeline({ bars, scale, timezone, onSelect }: TimelineProps) {
                 {window.ticks.map((tick) => (
                   <div
                     key={tick.label}
-                    className={cn(
-                      'border-l',
-                      tick.isToday && 'bg-muted/20'
-                    )}
+                    className={cn('border-l', tick.isToday && 'bg-muted/20')}
                   />
                 ))}
               </div>
 
               {/* 今天标记 */}
-              {todayPercent > 0 && todayPercent < 100 && (
+              {nowPercent > 0 && nowPercent < 100 && (
                 <div
                   className='pointer-events-none absolute inset-y-0 z-10 w-px bg-destructive/60'
-                  style={{ left: `${todayPercent}%` }}
+                  style={{ left: `${nowPercent}%` }}
                 />
               )}
 
-              {/* 内容块 */}
+              {/* 内容：每格一个块，与表头列对齐 */}
               <div
-                className='relative'
-                style={{ height: `${row.laneCount * 30 + 8}px` }}
+                className='relative grid h-11 items-center py-1'
+                style={{
+                  gridTemplateColumns: `repeat(${window.unitCount}, minmax(0, 1fr))`,
+                }}
               >
-                {row.entries.map((entry) => (
-                  <TimelineChip
-                    key={entry.bar.id}
-                    bar={entry.bar}
-                    percent={entry.percent}
-                    lane={entry.lane}
-                    timezone={timezone}
-                    onSelect={onSelect}
-                  />
-                ))}
-                {row.entries.length === 0 && (
-                  <div className='absolute inset-y-0 left-3 flex items-center text-xs text-muted-foreground/60'>
-                    暂无排期
-                  </div>
-                )}
+                {window.ticks.map((tick, index) => {
+                  const cell = row.cells.find((entry) => entry.index === index)
+
+                  return (
+                    <div key={tick.label} className='h-full px-0.5'>
+                      {cell && (
+                        <BucketBlock
+                          cell={cell}
+                          channelLabel={row.channel.nameZh ?? row.channel.name}
+                          tick={tick}
+                          timezone={timezone}
+                          onSelect={onSelect}
+                        />
+                      )}
+                    </div>
+                  )
+                })}
               </div>
+
+              {row.total === 0 && (
+                <div className='pointer-events-none absolute inset-y-0 left-3 flex items-center text-xs text-muted-foreground/60'>
+                  暂无排期
+                </div>
+              )}
             </div>
           </div>
         ))}
@@ -285,40 +334,173 @@ export function Timeline({ bars, scale, timezone, onSelect }: TimelineProps) {
 
       {/* ---------- 图例 ---------- */}
       <div className='flex flex-wrap items-center gap-x-4 gap-y-2 px-3 py-3 text-xs text-muted-foreground'>
-        {(
-          ['scheduled', 'published', 'failed', 'draft'] as ContentStatus[]
-        ).map((status) => (
-          <span key={status} className='flex items-center gap-1.5'>
-            <span
-              className='size-2.5 rounded-sm'
-              style={{
-                backgroundColor: CONTENT_STATUS_META[status].color,
-                ...(status === 'draft'
-                  ? { backgroundColor: 'transparent', border: '1px dashed currentColor' }
-                  : {}),
-              }}
-            />
-            {CONTENT_STATUS_META[status].label}
-          </span>
-        ))}
+        {(['scheduled', 'published', 'failed', 'draft'] as ContentStatus[]).map(
+          (status) => (
+            <span key={status} className='flex items-center gap-1.5'>
+              <span
+                className='size-2.5 rounded-sm'
+                style={{
+                  backgroundColor: CONTENT_STATUS_META[status].color,
+                  ...(status === 'draft'
+                    ? {
+                        backgroundColor: 'transparent',
+                        border: '1px dashed currentColor',
+                      }
+                    : {}),
+                }}
+              />
+              {CONTENT_STATUS_META[status].label}
+            </span>
+          )
+        )}
         <span className='flex items-center gap-1.5'>
           <span className='h-3 w-px bg-destructive/60' />
           现在
+        </span>
+        <span className='ms-auto'>
+          块上的数字是该格的内容条数，悬停或点击展开清单
         </span>
       </div>
     </div>
   )
 }
 
-type ChipProps = {
-  bar: TimelineBar
-  percent: number
-  lane: number
+type BucketBlockProps = {
+  cell: Bucket
+  channelLabel: string
+  tick: Tick
   timezone: string
   onSelect: (bar: TimelineBar) => void
 }
 
-function TimelineChip({ bar, percent, lane, timezone, onSelect }: ChipProps) {
+/**
+ * 一个时间格里的内容块。
+ *
+ * - **条数写在块上**：不折叠、不隐藏，一眼能看出这天有多少条
+ * - 块内细条表示状态构成（多条时才知道有多少是排期、多少是失败）
+ * - 悬停展开清单；点击也能展开（触屏和键盘用不了悬停）
+ *
+ * 悬停关闭加了 150ms 延迟：触发器和浮层之间有一道缝，指针穿过时
+ * 会先触发 trigger 的 leave，立即关闭就会闪烁、来不及移到浮层上。
+ */
+function BucketBlock({
+  cell,
+  channelLabel,
+  tick,
+  timezone,
+  onSelect,
+}: BucketBlockProps) {
+  const [open, setOpen] = useState(false)
+  const meta = CONTENT_STATUS_META[cell.dominant]
+  const mixed = cell.composition.length > 1
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type='button'
+          data-testid='timeline-bucket'
+          data-count={cell.count}
+          data-status={cell.dominant}
+          data-tick-index={cell.index}
+          aria-label={`${channelLabel} ${tick.label} 共 ${cell.count} 条`}
+          onMouseEnter={() => setOpen(true)}
+          onMouseLeave={() => setOpen(false)}
+          className={cn(
+            'flex h-full w-full flex-col justify-center gap-0.5 overflow-hidden rounded-md border px-1.5 text-left text-xs shadow-sm transition',
+            'hover:z-20 hover:shadow-md focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none',
+            cell.dominant === 'draft' && 'border-dashed bg-transparent'
+          )}
+          style={
+            cell.dominant === 'draft'
+              ? { color: meta.color }
+              : {
+                  backgroundColor: `${meta.color}1a`,
+                  borderColor: `${meta.color}66`,
+                  color: meta.color,
+                }
+          }
+        >
+          <span className='flex items-baseline gap-1'>
+            <span className='font-mono text-sm font-semibold'>
+              {cell.count}
+            </span>
+            <span className='text-[10px] opacity-80'>
+              {cell.count === 1 ? cell.bars[0].title : '条'}
+            </span>
+          </span>
+
+          {/* 状态构成细条：只有一种状态时就是一条实色，不额外干扰 */}
+          <span className='flex h-1 w-full overflow-hidden rounded-full'>
+            {cell.composition.map(([status, count]) => (
+              <span
+                key={status}
+                style={{
+                  width: `${(count / cell.count) * 100}%`,
+                  backgroundColor: CONTENT_STATUS_META[status].color,
+                }}
+              />
+            ))}
+          </span>
+        </button>
+      </PopoverTrigger>
+
+      <PopoverContent
+        align='start'
+        sideOffset={2}
+        className='w-80 p-0'
+        onMouseEnter={() => setOpen(true)}
+        onMouseLeave={() => setOpen(false)}
+        onOpenAutoFocus={(event) => event.preventDefault()}
+      >
+        <div className='border-b px-3 py-2 text-xs'>
+          <div className='flex items-center justify-between gap-2 font-medium'>
+            <span>
+              {channelLabel} · {tick.label}
+            </span>
+            <span className='font-mono text-muted-foreground'>
+              {cell.count} 条
+            </span>
+          </div>
+          {mixed && (
+            <div className='mt-0.5 text-[10px] text-muted-foreground'>
+              {cell.composition
+                .map(
+                  ([status, count]) =>
+                    `${CONTENT_STATUS_META[status].label} ${count}`
+                )
+                .join(' · ')}
+            </div>
+          )}
+        </div>
+
+        <div className='max-h-72 overflow-y-auto p-1'>
+          {cell.bars.map((bar) => (
+            <BucketItem
+              key={bar.id}
+              bar={bar}
+              timezone={timezone}
+              onSelect={(selected) => {
+                setOpen(false)
+                onSelect(selected)
+              }}
+            />
+          ))}
+        </div>
+      </PopoverContent>
+    </Popover>
+  )
+}
+
+function BucketItem({
+  bar,
+  timezone,
+  onSelect,
+}: {
+  bar: TimelineBar
+  timezone: string
+  onSelect: (bar: TimelineBar) => void
+}) {
   const meta = CONTENT_STATUS_META[bar.status]
   const iso = bar.scheduledAt ?? bar.publishedAt
   const label = iso ? isoToWallTime(iso, timezone).slice(11) : ''
@@ -329,34 +511,16 @@ function TimelineChip({ bar, percent, lane, timezone, onSelect }: ChipProps) {
       data-testid='timeline-chip'
       data-status={bar.status}
       onClick={() => onSelect(bar)}
-      title={`${bar.title}\n${meta.label}${label ? ` · ${label}` : ''}`}
-      className={cn(
-        'absolute flex h-7 max-w-[240px] items-center gap-1.5 overflow-hidden rounded-md border px-2 text-xs shadow-sm transition',
-        'hover:z-20 hover:shadow-md focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none',
-        bar.status === 'draft' && 'border-dashed bg-transparent'
-      )}
-      style={{
-        left: `${percent}%`,
-        top: `${lane * 30 + 4}px`,
-        transform: 'translateX(-2px)',
-        // 实心/描边两种表现：草稿用描边，其余用状态色填充
-        ...(bar.status === 'draft'
-          ? { color: meta.color }
-          : {
-              backgroundColor: `${meta.color}1a`,
-              borderColor: `${meta.color}66`,
-              color: meta.color,
-            }),
-      }}
+      className='flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-xs transition hover:bg-accent focus-visible:bg-accent focus-visible:outline-none'
     >
       <span
         className='size-1.5 shrink-0 rounded-full'
         style={{ backgroundColor: meta.color }}
       />
-      <span className='truncate font-medium'>{bar.title}</span>
-      {label && (
-        <span className='shrink-0 text-[10px] opacity-70'>{label}</span>
-      )}
+      <span className='flex-1 truncate'>{bar.title}</span>
+      <span className='shrink-0 font-mono text-[10px] text-muted-foreground'>
+        {label}
+      </span>
     </button>
   )
 }
