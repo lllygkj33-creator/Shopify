@@ -213,14 +213,31 @@ try {
     console.log(`  · «${row.title}» | 目标：${row.target} | 校验：${row.check}`)
   }
   console.log(`发布按钮：${flowFacts.publishButton}`)
-  if (flowFacts.publishButton !== '发布 6 篇') {
-    problems.push(`发布按钮应统计 6 篇可发布内容，实际：${flowFacts.publishButton}`)
+  if (flowFacts.publishButton !== '发布 7 篇') {
+    problems.push(`发布按钮应统计 7 篇可发布内容，实际：${flowFacts.publishButton}`)
   }
 
   // 断言：2 篇博客 + 1 个页面 = 3 行；且第一行正文无 class 时应回落到栏目默认博客
-  if (flowFacts.rowCount !== 7) {
-    problems.push(`上传 6 个 JSON 应解析出 7 条内容，实际 ${flowFacts.rowCount} 条`)
+  if (flowFacts.rowCount !== 8) {
+    problems.push(`上传 7 个 JSON 应解析出 8 条内容，实际 ${flowFacts.rowCount} 条`)
   }
+  // 真实样本：正文带 class="zima-buying-guide-article"，
+  // 即使从 tech-ai-hub 栏目页上传，也应靠 class 落到 Buying Guide
+  const buyingGuideRow = flowFacts.rows.find((r) =>
+    r.title.includes('Home Server Buying Guide')
+  )
+  if (!buyingGuideRow) {
+    problems.push('没有解析出真实样本「Home Server Buying Guide」')
+  } else if (!buyingGuideRow.target.includes('Buying Guide')) {
+    problems.push(
+      `真实样本应按正文 class 落到 Buying Guide，实际：${buyingGuideRow.target}`
+    )
+  } else if (buyingGuideRow.check.includes('错误')) {
+    problems.push(`真实样本不应有校验错误，实际：${buyingGuideRow.check}`)
+  } else {
+    console.log(`✓ 真实 buying-guide 样本：${buyingGuideRow.check}`)
+  }
+
   // 注意用不区分大小写比较：店铺里的真实标题是 'Tech & AI HUB'（大写 HUB）
   if (!flowFacts.rows.some((r) => r.target.toLowerCase().includes('tech & ai hub'))) {
     problems.push('无 class 的正文没有回落到栏目默认博客 Tech & AI HUB')
