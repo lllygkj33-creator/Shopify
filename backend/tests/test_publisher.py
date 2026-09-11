@@ -437,7 +437,7 @@ async def test_find_person_gid_resolves_via_metaobject_definition():
     )
     publisher = BlogPublisher(client)
 
-    assert await publisher.find_person_gid("eva wong") == "gid://shopify/Metaobject/1"
+    assert await publisher.find_person_gid("author name") == "gid://shopify/Metaobject/1"
 
 
 async def test_find_person_gid_reports_missing_person():

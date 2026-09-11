@@ -506,7 +506,7 @@ DISCORD_SOURCE = {
     "excerpt": "A thread about drive temperatures and airflow.",
     "starter_name": "Eric Brown",
     "starter_avatar_url": "https://cdn.discordapp.com/avatars/1/abc.png",
-    "channel_name": "#zimacube-general",
+    "channel_name": "#example-channel",
     "invite_url": "",
 }
 
@@ -550,7 +550,7 @@ def test_discord_spec_is_verified_and_stricter_than_community():
 
 def test_discord_source_strips_hash_from_channel_name():
     payload = build_discord()
-    assert payload.source["channel_name"] == "zimacube-general"
+    assert payload.source["channel_name"] == "example-channel"
 
 
 def test_discord_source_keeps_extra_keys():

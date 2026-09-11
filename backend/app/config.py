@@ -54,6 +54,9 @@ class EnvSettings(BaseSettings):
     # 统一为上海时区（店铺的 ianaTimezone 实测就是 Asia/Shanghai）
     default_timezone: str = "Asia/Shanghai"
     default_author: str = "ZimaSpace"
+    # 默认评审人（逗号分隔）。**故意留空**：真实的人是个人信息，
+    # 不该写进代码/仓库 —— 在全局设置界面里配，或放 .env（已 gitignore）
+    default_reviewers: str = ""
 
     # --- 后台对账 ---
     # 分钟；0 = 关闭。Shopify 到点会自己上线内容，本地只需定期对齐状态。

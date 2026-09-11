@@ -684,7 +684,7 @@ const DISCORD_SOURCE = {
   excerpt: 'A thread about drive temperatures and airflow.',
   starter_name: 'Eric Brown',
   starter_avatar_url: 'https://cdn.discordapp.com/avatars/1/abc.png',
-  channel_name: '#zimacube-general',
+  channel_name: '#example-channel',
   invite_url: '',
 }
 
@@ -714,7 +714,7 @@ describe('上传阶段校验 —— Discord 页面（更严）', () => {
     expect(candidate.issues).toEqual([])
     // 脚本会把 channel_name 的前导 # 去掉再写入 metafield
     expect((candidate.source as Record<string, unknown>)['channel_name']).toBe(
-      'zimacube-general'
+      'example-channel'
     )
   })
 

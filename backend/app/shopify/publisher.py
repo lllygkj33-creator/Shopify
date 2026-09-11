@@ -49,7 +49,16 @@ METAOBJECT_DEFINITION_NAME = "Blog Author Information"
 
 RELATED_PRODUCTS_PLACEHOLDER = "<p><span>[[related_products_1]]</span></p>"
 
-DEFAULT_REVIEWERS_FALLBACK = ["Reviewer One", "Reviewer Two"]
+DEFAULT_REVIEWERS_FALLBACK = [
+    name.strip()
+    for name in app_config.env.default_reviewers.split(",")
+    if name.strip()
+]
+"""默认评审人兜底（全局设置里没配时用）。
+
+**故意为空**：评审人是真实的人，属于个人信息，不写进仓库。
+要固定默认值就在 `.env` 里配 `DEFAULT_REVIEWERS=姓名一,姓名二`（.env 已 gitignore），
+或者直接在全局设置界面里填（存到 data/settings.json，同样不提交）。"""
 
 RELATED_PRODUCT_TITLES_FALLBACK = [
     "ZimaCube 2 Personal Cloud Home NAS",
