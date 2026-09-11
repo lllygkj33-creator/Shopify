@@ -81,10 +81,10 @@ def test_created_at_is_preserved_on_update(store):
 
 def test_lists_round_trip(store):
     row = store.upsert(
-        make_record(related_products=["ZimaCube 2"], tags=["nas", "storage"])
+        make_record(related_products=["Product A"], tags=["nas", "storage"])
     )
 
-    assert row["related_products"] == ["ZimaCube 2"]
+    assert row["related_products"] == ["Product A"]
     assert row["tags"] == ["nas", "storage"]
 
 

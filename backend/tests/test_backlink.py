@@ -18,16 +18,16 @@ from app.shopify.backlink import (
     parse_blog_article_url,
 )
 
-PAGE_HANDLE = "001-example-builder-zimaboard2-350tb"
-PAGE_URL = f"https://shop.zimaspace.com/pages/{PAGE_HANDLE}"
+PAGE_HANDLE = "001-example-builder-350tb"
+PAGE_URL = f"https://example-store.test/pages/{PAGE_HANDLE}"
 
 CONFIG = BacklinkConfig(
     enabled=True,
-    article_url="https://shop.zimaspace.com/blogs/tech-ai-hub/user-builds-so-far",
+    article_url="https://example-store.test/blogs/tech-ai-hub/user-builds-so-far",
     blog_handle="tech-ai-hub",
     article_handle="user-builds-so-far",
     lead_in="Read the full build story:",
-    anchor_text="a 350 TB ZimaBoard 2 array",
+    anchor_text="a 350 TB Product B array",
 )
 
 
@@ -83,14 +83,14 @@ def article_with(body: str, *, blog_handle: str = "tech-ai-hub"):
 
 def test_parse_blog_article_url():
     blog, article = parse_blog_article_url(
-        "https://shop.zimaspace.com/blogs/buying-guide/is-one-nvme-slot-enough"
+        "https://example-store.test/blogs/buying-guide/is-one-nvme-slot-enough"
     )
     assert (blog, article) == ("buying-guide", "is-one-nvme-slot-enough")
 
 
 def test_parse_blog_article_url_rejects_other_shapes():
     with pytest.raises(BacklinkError, match="backlink.article_url"):
-        parse_blog_article_url("https://shop.zimaspace.com/pages/some-page")
+        parse_blog_article_url("https://example-store.test/pages/some-page")
 
 
 def test_load_backlink_returns_none_when_absent():
@@ -107,7 +107,7 @@ def test_load_backlink_requires_all_three_fields():
         load_backlink(
             {
                 "backlink": {
-                    "article_url": "https://shop.zimaspace.com/blogs/a/b",
+                    "article_url": "https://example-store.test/blogs/a/b",
                     "anchor_text": "x",
                 }
             }
@@ -118,7 +118,7 @@ def test_load_backlink_accepts_json_string():
     config = load_backlink(
         {
             "backlink": (
-                '{"article_url":"https://shop.zimaspace.com/blogs/a/b",'
+                '{"article_url":"https://example-store.test/blogs/a/b",'
                 '"lead_in":"Read:","anchor_text":"story"}'
             )
         }
@@ -144,7 +144,7 @@ def test_backlink_block_contains_marker_and_data_attribute():
 def test_backlink_block_escapes_html():
     config = BacklinkConfig(
         enabled=True,
-        article_url="https://shop.zimaspace.com/blogs/a/b",
+        article_url="https://example-store.test/blogs/a/b",
         blog_handle="a",
         article_handle="b",
         lead_in='Lead <b>in</b> & more',

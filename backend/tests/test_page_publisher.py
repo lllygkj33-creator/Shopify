@@ -531,7 +531,7 @@ def raw_discord(**overrides):
         "title": "ZimaCube 1 HDD Running Hot",
         "meta_title": "ZimaCube 1 HDD Temperature: Improve Cooling",
         "td": DISCORD_META_DESCRIPTION,
-        "url": "/pages/zimacube-1-hdd-temperature-cooling-airflow",
+        "url": "/pages/examplecube-1-hdd-temperature-cooling-airflow",
         "template": "discord-page",
         "html": DISCORD_HTML_4H2,
         "discord_source": dict(DISCORD_SOURCE),
@@ -701,7 +701,7 @@ assert MAKER_SPEC is not None
 MAKER_SOURCE_URL = "https://makerworld.com/en/models/3034621-minimal-balmuda-style-nas-case"
 
 MAKER_SOURCE = {
-    "title": "Minimal BALMUDA Style ZimaBoard 2 NAS Case",
+    "title": "Minimal BALMUDA Style Product B NAS Case",
     "url": MAKER_SOURCE_URL,
     "excerpt": "A minimal BALMUDA-style case with dual 3.5-inch bays.",
     "creator_name": "ExampleCreator",
@@ -713,11 +713,11 @@ MAKER_SOURCE = {
 }
 
 MAKER_META_DESCRIPTION = (
-    "A minimal BALMUDA-style ZimaBoard 2 NAS case with dual 3.5-inch HDD bays, "
+    "A minimal BALMUDA-style Product B NAS case with dual 3.5-inch HDD bays, "
     "printed panels, and a quiet airflow path for a home server build."
 )
 MAKER_SUMMARY = (
-    "This minimal BALMUDA-style enclosure holds a ZimaBoard 2 with two 3.5-inch drives, "
+    "This minimal BALMUDA-style enclosure holds a Product B with two 3.5-inch drives, "
     "keeps cabling internal, and leaves the front panel clean."
 )
 
@@ -745,11 +745,11 @@ def maker_html(**overrides):
 
 def raw_maker(**overrides):
     base = {
-        "title": "Minimal BALMUDA-Style ZimaBoard 2 NAS Case with Dual HDD Bays",
-        "meta_title": "ZimaBoard 2 NAS Case with Dual 3.5-Inch HDD Bays",
+        "title": "Minimal BALMUDA-Style Product B NAS Case with Dual HDD Bays",
+        "meta_title": "Product B NAS Case with Dual 3.5-Inch HDD Bays",
         "td": MAKER_META_DESCRIPTION,
         "summary": MAKER_SUMMARY,
-        "url": "/pages/zimaboard-2-balmuda-style-nas-case-dual-hdd",
+        "url": "/pages/product-b-balmuda-style-nas-case-dual-hdd",
         "template": "makerworld-page",
         "html": maker_html(),
         "maker_source": dict(MAKER_SOURCE),
@@ -921,10 +921,10 @@ USER_HTML = (
 
 def raw_user(**overrides):
     base = {
-        "title": "How ExampleBuilder Built a 350 TB ZimaBoard 2 Array",
-        "meta_title": "User Story: A 350 TB ZimaBoard 2 Array",
-        "td": "A user story about scaling a ZimaBoard 2 build to 350 TB of storage.",
-        "url": "/pages/001-example-builder-zimaboard2-350tb",
+        "title": "How ExampleBuilder Built a 350 TB Product B Array",
+        "meta_title": "User Story: A 350 TB Product B Array",
+        "td": "A user story about scaling a Product B build to 350 TB of storage.",
+        "url": "/pages/001-example-builder-350tb",
         "template": "user-story",
         "html": USER_HTML,
         "user_info": dict(USER_INFO),

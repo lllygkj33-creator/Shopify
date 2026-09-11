@@ -51,7 +51,7 @@ def normalize(raw, **kwargs):
         "blog_name": "Buying Guide",
         "default_author": "Author Name",
         "reviewers": ["Reviewer One", "Reviewer Two"],
-        "product_titles": ["ZimaCube 2 Personal Cloud Home NAS"],
+        "product_titles": ["Product A Personal Cloud Home NAS"],
     }
     options.update(kwargs)
     return normalize_article(raw, **options)
@@ -186,7 +186,7 @@ def test_explicit_reviewer_wins_over_random():
 
 
 def test_related_product_randomly_chosen_when_absent():
-    products = ["ZimaCube 2 Personal Cloud Home NAS", "ZimaBoard 2 - Mini Home Server"]
+    products = ["Product A Personal Cloud Home NAS", "Product B - Mini Home Server"]
     seen = set()
     for seed in range(40):
         result = normalize(article(), product_titles=products, **{"rng": random.Random(seed)})
@@ -197,8 +197,8 @@ def test_related_product_randomly_chosen_when_absent():
 
 
 def test_explicit_related_product_wins():
-    result = normalize(article(**{"related_products": ["ZimaBoard 2 - Mini Home Server"]}))
-    assert result["related_product_title"] == "ZimaBoard 2 - Mini Home Server"
+    result = normalize(article(**{"related_products": ["Product B - Mini Home Server"]}))
+    assert result["related_product_title"] == "Product B - Mini Home Server"
 
 
 def test_missing_reviewers_raises_actionable_error():
@@ -258,8 +258,8 @@ def test_cover_slot_returns_none_for_unknown_file():
 
 
 def test_normalize_product_title_unifies_dashes_and_case():
-    assert normalize_product_title("ZimaCube 2  Personal—Cloud") == (
-        "zimacube 2 personal-cloud"
+    assert normalize_product_title("Product A  Personal—Cloud") == (
+        "product a personal-cloud"
     )
 
 
@@ -463,13 +463,13 @@ async def test_find_person_gid_reports_missing_person():
 async def test_find_product_gid_normalizes_dash_variants():
     client = FakeClient(
         products=[
-            {"id": "gid://shopify/Product/9", "title": "ZimaBoard 2 – Mini Home Server"}
+            {"id": "gid://shopify/Product/9", "title": "Product B – Mini Home Server"}
         ]
     )
     publisher = BlogPublisher(client)
 
     # 配置里是 "-"，Shopify 里是 "–"，normalize 之后要能匹配上
-    assert await publisher.find_product_gid("ZimaBoard 2 - Mini Home Server") == (
+    assert await publisher.find_product_gid("Product B - Mini Home Server") == (
         "gid://shopify/Product/9"
     )
 
@@ -563,7 +563,7 @@ async def test_create_article_builds_expected_input():
         blog_name="Buying Guide",
         author="Author Name",
         reviewer="Reviewer Two",
-        related_product_title="ZimaCube 2 Personal Cloud Home NAS",
+        related_product_title="Product A Personal Cloud Home NAS",
         tags=["a"],
         cover_image_url="https://cdn.example/x.png",
     )

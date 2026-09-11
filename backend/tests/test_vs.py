@@ -45,7 +45,7 @@ assert VS_SPEC is not None
 from app.site_config import site  # noqa: E402
 from app.shopify import vs_resources as _vs  # noqa: E402
 
-_TEST_PRODUCTS = ("zimacube-2", "zimaboard-2", "zimablade")
+_TEST_PRODUCTS = ("product-a", "product-b", "product-c")
 
 TEST_LIBRARY = {
     key: {
@@ -101,7 +101,7 @@ def marker_block(name: str, inner: str = "<p>Compare content.</p>") -> str:
 
 
 VS_META_DESCRIPTION = (
-    "Compare ZimaBoard 2 and ZimaBlade for a small home server: expansion, "
+    "Compare Product B and Product C for a small home server: expansion, "
     "storage options, noise, and which board fits a beginner build."
 )
 
@@ -130,10 +130,10 @@ def vs_html(**overrides) -> str:
 
 def raw_vs(**overrides):
     base = {
-        "title": "ZimaBoard 2 vs ZimaBlade for a Compact Home Server",
-        "meta_title": "ZimaBoard 2 vs ZimaBlade: Compact Server Pick",
+        "title": "Product B vs Product C for a Compact Home Server",
+        "meta_title": "Product B vs Product C: Compact Server Pick",
         "td": VS_META_DESCRIPTION,
-        "url": "zimaboard-2-vs-zimablade",
+        "url": "product-b-vs-product-c",
         "template": VS_SPEC.template,
         "published": True,
         "related_products": [],
@@ -302,19 +302,19 @@ def test_vs_image_requires_lazy_and_async():
 
 
 def test_detect_one_two_and_three_products():
-    assert detect_zima_products("ZimaBoard 2 vs ZimaBlade") == [
-        "zimaboard-2",
-        "zimablade",
+    assert detect_zima_products("Product B vs Product C") == [
+        "product-b",
+        "product-c",
     ]
-    assert detect_zima_products("ZimaCube 2 deep dive") == ["zimacube-2"]
+    assert detect_zima_products("Product A deep dive") == ["product-a"]
     assert detect_zima_products(
-        "ZimaCube 2 vs ZimaBoard 2 vs ZimaBlade"
-    ) == ["zimacube-2", "zimaboard-2", "zimablade"]
+        "Product A vs Product B vs Product C"
+    ) == ["product-a", "product-b", "product-c"]
 
 
 def test_detect_products_falls_back_to_body():
-    assert detect_zima_products("A tiny server", "<p>Built on ZimaBlade.</p>") == [
-        "zimablade"
+    assert detect_zima_products("A tiny server", "<p>Built on Product C.</p>") == [
+        "product-c"
     ]
 
 
@@ -327,36 +327,36 @@ def test_no_product_detected_blocks_allocation():
 
 
 def test_allocation_rules():
-    assert resource_allocation(["zimaboard-2"]) == {"zimaboard-2": 3}
-    assert resource_allocation(["zimaboard-2", "zimablade"]) == {
-        "zimaboard-2": 2,
-        "zimablade": 1,
+    assert resource_allocation(["product-b"]) == {"product-b": 3}
+    assert resource_allocation(["product-b", "product-c"]) == {
+        "product-b": 2,
+        "product-c": 1,
     }
     assert resource_allocation(
-        ["zimacube-2", "zimaboard-2", "zimablade"]
-    ) == {"zimacube-2": 1, "zimaboard-2": 1, "zimablade": 1}
+        ["product-a", "product-b", "product-c"]
+    ) == {"product-a": 1, "product-b": 1, "product-c": 1}
 
 
 def test_choose_resources_returns_requested_counts():
     rng = random.Random(7)
-    youtube = choose_resources(["zimaboard-2", "zimablade"], "youtube", rng)
-    blog = choose_resources(["zimaboard-2", "zimablade"], "blog", rng)
+    youtube = choose_resources(["product-b", "product-c"], "youtube", rng)
+    blog = choose_resources(["product-b", "product-c"], "blog", rng)
 
     assert len(youtube) == 3
     assert len(blog) == 3
     # 2 + 1 的分配
-    assert sum(1 for item in youtube if item["product_key"] == "zimaboard-2") == 2
-    assert sum(1 for item in youtube if item["product_key"] == "zimablade") == 1
+    assert sum(1 for item in youtube if item["product_key"] == "product-b") == 2
+    assert sum(1 for item in youtube if item["product_key"] == "product-c") == 1
 
 
 def test_youtube_card_opens_new_tab_with_safe_rel():
     card = youtube_card(
         {
-            "title": "ZimaBoard 2 Review",
+            "title": "Product B Review",
             "url": "https://www.youtube.com/watch?v=abc",
             "video_id": "abc",
             "creator": "Someone",
-            "product_label": "ZimaBoard 2",
+            "product_label": "Product B",
         }
     )
 
@@ -374,7 +374,7 @@ def test_blog_card_stays_in_same_tab():
             "title": "A creator story",
             "url": f"https://{site.storefront_domain}/blogs/example-blog/x",
             "creator": "Someone",
-            "product_label": "ZimaBlade",
+            "product_label": "Product C",
         },
         "https://cdn.shopify.com/cover.png",
     )
@@ -385,7 +385,7 @@ def test_blog_card_stays_in_same_tab():
 
 async def test_inject_resources_replaces_block_and_keeps_one_marker_pair():
     html, note = await inject_resources(
-        "ZimaBoard 2 vs ZimaBlade",
+        "Product B vs Product C",
         vs_html(),
         fetch_covers=False,
         rng=random.Random(3),
@@ -402,7 +402,7 @@ async def test_inject_resources_replaces_block_and_keeps_one_marker_pair():
 async def test_injected_html_passes_validation():
     """注入后的 HTML 必须能通过全部 VS 校验（含 2~6 词锚文本与图片属性）。"""
     html, _ = await inject_resources(
-        "ZimaBoard 2 vs ZimaBlade",
+        "Product B vs Product C",
         vs_html(),
         fetch_covers=False,
         rng=random.Random(11),
@@ -416,7 +416,7 @@ async def test_injection_requires_exactly_one_marker_pair():
     html = vs_html().replace(RESOURCES_OPEN_MARKER, "")
     with pytest.raises(ResourceInjectionError, match="恰好包含一对"):
         await inject_resources(
-            "ZimaBoard 2 vs ZimaBlade", html, fetch_covers=False
+            "Product B vs Product C", html, fetch_covers=False
         )
 
 
@@ -426,7 +426,7 @@ async def test_cover_fetch_failure_surfaces():
 
     with pytest.raises(ResourceInjectionError, match="og:image"):
         await build_resources_html(
-            "ZimaBoard 2 vs ZimaBlade",
+            "Product B vs Product C",
             vs_html(),
             fetch_covers=True,
             rng=random.Random(1),
@@ -442,7 +442,7 @@ async def test_cover_fetcher_is_used_when_fetching():
         return "https://cdn.shopify.com/cover.png"
 
     html, _ = await build_resources_html(
-        "ZimaBoard 2 vs ZimaBlade",
+        "Product B vs Product C",
         vs_html(),
         fetch_covers=True,
         rng=random.Random(5),

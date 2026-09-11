@@ -132,14 +132,14 @@ def test_multiple_links_report_by_index():
 
 
 def test_is_first_party():
-    assert is_first_party("zimaspace.com", ("zimaspace.com",)) is True
-    assert is_first_party("www.zimaspace.com", ("zimaspace.com",)) is True
-    assert is_first_party("shop.zimaspace.com", ("zimaspace.com",)) is True
-    assert is_first_party("notzimaspace.com", ("zimaspace.com",)) is False
-    assert is_first_party("example.com", ("zimaspace.com",)) is False
+    assert is_first_party("example-store.test", ("example-store.test",)) is True
+    assert is_first_party("www.example-store.test", ("example-store.test",)) is True
+    assert is_first_party("shop.example-store.test", ("example-store.test",)) is True
+    assert is_first_party("notexample-store.test", ("example-store.test",)) is False
+    assert is_first_party("example.com", ("example-store.test",)) is False
 
 
 def test_is_internal_covers_shop_and_first_party():
-    assert is_internal("shop.zimaspace.com", SHOP, ("zimaspace.com",)) is True
-    assert is_internal("www.zimaspace.com", SHOP, ("zimaspace.com",)) is True
-    assert is_internal("example.com", SHOP, ("zimaspace.com",)) is False
+    assert is_internal("shop.example-store.test", SHOP, ("example-store.test",)) is True
+    assert is_internal("www.example-store.test", SHOP, ("example-store.test",)) is True
+    assert is_internal("example.com", SHOP, ("example-store.test",)) is False

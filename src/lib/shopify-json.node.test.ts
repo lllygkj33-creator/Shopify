@@ -715,7 +715,7 @@ function discordPage(overrides: Record<string, unknown> = {}) {
     title: 'ZimaCube 1 HDD Running Hot',
     meta_title: 'ZimaCube 1 HDD Temperature: Improve Cooling',
     td: DISCORD_META_DESCRIPTION,
-    url: '/pages/zimacube-1-hdd-temperature-cooling-airflow',
+    url: '/pages/examplecube-1-hdd-temperature-cooling-airflow',
     template: 'discord-page',
     published: true,
     discord_source: DISCORD_SOURCE,
@@ -846,8 +846,8 @@ function userStory(overrides: Record<string, unknown> = {}) {
   return JSON.stringify({
     title: 'How ExampleBuilder Built a 350 TB Array',
     meta_title: 'User Story: A 350 TB Array',
-    td: 'A user story about scaling a ZimaBoard 2 build.',
-    url: '/pages/001-example-builder-zimaboard2-350tb',
+    td: 'A user story about scaling a Product B build.',
+    url: '/pages/001-example-builder-350tb',
     template: 'user-story',
     html: USER_HTML,
     user_info: USER_INFO,
@@ -961,7 +961,7 @@ const VS_MARKERS = [
 ]
 
 const VS_META_DESCRIPTION =
-  'Compare ZimaBoard 2 and ZimaBlade for a small home server: expansion, storage options, noise, and which board fits a beginner build.'
+  'Compare Product B and Product C for a small home server: expansion, storage options, noise, and which board fits a beginner build.'
 
 function vsHtml(): string {
   const blocks = VS_MARKERS.map((name) =>
@@ -979,10 +979,10 @@ function vsHtml(): string {
 
 function vsPage(overrides: Record<string, unknown> = {}) {
   return JSON.stringify({
-    title: 'ZimaBoard 2 vs ZimaBlade for a Compact Home Server',
-    meta_title: 'ZimaBoard 2 vs ZimaBlade: Compact Server Pick',
+    title: 'Product B vs Product C for a Compact Home Server',
+    meta_title: 'Product B vs Product C: Compact Server Pick',
     td: VS_META_DESCRIPTION,
-    url: 'zimaboard-2-vs-zimablade',
+    url: 'product-b-vs-product-c',
     template: 'nas-a-vs-b',
     published: true,
     related_products: [],
