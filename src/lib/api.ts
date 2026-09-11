@@ -48,13 +48,22 @@ import type {
   PublishResult,
   SettingsUpdatePayload,
   TimelineBar,
-    ReconcileReport,
+  ReconcileReport,
   SyncStatus,
 } from '@/types/content'
 import { mockApi } from './mock-api'
 
-/** 演示模式：后端未就绪时默认开启，配 VITE_USE_MOCK=false 切到真实接口 */
-export const USE_MOCK = import.meta.env.VITE_USE_MOCK !== 'false'
+/**
+ * 演示数据模式。
+ *
+ * **默认关闭**：`pnpm dev` 直连真实后端。
+ *
+ * 为什么改掉原来的「默认开启」：演示数据是内置的假排期（10 条），
+ * 打开仪表盘会以为平台里已经有内容，而实际一条都没有 —— 排查半天才
+ * 发现是模式问题。真实的店铺连接是这个平台的默认状态，演示数据应该是
+ * 显式的选择（`pnpm dev:mock`）。
+ */
+export const USE_MOCK = import.meta.env.VITE_USE_MOCK === 'true'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE ?? 'http://127.0.0.1:8000'
 
@@ -193,7 +202,7 @@ export const templatesApi = {
           'nas-a-vs-b',
           'makerworld-page',
         ],
-        reason: '演示模式：未连接后端，展示内置清单',
+        reason: '演示模式：展示内置博客清单（VITE_USE_MOCK=true）',
       })
     }
     return get<TemplateList>('/api/theme/templates')

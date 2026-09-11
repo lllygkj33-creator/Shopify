@@ -4,9 +4,9 @@
  * 目的：用真实浏览器打开开发服务器，逐页确认「能渲染、无运行时报错」，
  * 并输出截图供人工/视觉核对。
  *
- * 使用：
- *   pnpm dev            # 另开一个终端
- *   node scripts/verify-ui.mjs [baseUrl]
+ * 使用（本脚本断言的是**内置演示数据**，必须跑在演示模式下）：
+ *   pnpm dev:mock --port 5177   # 另开一个终端
+ *   node scripts/verify-ui.mjs http://localhost:5177
  *
  * 之所以用 channel: 'chrome'：复用本机已安装的 Google Chrome，
  * 避免额外下载 Playwright 自带的 Chromium。

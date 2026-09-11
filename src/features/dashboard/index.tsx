@@ -112,15 +112,16 @@ export function Dashboard() {
           <Alert className='mb-4'>
             <AlertTitle>演示数据模式</AlertTitle>
             <AlertDescription>
-              当前未连接后端，界面展示的是内置演示数据。后端就绪后在
-              <code className='mx-1 rounded bg-muted px-1 py-0.5 text-xs'>
-                .env
-              </code>
-              设置{' '}
+              下面这些排期是<strong>内置的假数据</strong>，不是你的店铺内容。
+              想看真实数据：停掉当前服务，改用{' '}
               <code className='rounded bg-muted px-1 py-0.5 text-xs'>
-                VITE_USE_MOCK=false
+                pnpm dev
               </code>
-              即可切换到真实接口。
+              （连接真实后端），演示模式只在{' '}
+              <code className='rounded bg-muted px-1 py-0.5 text-xs'>
+                pnpm dev:mock
+              </code>{' '}
+              下开启。
             </AlertDescription>
           </Alert>
         )}
@@ -179,12 +180,27 @@ export function Dashboard() {
                   </Alert>
                 </div>
               ) : (
-                <Timeline
-                  bars={bars}
-                  scale={scale}
-                  timezone={timezone}
-                  onSelect={setSelected}
-                />
+                <>
+                  {/*
+                    空库提示。
+                    为什么必须有：新装的平台本地库是**空的**（只记平台自己发过的内容，
+                    不导入店铺历史），时间轴会是一片空网格。没有这句话的话，
+                    看起来像加载失败或连错了库。
+                  */}
+                  {bars.length === 0 && (
+                    <div className='mb-4 mx-6 rounded-md border border-dashed p-3 text-xs text-muted-foreground'>
+                      还没有任何排期内容。去左侧任一栏目页上传 JSON 文件并设置发布时间 ——
+                      发布后（或排期到点由 Shopify 上线）内容就会出现在这里。
+                      点色块可以改期或取消。
+                    </div>
+                  )}
+                  <Timeline
+                    bars={bars}
+                    scale={scale}
+                    timezone={timezone}
+                    onSelect={setSelected}
+                  />
+                </>
               )}
             </CardContent>
           </Card>

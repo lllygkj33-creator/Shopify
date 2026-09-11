@@ -11,7 +11,7 @@
  *  - 点「立即对账」后能拿到真实报告，而不是报错
  *
  * 用法：
- *   pnpm dev:real --port 5178
+ *   pnpm dev --port 5178   # 默认就是真实后端
  *   node scripts/verify-sync-panel.mjs http://localhost:5178
  */
 

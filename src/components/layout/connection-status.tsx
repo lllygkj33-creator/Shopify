@@ -75,7 +75,7 @@ export function ConnectionStatus() {
               variant='outline'
               className='w-full justify-center border-dashed text-[10px] font-normal text-muted-foreground'
             >
-              演示数据模式（未连接后端）
+              演示数据模式（内置数据，未连后端）
             </Badge>
           </div>
         )}

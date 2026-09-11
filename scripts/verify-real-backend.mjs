@@ -8,7 +8,7 @@
  *  - 栏目历史记录能读到后端那条记录
  *
  * 用法：
- *   pnpm dev:real --port 5178
+ *   pnpm dev --port 5178   # 默认就是真实后端
  *   node scripts/verify-real-backend.mjs http://localhost:5178
  */
 

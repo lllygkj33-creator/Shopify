@@ -17,16 +17,23 @@ ZimaSpace 的 **Shopify 内容托管发布平台**：本地选文件夹 → 上�
 
 ```bash
 pnpm install
-cp .env.example .env      # 默认 VITE_USE_MOCK=true，无需后端即可运行
-pnpm dev                  # http://localhost:5173
+pnpm dev        # http://localhost:5173 —— 直连真实后端
 ```
 
-前端有两种模式：
+**默认就是真实后端**。前端有两种模式：
 
 ```bash
-pnpm dev        # 演示模式：用内置演示数据，不需要后端
-pnpm dev:real   # 真实模式：读后端真实数据（.env.real，默认指向 127.0.0.1:8000）
+pnpm dev        # 真实模式（默认）：读后端数据，指向 127.0.0.1:8000
+pnpm dev:mock   # 演示模式：内置假数据，完全不请求后端（.env.mock）
+pnpm dev:real   # 真实模式的显式写法（等价于 pnpm dev，.env.real）
 ```
+
+> 为什么默认是真实而不是演示：演示模式内置 10 条假排期，如果默认开启，
+> 打开仪表盘会以为「平台里已经有内容」，而实际本地库是空的。
+> 真实的店铺连接才是这个平台的默认状态，演示数据应该是显式的选择。
+>
+> 新库是**空的时间轴**（只记平台自己发过的内容，不导入店铺历史）——
+> 去栏目页上传 JSON 并排期后才会出现内容。
 
 ### 后端（FastAPI）
 
@@ -40,13 +47,11 @@ SSL_CERT_FILE=/etc/ssl/cert.pem .venv/bin/pip install -r requirements.txt
 .venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
-跑后端测试（34 个用例，全部用 mock transport，不触网）：
+跑后端测试（282 个用例，全部用 mock transport，不触网）：
 
 ```bash
 cd backend && .venv/bin/python -m pytest
 ```
-
-前端切到真实后端：把 `.env` 里的 `VITE_USE_MOCK` 改成 `false`。
 
 其他命令：
 
@@ -55,7 +60,8 @@ pnpm assets:favicon  # 从官方 SVG 重新生成 favicon 的 PNG 回退版本
 pnpm build        # 类型检查 + 生产构建
 pnpm lint         # ESLint（含 React Compiler 规则）
 pnpm knip         # 未使用的文件 / 依赖 / 导出
-pnpm test:logic   # 纯逻辑单元测试（node 环境，35 个用例，无需浏览器）
+pnpm test         # 浏览器模式单元测试（122 个用例，复用本机 Chrome）
+pnpm test:logic   # 纯逻辑单元测试（node 环境，90 个用例，无需浏览器）
 pnpm verify:ui http://localhost:5173   # 真实浏览器冒烟检查 + 截图
 ```
 
