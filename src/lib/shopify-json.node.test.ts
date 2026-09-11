@@ -170,21 +170,23 @@ describe('parseJsonContent —— 页面（单对象 schema）', () => {
     expect(candidate.channelId).toBe('vs')
   })
 
-  it('裸 handle 会补全为 /pages/ 路径并提示', () => {
+  it('裸 handle 会被补全为 /pages/ 路径，且不产生提示', () => {
+    // 真实文件普遍用裸 handle（脚本也接受两种写法），所以这里必须是静默的
     const text = JSON.stringify({
       title: 'X',
       url: 'my-page',
       template: 'user-story',
-      html: '<div/>',
-      images: ['a.png'],
+      html: '<div><h2>h</h2></div>',
+      'meta title': 'MT',
+      'meta description': 'MD',
     })
 
     const [candidate] = parseJsonContent(text, 'f.json').candidates
 
     expect(candidate.handle).toBe('/pages/my-page')
     expect(
-      candidate.issues.some((issue) => issue.message.includes('已按裸 handle 推断'))
-    ).toBe(true)
+      candidate.issues.some((issue) => issue.message.includes('裸 handle'))
+    ).toBe(false)
   })
 
   it('非 /pages/ 的带斜杠路径只补前导斜杠并提示', () => {

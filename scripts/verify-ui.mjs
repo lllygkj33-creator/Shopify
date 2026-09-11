@@ -213,13 +213,13 @@ try {
     console.log(`  · «${row.title}» | 目标：${row.target} | 校验：${row.check}`)
   }
   console.log(`发布按钮：${flowFacts.publishButton}`)
-  if (flowFacts.publishButton !== '发布 7 篇') {
-    problems.push(`发布按钮应统计 7 篇可发布内容，实际：${flowFacts.publishButton}`)
+  if (flowFacts.publishButton !== '发布 8 篇') {
+    problems.push(`发布按钮应统计 8 篇可发布内容，实际：${flowFacts.publishButton}`)
   }
 
   // 断言：2 篇博客 + 1 个页面 = 3 行；且第一行正文无 class 时应回落到栏目默认博客
-  if (flowFacts.rowCount !== 8) {
-    problems.push(`上传 7 个 JSON 应解析出 8 条内容，实际 ${flowFacts.rowCount} 条`)
+  if (flowFacts.rowCount !== 9) {
+    problems.push(`上传 8 个 JSON 应解析出 9 条内容，实际 ${flowFacts.rowCount} 条`)
   }
   // 真实样本：正文带 class="zima-buying-guide-article"，
   // 即使从 tech-ai-hub 栏目页上传，也应靠 class 落到 Buying Guide

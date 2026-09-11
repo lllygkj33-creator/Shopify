@@ -721,14 +721,10 @@ function normalizePageCandidate(
     })
   }
 
-  // 只填了裸 handle 时给出提示（路径会被推断成 /pages/<handle>）
-  if (rawUrl && !rawUrl.startsWith('/') && !/^https?:\/\//i.test(rawUrl)) {
-    issues.push({
-      level: 'warning',
-      field: 'url',
-      message: `url 不是完整路径，已按裸 handle 推断为「${handle}」`,
-    })
-  }
+  // 注意：这里**刻意不对裸 handle 报警**。
+  // 参考脚本的 Expected JSON（VS / MakerWorld）以及真实的社区文件都用裸 handle，
+  // 脚本的 normalize_handle 两种写法都接受。给常态加提示只会制造噪音，
+  // 让人慢慢无视整个校验列。
 
   // ---- 模板必须与栏目一致（脚本是硬错误） ----
   if (!template) {
