@@ -62,6 +62,14 @@ RESOURCES_CLOSE_MARKER = "<!-- /COMPARE:RESOURCES -->"
 # 否则结构校验会把它当成「未替换的占位串」而误报。
 PENDING_COVER = str(site.get("vs.pendingCover", ""))
 
+# 资源卡片的 class 属于**主题**（部署信息），从 VS 栏目的规格取
+MEDIA_CARD_CLASS = str(
+    (site.page_spec("vs") or {}).get("mediaCardClass") or "example-media-item"
+)
+# 子类名（__media-visual 之类）与前缀同源
+MEDIA_PREFIX = MEDIA_CARD_CLASS.split("__")[0]
+
+
 _rng = random.SystemRandom()
 
 
@@ -163,19 +171,19 @@ def youtube_card(item: dict[str, str]) -> str:
     )
 
     return f"""<a
-  class="zima-compare__media-item"
+  class="{MEDIA_CARD_CLASS}"
   href="{html_lib.escape(item['url'], quote=True)}"
   title="{html_lib.escape(title, quote=True)}"
   target="_blank"
   rel="nofollow noopener noreferrer"
 >
-  <span class="zima-compare__media-visual">
+  <span class="{MEDIA_PREFIX}__media-visual">
     <img src="{html_lib.escape(thumbnail, quote=True)}" alt="{html_lib.escape(alt_text, quote=True)}" title="{html_lib.escape(title, quote=True)}" loading="lazy" decoding="async">
-    <span class="zima-compare__play" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 7l8 5-8 5V7z" fill="currentColor"></path></svg></span>
+    <span class="{MEDIA_PREFIX}__play" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 7l8 5-8 5V7z" fill="currentColor"></path></svg></span>
   </span>
-  <span class="zima-compare__media-type">YouTube</span>
-  <strong class="zima-compare__media-title">{html_lib.escape(title)}</strong>
-  <span class="zima-compare__media-meta">{html_lib.escape(creator)} · {html_lib.escape(product_label)}</span>
+  <span class="{MEDIA_PREFIX}__media-type">YouTube</span>
+  <strong class="{MEDIA_PREFIX}__media-title">{html_lib.escape(title)}</strong>
+  <span class="{MEDIA_PREFIX}__media-meta">{html_lib.escape(creator)} · {html_lib.escape(product_label)}</span>
 </a>"""
 
 
@@ -189,16 +197,16 @@ def blog_card(item: dict[str, str], cover_url: str) -> str:
     )
 
     return f"""<a
-  class="zima-compare__media-item"
+  class="{MEDIA_PREFIX}__media-item"
   href="{html_lib.escape(item['url'], quote=True)}"
   title="{html_lib.escape(title, quote=True)}"
 >
-  <span class="zima-compare__media-visual">
+  <span class="{MEDIA_PREFIX}__media-visual">
     <img src="{html_lib.escape(cover_url, quote=True)}" alt="{html_lib.escape(alt_text, quote=True)}" title="{html_lib.escape(title, quote=True)}" loading="lazy" decoding="async">
   </span>
-  <span class="zima-compare__media-type">Creator Story</span>
-  <strong class="zima-compare__media-title">{html_lib.escape(title)}</strong>
-  <span class="zima-compare__media-meta">Based on {html_lib.escape(creator)} · {html_lib.escape(product_label)}</span>
+  <span class="{MEDIA_PREFIX}__media-type">Creator Story</span>
+  <strong class="{MEDIA_PREFIX}__media-title">{html_lib.escape(title)}</strong>
+  <span class="{MEDIA_PREFIX}__media-meta">Based on {html_lib.escape(creator)} · {html_lib.escape(product_label)}</span>
 </a>"""
 
 
@@ -302,16 +310,16 @@ async def build_resources_html(
         blog_cards.append(blog_card(item, cover))
     blog_html = "\n".join(blog_cards)
 
-    resources_html = f"""<div class="zima-compare__resource-group">
+    resources_html = f"""<div class="{MEDIA_PREFIX}__resource-group">
   <h3>Watch Creator Videos</h3>
-  <div class="zima-compare__media-grid">
+  <div class="{MEDIA_PREFIX}__media-grid">
 {youtube_html}
   </div>
 </div>
 
-<div class="zima-compare__resource-group">
+<div class="{MEDIA_PREFIX}__resource-group">
   <h3>Related Zima Articles</h3>
-  <div class="zima-compare__media-grid">
+  <div class="{MEDIA_PREFIX}__media-grid">
 {blog_html}
   </div>
 </div>"""

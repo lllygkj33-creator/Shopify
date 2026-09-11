@@ -29,6 +29,7 @@ from app.shopify.channel_map import (
     resolve_article_channel,
     resolve_page_channel,
 )
+from app.site_config import site
 from app.shopify.client import ShopifyError
 from app.shopify.schedule_pull import REMOTE_SOURCE_TAG, SchedulePuller
 from app.storage import ContentStore
@@ -99,12 +100,14 @@ def article(
 def page(
     gid: str,
     *,
-    template: str | None = "community_post",
+    template: str | None = None,
     handle: str = "some-page",
     title: str = "Some Page",
     published_at: str | None = FUTURE,
     is_published: bool = False,
 ) -> dict:
+    if template is None:
+        template = str(site.page_spec("community-post")["template"])
     return {
         "id": f"gid://shopify/Page/{gid}",
         "title": title,
@@ -190,8 +193,6 @@ async def test_items_outside_platform_channels_are_reported(store):
     assert report.scheduled_found == 3
     assert report.skipped["博客 zima-campaign-hub 不在平台栏目内"] == 2
     # 排除原因里的栏目名取自站点配置的 hidden 栏目（不再写死 "APP"）
-    from app.site_config import site
-
     hidden_names = [
         str(channel["name"]) for channel in site.channels if channel.get("hidden")
     ]
@@ -291,12 +292,17 @@ def test_channel_mismatch_error_is_none_when_consistent_or_unknown():
 
 
 def test_blog_handles_map_to_platform_channels():
-    assert resolve_article_channel("tech-ai-hub").channel_id == "tech-ai-hub"
-    assert (
-        resolve_article_channel("product-comparisons").channel_id
-        == "product-comparison"
-    )
-    assert not resolve_article_channel("zima-campaign-hub").resolved
+    """博客 handle → 栏目，用**配置里真实的 handle**。
+
+    写死 handle 会让测试依赖某一家店铺 —— 一份干净的克隆就红。
+    """
+    for channel in site.channels:
+        handle = channel.get("blogHandle")
+        if handle:
+            assert resolve_article_channel(str(handle)).channel_id == channel["id"]
+
+    # 不在配置里的博客认不出来，且要给出原因
+    assert not resolve_article_channel("not-a-configured-blog").resolved
     assert not resolve_article_channel(None).resolved
 
 
@@ -306,9 +312,14 @@ def test_page_templates_map_to_platform_channels():
     community-post 栏目的模板后缀是下划线的 `community_post`（栏目 id 才是连字符），
     实测拉到了 156 条这个后缀的排期页面。
     """
-    assert resolve_page_channel("community_post").channel_id == "community-post"
-    assert resolve_page_channel("discord-page").channel_id == "discord"
-    assert resolve_page_channel("nas-a-vs-b").channel_id == "vs"
+    resolved_any = False
+    for channel in site.channels:
+        template = (channel.get("page") or {}).get("template")
+        if template:
+            assert resolve_page_channel(str(template)).channel_id == channel["id"]
+            resolved_any = True
+    assert resolved_any, "配置里至少应有一个带模板的页面栏目"
+
     assert not resolve_page_channel(None).resolved
     assert "默认模板" in resolve_page_channel(None).reason
 

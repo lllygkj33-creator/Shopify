@@ -60,49 +60,8 @@ DEFAULT_REVIEWERS_FALLBACK = site.default_reviewers
 RELATED_PRODUCT_TITLES_FALLBACK = site.related_products
 
 # Shopify 后台 Content > Files 中允许作为文章封面的图片名称（不含扩展名，匹配不区分大小写）。
-COVER_IMAGE_NAMES: list[str] = [
-    *[f"images_{index}" for index in range(1, 13)],
-    "1786005085488",
-    "98ceaf42-2dc3-45e5-a01e-bcef613dcc90",
-    "cc3e79de-2c61-4451-913b-e915524c2e74",
-    "4813cb54-61f1-4be4-ba33-79b9692de65e",
-    "1280X1280_1_647efcf3-401c-4424-8356-301f3b386fdd",
-    "1280X1280_bbb23d1b-a833-4f2d-9ec1-b54d6f50778d",
-    "zimaboard-2-prototype-v0-echjxmct8txe1",
-    "17851231399810",
-    "17851217076922",
-    "my-whole-homelab-proxmox-cluster-zimaos-in-a-3d-printed-v0-ayzjkh3iuf8h1",
-    "my-homelab-journey-from-my-moms-old-work-laptop-to-a-v0-4rw6mph7zi8h1",
-    "finally-got-my-zimaos-setup-dialed-in-after-3-months-of-v0-ophiew2j6o7h1",
-    "running-zimaos-on-a-dell-optiplex-3040-mt-v0-v0v48effpw3h1",
-    "zimaboard2-classroom-vm-server-prototype-for-a-technical-v0-s5u4iwogfo7h1",
-    "ycjii0dbsa8h1",
-    "my-first-self-hosting-experience-v0-8t7ndo99mp8h1",
-    "self-hosting-immich-for-me-and-my-familys-photos-v0-e6cghhz8qu4h1",
-    "zima-blade-nas-v0-exlzleujxf8h1",
-    "my-first-self-hosting-experience-v0-nriegqz7mp8h1",
-    "zimaos-was-the-gateway-drug-now-ive-got-a-zimaboard-2-1664-v0-u36kh59gat2h1",
-    "zimaos-was-the-gateway-drug-now-ive-got-a-zimaboard-2-1664-v0-vzz2o69gat2h1",
-    "Your_AI_deserves_a_home_M_1",
-    "Frame_3467247_99ebb02e-9029-4ab3-815f-bd86e2184c6d",
-    "Frame_3467245_1de55521-ad22-4f07-b432-3368749e47fb",
-    "Frame_3467296",
-    "Frame_3467298",
-    "Frame_3467297",
-    "Frame_3467244",
-    "Frame_3467245",
-    "Frame_1413-3_9eb25afc-afd1-4864-8d11-8811cd78f045",
-    "Frame_1413_adcaf12b-72c7-41c3-9629-2eafef713ecb",
-    "Frame_1413_27e912d4-7dd3-4547-8d6a-f497bae92f01",
-    "Frame_8_5fdb03e0-1f94-4f42-b5c6-30b5d9353273",
-    "34.4",
-    "33.1",
-    "Giveaway-Banner-mb",
-    "Giveaway-Rewards",
-    "Frame_3_4b8fa64e-3417-4fcb-b4e1-77111039342c",
-    "32.1",
-    "Frame_23-4",
-]
+# 可作为文章封面的图片名（Shopify Content > Files），**部署内容**，来自站点配置
+COVER_IMAGE_NAMES: list[str] = [str(x) for x in (site.get("coverImageNames") or [])]
 
 COVER_IMAGE_QUERY_LIMIT = 250
 COVER_IMAGE_MAX_PAGES = 20

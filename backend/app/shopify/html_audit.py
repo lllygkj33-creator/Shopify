@@ -29,7 +29,7 @@ from typing import Iterable
 from ..site_config import site
 
 # 自家域名（豁免 nofollow，且不强制新标签页）
-DEFAULT_FIRST_PARTY_SUFFIXES = ("zimaspace.com",)
+DEFAULT_FIRST_PARTY_SUFFIXES = site.first_party_suffixes
 
 
 class _AnchorParser(HTMLParser):

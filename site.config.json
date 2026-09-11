@@ -45,53 +45,53 @@
     },
     {
       "id": "tech-ai-hub",
-      "name": "Tech & AI Hub",
-      "defaultFolder": "tech-ai-hub",
+      "name": "Example Blog A",
+      "defaultFolder": "blog-a",
       "contentType": "blog_article",
       "color": "#6366f1",
-      "blogName": "Tech & AI HUB",
-      "blogHandle": "tech-ai-hub",
-      "htmlClass": "zima-tech-ai-hub-article"
+      "blogName": "Example Blog A",
+      "blogHandle": "example-blog-a",
+      "htmlClass": "example-blog-a-article"
     },
     {
       "id": "support-tips",
-      "name": "Support & Tips",
-      "defaultFolder": "support-tips",
+      "name": "Example Blog B",
+      "defaultFolder": "blog-b",
       "contentType": "blog_article",
       "color": "#0ea5e9",
-      "blogName": "Support & Tips",
-      "blogHandle": "support-tips",
-      "htmlClass": "zima-support-tips-article"
+      "blogName": "Example Blog B",
+      "blogHandle": "example-blog-b",
+      "htmlClass": "example-blog-b-article"
     },
     {
       "id": "nas-server-setup",
-      "name": "NAS Server Setup",
-      "defaultFolder": "nas-server-setup",
+      "name": "Example Blog C",
+      "defaultFolder": "blog-c",
       "contentType": "blog_article",
       "color": "#14b8a6",
-      "blogName": "NAS & Server Setup",
-      "blogHandle": "nas-server-setup",
-      "htmlClass": "zima-nas-server-setup-article"
+      "blogName": "Example Blog C",
+      "blogHandle": "example-blog-c",
+      "htmlClass": "example-blog-c-article"
     },
     {
       "id": "buying-guide",
-      "name": "Buying Guides",
-      "defaultFolder": "buying-guide",
+      "name": "Example Blog D",
+      "defaultFolder": "blog-d",
       "contentType": "blog_article",
       "color": "#f59e0b",
-      "blogName": "Buying Guide",
-      "blogHandle": "buying-guide",
-      "htmlClass": "zima-buying-guide-article"
+      "blogName": "Example Blog D",
+      "blogHandle": "example-blog-d",
+      "htmlClass": "example-blog-d-article"
     },
     {
       "id": "product-comparison",
-      "name": "Product Comparisons",
-      "defaultFolder": "product-comparison",
+      "name": "Example Blog E",
+      "defaultFolder": "blog-e",
       "contentType": "blog_article",
       "color": "#ec4899",
-      "blogName": "Product Comparisons",
-      "blogHandle": "product-comparisons",
-      "htmlClass": "zima-product-comparisons-article"
+      "blogName": "Example Blog E",
+      "blogHandle": "example-blog-e",
+      "htmlClass": "example-blog-e-article"
     },
     {
       "id": "community-post",
@@ -100,7 +100,7 @@
       "defaultFolder": "Com",
       "contentType": "page",
       "color": "#8b5cf6",
-      "template": "community_post",
+      "template": "example-template-1",
       "page": {
         "enforceLinkRules": true,
         "h2Min": 1,
@@ -116,7 +116,7 @@
           "author_avatar_url",
           "author_profile_url"
         ],
-        "sourceKey": "community_source",
+        "sourceKey": "example_source_community_post",
         "sourceRequiredNonEmpty": [
           "title",
           "url",
@@ -129,7 +129,7 @@
           "excerpt",
           "author_name"
         ],
-        "template": "community_post",
+        "template": "example-template-1",
         "verified": true
       }
     },
@@ -140,7 +140,7 @@
       "defaultFolder": "Discord",
       "contentType": "page",
       "color": "#5865f2",
-      "template": "discord-page",
+      "template": "example-template-2",
       "page": {
         "enforceLinkRules": true,
         "h2Min": 4,
@@ -165,7 +165,7 @@
           "starter_avatar_url",
           "invite_url"
         ],
-        "sourceKey": "discord_source",
+        "sourceKey": "example_source_discord",
         "sourceRequiredNonEmpty": [
           "title",
           "url",
@@ -185,7 +185,7 @@
         "stripHashPrefix": [
           "channel_name"
         ],
-        "template": "discord-page",
+        "template": "example-template-2",
         "verified": true
       }
     },
@@ -196,11 +196,11 @@
       "defaultFolder": "User",
       "contentType": "page",
       "color": "#22c55e",
-      "template": "user-story",
+      "template": "example-template-3",
       "page": {
         "bodyMustContain": [
-          "A Note from Zima",
-          "The Story Is Still Being Written"
+          "Example fixed sentence 1",
+          "Example fixed sentence 2"
         ],
         "enforceLinkRules": true,
         "h2Min": 4,
@@ -214,7 +214,7 @@
           "avatar_url",
           "profile_url"
         ],
-        "sourceKey": "user_info",
+        "sourceKey": "example_source_user_story",
         "sourceRequiredNonEmpty": [
           "name",
           "handle",
@@ -225,7 +225,7 @@
           "handle",
           "profile_url"
         ],
-        "template": "user-story",
+        "template": "example-template-3",
         "verified": true
       }
     },
@@ -236,7 +236,7 @@
       "defaultFolder": "VS",
       "contentType": "page",
       "color": "#ef4444",
-      "template": "nas-a-vs-b",
+      "template": "example-template-4",
       "page": {
         "anchorWordMax": 6,
         "anchorWordMin": 2,
@@ -264,14 +264,14 @@
           "Replace with"
         ],
         "h2Min": 0,
-        "mediaCardClass": "zima-compare__media-item",
+        "mediaCardClass": "example-media-item",
         "metaDescriptionMax": 170,
         "metaDescriptionMin": 120,
         "metaTitleMax": 65,
         "requireDecodingAsync": true,
         "requireEmptyRelatedProducts": true,
         "requireLazyLoading": true,
-        "requireMetaAttribute": "data-zima-compare-meta",
+        "requireMetaAttribute": "data-example-meta",
         "requirePublishedTrue": true,
         "requiredMarkerPairs": [
           "OVERVIEW",
@@ -284,7 +284,7 @@
           "METHODOLOGY"
         ],
         "sourceKey": "",
-        "template": "nas-a-vs-b",
+        "template": "example-template-4",
         "verified": true
       }
     },
@@ -294,7 +294,7 @@
       "defaultFolder": "Maker",
       "contentType": "page",
       "color": "#06b6d4",
-      "template": "makerworld-page",
+      "template": "example-template-5",
       "page": {
         "enforceAnchorRules": true,
         "extraMetafields": [
@@ -337,7 +337,7 @@
           "creator_avatar_url",
           "creator_profile_url"
         ],
-        "sourceKey": "maker_source",
+        "sourceKey": "example_source_makerworld",
         "sourcePathContains": "/models/",
         "sourceRequiredNonEmpty": [
           "title",
@@ -354,7 +354,7 @@
           "platform"
         ],
         "summaryMin": 80,
-        "template": "makerworld-page",
+        "template": "example-template-5",
         "verified": true
       }
     },
@@ -364,7 +364,7 @@
       "defaultFolder": "Model",
       "contentType": "page",
       "color": "#a855f7",
-      "template": "local-ai-model-hardware",
+      "template": "example-template-6",
       "hidden": true
     },
     {
@@ -373,7 +373,7 @@
       "defaultFolder": "APP",
       "contentType": "page",
       "color": "#84cc16",
-      "template": "app-hardware-requirements",
+      "template": "example-template-7",
       "hidden": true
     }
   ],
@@ -406,5 +406,10 @@
       }
     },
     "pendingCover": "https://${storefront.domain}/cdn/cover-image-pending.png"
-  }
+  },
+  "coverImageNames": [
+    "example-cover-1",
+    "example-cover-2",
+    "example-cover-3"
+  ]
 }
