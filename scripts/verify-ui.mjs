@@ -144,10 +144,14 @@ try {
   if (facts.chipCount === 0) {
     problems.push('时间轴上没有任何色块，排期数据可能没渲染出来')
   }
-  if (facts.navLabels.length !== 12) {
+  if (facts.navLabels.length !== 13) {
     problems.push(
-      `侧边栏应有 12 项（仪表盘 + 10 栏目 + 全局设置），实际 ${facts.navLabels.length} 项`
+      `侧边栏应有 13 项（仪表盘 + 11 栏目 + 全局设置），实际 ${facts.navLabels.length} 项`
     )
+  }
+  // Custom 文章应在内容栏目组的最上面
+  if (facts.navLabels[1] !== 'Custom 文章') {
+    problems.push(`Custom 文章应排在仪表盘之后第一位，实际第 2 项是「${facts.navLabels[1]}」`)
   }
 
   // ---------- 交互：点开色块 → 详情弹窗 ----------
@@ -213,13 +217,13 @@ try {
     console.log(`  · «${row.title}» | 目标：${row.target} | 校验：${row.check}`)
   }
   console.log(`发布按钮：${flowFacts.publishButton}`)
-  if (flowFacts.publishButton !== '发布 8 篇') {
-    problems.push(`发布按钮应统计 8 篇可发布内容，实际：${flowFacts.publishButton}`)
+  if (flowFacts.publishButton !== '发布 9 篇') {
+    problems.push(`发布按钮应统计 9 篇可发布内容，实际：${flowFacts.publishButton}`)
   }
 
   // 断言：2 篇博客 + 1 个页面 = 3 行；且第一行正文无 class 时应回落到栏目默认博客
-  if (flowFacts.rowCount !== 9) {
-    problems.push(`上传 8 个 JSON 应解析出 9 条内容，实际 ${flowFacts.rowCount} 条`)
+  if (flowFacts.rowCount !== 10) {
+    problems.push(`上传 9 个 JSON 应解析出 10 条内容，实际 ${flowFacts.rowCount} 条`)
   }
   // 真实样本：正文带 class="zima-buying-guide-article"，
   // 即使从 tech-ai-hub 栏目页上传，也应靠 class 落到 Buying Guide
@@ -260,6 +264,7 @@ try {
     ['makerworld-page', 'MakerWorld 页面'],
     ['user-story', '用户故事'],
     ['nas-a-vs-b', 'VS 对比页'],
+    ['custom-articles-template-v1', 'Custom 文章'],
   ]) {
     const row = flowFacts.rows.find((r) => r.target.includes(template))
     if (!row) {

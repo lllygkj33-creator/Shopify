@@ -166,6 +166,12 @@ export type ParsedCandidate = {
   source?: Record<string, unknown>
 
   /**
+   * 来源对象实际使用的 metafield 键名。
+   * 固定栏目来自栏目规格；Custom 文章由 JSON 的 `*_source` 决定。
+   */
+  sourceKey?: string
+
+  /**
    * 可选反链配置（用户故事）：页面发布成功后，往一篇已有博客文章追加
    * 幂等的上下文反链。后端会按 marker 去重，重复运行不会追加两次。
    */

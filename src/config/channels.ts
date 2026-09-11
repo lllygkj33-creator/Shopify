@@ -77,8 +77,13 @@ export type Channel = {
  * 看到问题，而不是点了「发布 N 篇」才逐条失败。
  */
 export type PageSpec = {
-  /** 要求的 templateSuffix，与 JSON 不一致即报错 */
+  /** 要求的 templateSuffix，与 JSON 不一致即报错（allowAnyTemplate 时忽略） */
   template: string
+  /** 模板由 JSON 自由指定，不做白名单校验（Custom 文章用） */
+  allowAnyTemplate?: boolean
+  /** 来源 metafield 的自动识别后缀（如 `_source`）：JSON 里任一以它结尾的
+   *  顶层对象都会被写成 custom.<key>，键名原样使用（Custom 文章用） */
+  sourceKeySuffix?: string
   /** 来源 metafield 的 key（namespace = custom） */
   sourceKey: string
   /** 来源对象里必须存在的字段；为空表示规格尚未核对，不做强校验 */
@@ -134,6 +139,30 @@ export type PageSpec = {
 
 /** 10 个内容栏目，顺序即菜单顺序（§3.2） */
 export const CHANNELS: Channel[] = [
+  {
+    // 通用页面出口：没有参考脚本，是平台新增的。
+    // 模板名由 JSON 自己指定，所以不套用任何栏目专属规则
+    // （H2 数量、必需文案、强制标记对都与具体模板强相关）。
+    id: 'custom',
+    name: 'Custom Articles',
+    nameZh: 'Custom 文章',
+    defaultFolder: 'Custom',
+    contentType: 'page',
+    color: '#64748b',
+    template: '',
+    pageSpec: {
+      template: '',
+      allowAnyTemplate: true,
+      // 来源键不固定：JSON 里任一 *_source 对象都会成为 custom.<key>
+      sourceKey: '',
+      sourceKeySuffix: '_source',
+      // 模板任意 → 不要求 H2 数量
+      h2Min: 0,
+      // 通用的正文/外链规则照旧生效
+      enforceLinkRules: true,
+      verified: true,
+    },
+  },
   {
     id: 'tech-ai-hub',
     name: 'Tech & AI Hub',

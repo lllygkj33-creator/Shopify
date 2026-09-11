@@ -1102,3 +1102,100 @@ describe('上传阶段校验 —— 外链规则', () => {
     )
   })
 })
+
+// ---------------------------------------------------------------------------
+// Custom 文章：模板由 JSON 自由指定，来源对象可选
+// ---------------------------------------------------------------------------
+
+function customPage(overrides: Record<string, unknown> = {}) {
+  return JSON.stringify({
+    title: 'Custom Articles Example Page',
+    meta_title: 'Custom Articles Example Page',
+    td: 'A custom page published with a freely chosen Liquid template for the Custom channel.',
+    url: '/pages/custom-articles-example',
+    template: 'custom-articles-template-v1',
+    html: '<div><h2>Any template</h2><p>Body.</p></div>',
+    ...overrides,
+  })
+}
+
+describe('上传阶段校验 —— Custom 文章（模板自由）', () => {
+  it('接受任意模板名', () => {
+    const [candidate] = parseJsonContent(
+      customPage({ template: 'brand-new-template-v9' }),
+      'Custom/a.json'
+    ).candidates
+
+    expect(candidate.channelId).toBe('custom')
+    expect(candidate.template).toBe('brand-new-template-v9')
+    expect(errorsOf(candidate)).toEqual([])
+  })
+
+  it('不要求 H2（模板任意的栏目不能套用栏目的 H2 规则）', () => {
+    const [candidate] = parseJsonContent(
+      customPage({ html: '<div><p>No headings at all.</p></div>' }),
+      'Custom/a.json'
+    ).candidates
+
+    expect(candidate.publishable).toBe(true)
+    expect(errorsOf(candidate)).toEqual([])
+  })
+
+  it('必须提供 template', () => {
+    const [candidate] = parseJsonContent(
+      customPage({ template: '' }),
+      'Custom/a.json'
+    ).candidates
+
+    expect(errorsOf(candidate)).toContainEqual(
+      expect.stringContaining('模板由 JSON 指定')
+    )
+  })
+
+  it('自动识别 *_source 作为来源 metafield 键', () => {
+    const [candidate] = parseJsonContent(
+      customPage({ my_thing_source: { a: 1 } }),
+      'Custom/a.json'
+    ).candidates
+
+    expect(candidate.sourceKey).toBe('my_thing_source')
+    expect(candidate.source).toEqual({ a: 1 })
+    expect(errorsOf(candidate)).toEqual([])
+  })
+
+  it('来源是可选的：没有也不报错、不提示', () => {
+    const [candidate] = parseJsonContent(customPage(), 'Custom/a.json').candidates
+
+    expect(candidate.sourceKey).toBe('')
+    expect(candidate.issues).toEqual([])
+  })
+
+  it('通用规则仍然生效：禁 h1、外链安全标记', () => {
+    const [candidate] = parseJsonContent(
+      customPage({
+        html: '<div><h1>Bad</h1><a href="https://example.com/x" title="t">link text</a></div>',
+      }),
+      'Custom/a.json'
+    ).candidates
+
+    const errors = errorsOf(candidate)
+    expect(errors).toContainEqual(expect.stringContaining('<h1>'))
+    expect(errors).toContainEqual(expect.stringContaining('target="_blank"'))
+  })
+
+  it('不会抢走固定栏目的模板匹配', () => {
+    // 一个 community_post 的 JSON 即使从 Custom 栏目页上传，也应按模板落到社区栏目
+    const raw = JSON.stringify({
+      title: 'C',
+      'meta title': 'MT',
+      'meta description': 'MD',
+      url: '/pages/c',
+      template: 'community_post',
+      html: '<div><h2>h</h2></div>',
+      community_source: COMMUNITY_SOURCE,
+    })
+    const [candidate] = parseJsonContent(raw, 'Custom/f.json', 'custom').candidates
+
+    expect(candidate.channelId).toBe('community-post')
+  })
+})

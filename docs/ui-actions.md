@@ -129,20 +129,20 @@ F1「返回上一页」、F2「回到首页」—— 纯前端。
 
 按栏目差异的部分（对照各自脚本）：
 
-| 规则 | 社区 `community_post` | Discord `discord-page` | MakerWorld `makerworld-page` | 用户故事 `user-story` | VS `nas-a-vs-b` |
-|---|---|---|---|---|---|
-| 最少 `<h2>` 数 | **1** | **4** | **4** | **4** | **禁止 `<h2>`**（由 Liquid 模板输出） |
+| 规则 | 社区 `community_post` | Discord `discord-page` | MakerWorld `makerworld-page` | 用户故事 `user-story` | VS `nas-a-vs-b` | **Custom（模板自由）** |
+|---|---|---|---|---|---|---|
+| 最少 `<h2>` 数 | **1** | **4** | **4** | **4** | **禁止 `<h2>`**（由 Liquid 模板输出） | **不要求** |
 | `meta_title` 上限 | 无限制 | **≤ 65** | **≤ 65** | 无限制 | **≤ 65** |
 | `meta description` | 无限制 | **120 ~ 170** | **120 ~ 170** | 无限制 | **120 ~ 170** |
 | `summary` 下限 | 无 | 无 | **≥ 80** | 无 | 无 |
-| 来源 metafield | `custom.community_source` | `custom.discord_source` | `custom.maker_source` | **`custom.user_info`** | **无**（只有 SEO 两个） |
+| 来源 metafield | `custom.community_source` | `custom.discord_source` | `custom.maker_source` | **`custom.user_info`** | **无**（只有 SEO 两个） | **可选**：JSON 里任一 `*_source` 对象 |
 | 额外 metafield | — | — | **`custom.maker_summary`**（multi_line_text_field） | — | — |
 | 来源必需字段 | `title` `url` `excerpt` `author_name` `author_avatar_url` `author_profile_url` | `title` `url` `excerpt` `starter_name` `starter_avatar_url` `channel_name` `invite_url` | `title` `url` `excerpt` `creator_name` `creator_avatar_url` `creator_profile_url` `platform` `model_id` `license` |
 | 来源 url 校验 | 前缀 `community.zimaspace.com/t/` | 正则 Discord 消息链接 | **host 必须 makerworld.com 且路径含 `/models/`** |
 | 其他来源校验 | `author_profile_url` 前缀 `/u/` | `channel_name` 剥掉 `#` | `platform` 必须 `MakerWorld`、`model_id` 纯数字 |
 | 图片规则 | `alt` + `title` | 同左 | 再加 **`alt` 长度 50~100**、**必须 `loading="lazy"`** |
 | 链接规则 | `title` | 同左 | 再加：禁止 anchor 文本（`docs`/`see…guide`/`click here`…）、内链不得 `target="_blank"`、外链必须 `_blank`+`noopener`+`noreferrer`、第三方必须 `nofollow` | 同左，**且内联锚文本必须 2~6 个英文单词**（媒体卡片豁免） |
-| 正文要求 | — | — | **必须引用原始模型页 URL** | **必须含「A Note from Zima」与「The Story Is Still Being Written」** | **8 对 COMPARE 标记各恰好一次 + `data-zima-compare-meta` + 禁占位串 + `published` 必须 true + `related_products` 必须为空** |
+| 正文要求 | — | — | **必须引用原始模型页 URL** | **必须含「A Note from Zima」与「The Story Is Still Being Written」** | **8 对 COMPARE 标记各恰好一次 + `data-zima-compare-meta` + 禁占位串 + `published` 必须 true + `related_products` 必须为空** | 无专属要求 |
 | 反链 | — | — | — | **可选：发布后往已有博客文章追加幂等上下文反链** | — |
 | 资源注入 | — | — | — | — | **发布时自动注入 3 个 YouTube + 3 篇博客卡片** |
 
@@ -159,6 +159,21 @@ F1「返回上一页」、F2「回到首页」—— 纯前端。
 | VS | `"template": "nas-comparison-template-v5-resources"` | `nas-a-vs-b` | `nas-a-vs-b` |
 
 这两处的示例 JSON 都会被脚本自己的 preflight 拒掉。**如果你们的 JSON 生成器真在用示例里的模板名，那些文件现在发不出去。**
+
+### Custom 文章（模板自由，平台新增）
+
+侧边栏内容栏目组的**第一项**。它没有对应的参考脚本，是平台新增的通用出口：
+
+- **模板名由 JSON 的 `template` 字段自由指定**，不受任何白名单限制
+  （所以 `src/config/channels.ts` 里它的 `template` 是空串 + `allowAnyTemplate: true`）
+- **来源 metafield 可选**：JSON 里任一以 `_source` 结尾的顶层对象
+  都会被写成 `custom.<该键名>`（键名原样使用，不要求固定命名）
+- 因为模板是任意的，**不套用任何栏目专属规则**（H2 数量、必需文案、强制标记对
+  都与具体模板强相关），只保留与模板无关的通用规则：
+  必填字段、handle 格式、禁 `<h1>`、`<img>` 的 alt/title、外链规则
+
+模板自由的栏目**不参与「按模板匹配栏目」**，否则会把 `community_post` 等
+固定栏目的 JSON 抢走（已有测试钉住这一行为）。
 
 ### 外链规则（所有栏目共用；平台在脚本之外新增）
 

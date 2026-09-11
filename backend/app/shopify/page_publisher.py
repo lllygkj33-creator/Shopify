@@ -110,10 +110,22 @@ class PageChannelSpec:
     """
 
     template: str
-    """要求的 templateSuffix（与 JSON 不一致时报错）。"""
+    """要求的 templateSuffix（与 JSON 不一致时报错）。
+
+    `allow_any_template=True` 时忽略本字段，改由 JSON 提供模板名。
+    """
 
     source_key: str
-    """来源 metafield 的 key（namespace = custom）。"""
+    """来源 metafield 的 key（namespace = custom）。空 = 该栏目没有来源 metafield。"""
+
+    allow_any_template: bool = False
+    """是否允许任意模板：模板名完全由 JSON 决定（Custom 栏目用）。"""
+
+    source_key_suffix: str = ""
+    """来源 metafield 的自动识别后缀（如 `_source`）。
+
+    设了之后，JSON 里任一以该后缀结尾的顶层对象都会被当作来源，
+    键名原样作为 metafield key（Custom 栏目用）。"""
 
     source_fields: tuple[str, ...] = ()
     """来源对象里**必须存在**的字段。"""
@@ -293,6 +305,29 @@ PAGE_CHANNEL_SPECS: dict[str, PageChannelSpec] = {
         meta_title_max=65,
         meta_description_min=120,
         meta_description_max=170,
+        verified=True,
+    ),
+    # ✅ 通用页面栏目（Custom 文章）
+    #
+    # 这个栏目**没有对应的参考脚本**，是平台新增的通用出口：
+    # 用户上传任意页面 JSON，模板名由 JSON 自己指定（`template` 字段），
+    # 不受固定栏目的白名单限制。
+    #
+    # 因为模板是任意的，所以**不能**套用任何栏目专属规则
+    # （H2 数量、必需文案、强制标记对、固定来源字段都与具体模板强相关）。
+    # 这里只保留与模板无关的通用规则：
+    #   - 必填字段、handle 格式
+    #   - 禁 <h1>（H1 应由模板输出 —— 六个页面脚本一致的做法）
+    #   - <img> 必须有 alt/title
+    #   - 外链规则
+    "custom": PageChannelSpec(
+        template="",
+        allow_any_template=True,
+        # 来源键不固定：JSON 里任一 *_source 顶层对象都会被写成 custom.<key>
+        source_key="",
+        source_key_suffix="_source",
+        h2_min=0,
+        enforce_link_rules=True,
         verified=True,
     ),
     # ⚠️ 以下 1 个规格来自 PRD §3.2，**尚未**用真实脚本核对：
@@ -493,6 +528,8 @@ class PagePayload:
     template_suffix: str
     summary: str = ""
     source: dict[str, str] = field(default_factory=dict)
+    # 实际使用的来源 metafield 键（Custom 栏目由 JSON 的 *_source 决定）
+    source_key: str = ""
     related_products: list[Any] = field(default_factory=list)
     # 资源注入的说明（VS 用，记录本次选中了哪些视频/文章）
     resource_note: str = ""
@@ -614,15 +651,37 @@ def _load_related_products(data: dict[str, Any]) -> list[Any]:
     return value
 
 
+def resolve_source_key(data: dict[str, Any], spec: PageChannelSpec) -> str:
+    """确定来源 metafield 的键名。
+
+    - 固定栏目：用 spec.source_key
+    - Custom 栏目：JSON 里任一以 spec.source_key_suffix 结尾的对象
+      （键名原样使用，所以 community_source / maker_source / 自定义名都行）
+    """
+    if spec.source_key:
+        return spec.source_key
+
+    if spec.source_key_suffix:
+        for key in data:
+            if not isinstance(key, str) or not key.endswith(spec.source_key_suffix):
+                continue
+            value = data[key]
+            if isinstance(value, (dict, str)) and value:
+                return key
+
+    return ""
+
+
 def load_source(data: dict[str, Any], spec: PageChannelSpec) -> dict[str, str]:
     """读取并归一化 `custom.<source_key>` 那个 JSON 对象。
 
     规则全部来自 spec（各栏目脚本的要求不同）。
     """
-    if not spec.source_key:
+    key = resolve_source_key(data, spec)
+    if not key:
         return {}
 
-    source = first_value(data, [spec.source_key, f"custom.{spec.source_key}"])
+    source = first_value(data, [key, f"custom.{key}"])
 
     if isinstance(source, str):
         try:
@@ -634,9 +693,9 @@ def load_source(data: dict[str, Any], spec: PageChannelSpec) -> dict[str, str]:
             ) from error
 
     if not isinstance(source, dict):
-        raise PagePublishError(f"{spec.source_key} 必须是 JSON 对象")
+        raise PagePublishError(f"{key} 必须是 JSON 对象")
 
-    # 规格未核对的栏目：原样透传字符串字段，不做强校验
+    # 规格未核对的栏目 / Custom 栏目：原样透传字符串字段，不做强校验
     if not spec.source_fields:
         return {str(key): str(value).strip() for key, value in source.items()}
 
@@ -789,7 +848,10 @@ def validate_page_payload(payload: PagePayload, spec: PageChannelSpec) -> list[s
             "related_products 必须为空数组；商品链接请直接写在正文里"
         )
 
-    if payload.template_suffix != spec.template:
+    if spec.allow_any_template:
+        if not payload.template_suffix:
+            errors.append("JSON 必须提供 template（该栏目模板由 JSON 指定）")
+    elif payload.template_suffix != spec.template:
         errors.append(
             f"template 必须是 {spec.template!r}；当前为 {payload.template_suffix!r}"
         )
@@ -1051,6 +1113,7 @@ def build_page_payload(
         body_html=load_body_html(raw, source_file),
         template_suffix=template_suffix,
         source=load_source(raw, spec),
+        source_key=resolve_source_key(raw, spec),
         related_products=_load_related_products(raw),
         source_file=source_file,
         is_published_flag=parse_bool(
@@ -1092,12 +1155,14 @@ def page_metafields(payload: PagePayload, spec: PageChannelSpec) -> list[dict[st
         seo_metafields(payload.meta_title, payload.meta_description)
     )
 
-    # 有来源 metafield 的栏目才写 custom.<source_key>（VS 没有来源 metafield）
-    if spec.source_key:
+    # 有来源 metafield 的栏目才写 custom.<source_key>
+    # （VS 没有；Custom 栏目的 key 由 JSON 的 *_source 决定）
+    resolved_source_key = payload.source_key or spec.source_key
+    if resolved_source_key and payload.source:
         metafields.append(
             {
                 "namespace": "custom",
-                "key": spec.source_key,
+                "key": resolved_source_key,
                 "type": "json",
                 "value": json.dumps(
                     payload.source, ensure_ascii=False, separators=(",", ":")

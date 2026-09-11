@@ -1,0 +1,12 @@
+{
+  "title": "Custom Articles Example Page",
+  "meta_title": "Custom Articles Example Page",
+  "td": "A custom page published with a freely chosen Liquid template, showing how the Custom Articles channel handles arbitrary page templates.",
+  "url": "/pages/custom-articles-example",
+  "template": "custom-articles-template-v1",
+  "published": true,
+  "custom_source": {
+    "note": "任意 *_source 对象都会写成 custom.<key>"
+  },
+  "html": "<div class=\"custom-landing\"><h2>Any template, any section</h2><p>The template name comes from this JSON, so the Custom channel is not tied to a fixed list.</p><h2>Optional source metafield</h2><p>Any top-level object ending in <code>_source</code> becomes a custom metafield.</p><h2>Same content rules still apply</h2><p>No <code>&lt;h1&gt;</code>, images need alt and title, and third-party links need safe rel tokens.</p></div>"
+}

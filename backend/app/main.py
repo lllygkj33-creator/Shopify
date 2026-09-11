@@ -156,6 +156,8 @@ class PublishItemIn(BaseModel):
     template: str | None = None
     # 页面来源对象（如 community_source），整对象透传给后端
     source: dict[str, Any] | None = None
+    # 来源 metafield 的键名（Custom 栏目由 JSON 的 *_source 决定）
+    sourceKey: str | None = None
     # 可选：页面发布成功后往某篇博客文章追加上下文反链（用户故事用）
     backlink: dict[str, Any] | None = None
 
@@ -217,6 +219,8 @@ class ValidateItemIn(BaseModel):
     blogName: str | None = None
     template: str | None = None
     source: dict[str, Any] | None = None
+    sourceKey: str | None = None
+    relatedProducts: list[str] | None = None
     sourceFile: str | None = None
 
 
@@ -456,6 +460,8 @@ async def validate(payload: ValidateRequest) -> ValidateResponse:
                 )
             else:
                 try:
+                    resolved_source_key = item.sourceKey or spec.source_key
+
                     raw: dict[str, Any] = {
                         "title": item.title,
                         "meta_title": item.metaTitle,
@@ -464,8 +470,10 @@ async def validate(payload: ValidateRequest) -> ValidateResponse:
                         "url": item.handle,
                         "template": item.template,
                         "html": item.bodyHtml,
-                        spec.source_key: item.source,
+                        "related_products": item.relatedProducts or [],
                     }
+                    if resolved_source_key and item.source:
+                        raw[resolved_source_key] = item.source
                     page = build_page_payload(
                         raw,
                         channel_id=item.channelId,
@@ -778,6 +786,9 @@ async def _publish_page(item: PublishItemIn, now: datetime) -> PublishResultItem
                 "需要在 page_publisher.py 的 PAGE_CHANNEL_SPECS 里登记模板与来源 metafield。"
             )
 
+        # 来源键：前端识别到的优先，其次栏目规格里的固定键
+        resolved_source_key = item.sourceKey or spec.source_key
+
         raw: dict[str, Any] = {
             "title": item.title,
             "meta_title": item.metaTitle,
@@ -787,8 +798,11 @@ async def _publish_page(item: PublishItemIn, now: datetime) -> PublishResultItem
             "url": item.handle,
             "template": item.template,
             "html": item.bodyHtml,
-            spec.source_key: item.source,
+            "related_products": item.relatedProducts or [],
+            "published": item.mode != "draft",
         }
+        if resolved_source_key and item.source:
+            raw[resolved_source_key] = item.source
 
         payload_page = build_page_payload(
             raw,

@@ -123,7 +123,10 @@ function matchBlogChannel(classNames: string[]): Channel | undefined {
 function matchPageChannel(record: RawRecord): Channel | undefined {
   const template = pick(record, 'template', 'template_suffix')
   if (template) {
-    const byTemplate = CHANNELS.find((channel) => channel.template === template)
+    // 模板自由的栏目（Custom）不参与按模板匹配，否则会把别人的模板抢走
+    const byTemplate = CHANNELS.find(
+      (channel) => !channel.pageSpec?.allowAnyTemplate && channel.template === template
+    )
     if (byTemplate) return byTemplate
   }
   // 退而求其次：按来源键名（com_source / discord_source ...）
@@ -269,6 +272,32 @@ function normalizePageSource(
   }
 
   return source
+}
+
+/**
+ * 确定来源 metafield 的键名。
+ *
+ * - 固定栏目：`spec.sourceKey`
+ * - Custom 栏目：JSON 里任一以 `spec.sourceKeySuffix` 结尾的顶层对象
+ *   （键名原样使用，所以 `community_source` / `maker_source` / 自定义名都行）
+ */
+function resolveSourceKeyFor(
+  raw: Record<string, unknown>,
+  spec?: PageSpec
+): string {
+  if (spec?.sourceKey) return spec.sourceKey
+
+  const suffix = spec?.sourceKeySuffix
+  if (!suffix) return ''
+
+  for (const key of Object.keys(raw)) {
+    if (!key.endsWith(suffix)) continue
+    const value = raw[key]
+    if (value && typeof value === 'object' && !Array.isArray(value)) return key
+    if (typeof value === 'string' && value.trim()) return key
+  }
+
+  return ''
 }
 
 function countOccurrences(haystack: string, needle: string): number {
@@ -825,8 +854,17 @@ function normalizePageCandidate(
   // 脚本的 normalize_handle 两种写法都接受。给常态加提示只会制造噪音，
   // 让人慢慢无视整个校验列。
 
-  // ---- 模板必须与栏目一致（脚本是硬错误） ----
-  if (!template) {
+  // ---- 模板校验 ----
+  // allowAnyTemplate（Custom 文章）：模板由 JSON 自由指定，不做白名单校验
+  if (spec?.allowAnyTemplate) {
+    if (!template) {
+      issues.push({
+        level: 'error',
+        field: 'template',
+        message: '缺少 template：该栏目的模板由 JSON 指定，必须填写',
+      })
+    }
+  } else if (!template) {
     issues.push({
       level: 'error',
       field: 'template',
@@ -957,21 +995,27 @@ function normalizePageCandidate(
   }
 
   // ---- 来源对象（custom.<sourceKey> json metafield） ----
-  const rawSource = channel?.pageSpec?.sourceKey
-    ? raw[channel.pageSpec.sourceKey]
-    : undefined
+  // 固定栏目用 spec.sourceKey；Custom 栏目用 sourceKeySuffix 自动识别
+  // （JSON 里任一 *_source 顶层对象，键名原样作为 metafield key）
+  const resolvedSourceKey = resolveSourceKeyFor(raw, spec)
+
+  const rawSource = resolvedSourceKey ? raw[resolvedSourceKey] : undefined
   // 归一化（剥掉 Discord channel_name 的前导 '#'）后再提交给后端
   const source = normalizePageSource(rawSource, spec)
 
   if (spec?.verified && spec.sourceKey) {
+    // 固定栏目：按规格强校验来源字段
     issues.push(...checkPageSource(source, spec))
-  } else if (channel?.pageSpec?.sourceKey && !source) {
+  } else if (resolvedSourceKey && !source && !spec?.sourceKeySuffix) {
+    // 未核对规格的固定栏目：只提示，不阻断
     issues.push({
       level: 'warning',
-      field: channel.pageSpec.sourceKey,
-      message: `缺少 ${channel.pageSpec.sourceKey} 来源信息；该栏目规格尚未核对，此处只做提示`,
+      field: resolvedSourceKey,
+      message: `缺少 ${resolvedSourceKey} 来源信息；该栏目规格尚未核对，此处只做提示`,
     })
   }
+  // Custom 文章（sourceKeySuffix）的来源对象是**可选**的：
+  // 有就写成 custom.<key>，没有就不写 —— 所以这里不提示。
 
   // 可选反链：页面发布后往某篇博客文章追加幂等上下文反链
   const rawBacklink = pickRaw(raw, 'backlink')
@@ -1000,6 +1044,7 @@ function normalizePageCandidate(
     // 页面**不使用** related_products：参考脚本刻意不写 custom.related_products，
     // 避免清掉页面上已有的商品列表 metafield
     source,
+    sourceKey: resolvedSourceKey,
     backlink,
     sourceFile: filePath,
     sourceIndex: index,

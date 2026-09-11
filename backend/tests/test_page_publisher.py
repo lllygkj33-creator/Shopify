@@ -992,3 +992,116 @@ def test_user_story_metafields_use_user_info():
     assert by_key["user_info"]["namespace"] == "custom"
     assert by_key["user_info"]["type"] == "json"
     assert json.loads(by_key["user_info"]["value"])["handle"] == "example-builder"
+
+
+# ---------------------------------------------------------------------------
+# Custom 文章：模板自由、来源可选（平台新增的通用出口）
+# ---------------------------------------------------------------------------
+
+
+def test_custom_spec_allows_any_template():
+    spec = PAGE_CHANNEL_SPECS["custom"]
+    assert spec.verified is True
+    assert spec.allow_any_template is True
+    # 模板由 JSON 决定，所以不设 H2 要求
+    assert spec.h2_min == 0
+    # 来源可选，键名自动识别
+    assert spec.source_key == ""
+    assert spec.source_key_suffix == "_source"
+
+
+def test_custom_accepts_arbitrary_template_name():
+    raw = {
+        "title": "Custom page",
+        "meta_title": "MT",
+        "meta_description": "MD" * 30,
+        "url": "/pages/custom-page",
+        "template": "some-brand-new-template-v9",
+        "html": "<div><p>Anything goes.</p></div>",
+    }
+    spec = PAGE_CHANNEL_SPECS["custom"]
+    payload = build_page_payload(
+        raw, channel_id="custom", spec=spec, source_file="Custom/a.json"
+    )
+
+    assert payload.template_suffix == "some-brand-new-template-v9"
+    # 模板任意 → 不要求 H2，也不套用栏目专属规则
+    assert validate_page_payload(payload, spec) == []
+
+
+def test_custom_requires_template_in_json():
+    raw = {
+        "title": "Custom page",
+        "meta_title": "MT",
+        "meta_description": "MD" * 30,
+        "url": "/pages/custom-page",
+        "html": "<div><p>x</p></div>",
+    }
+    spec = PAGE_CHANNEL_SPECS["custom"]
+    payload = build_page_payload(
+        raw, channel_id="custom", spec=spec, source_file="Custom/a.json"
+    )
+
+    assert any("template" in error for error in validate_page_payload(payload, spec))
+
+
+def test_custom_auto_detects_source_metafield_key():
+    spec = PAGE_CHANNEL_SPECS["custom"]
+    raw = {
+        "title": "Custom page",
+        "meta_title": "MT",
+        "meta_description": "MD" * 30,
+        "url": "/pages/custom-page",
+        "template": "tpl",
+        "html": "<div><p>x</p></div>",
+        "something_source": {"any": "shape"},
+    }
+    payload = build_page_payload(
+        raw, channel_id="custom", spec=spec, source_file="Custom/a.json"
+    )
+
+    assert payload.source_key == "something_source"
+    assert payload.source == {"any": "shape"}
+
+    keys = {item["key"] for item in page_metafields(payload, spec)}
+    assert keys == {"title_tag", "description_tag", "something_source"}
+
+
+def test_custom_source_is_optional():
+    spec = PAGE_CHANNEL_SPECS["custom"]
+    raw = {
+        "title": "Custom page",
+        "meta_title": "MT",
+        "meta_description": "MD" * 30,
+        "url": "/pages/custom-page",
+        "template": "tpl",
+        "html": "<div><p>x</p></div>",
+    }
+    payload = build_page_payload(
+        raw, channel_id="custom", spec=spec, source_file="Custom/a.json"
+    )
+
+    assert payload.source_key == ""
+    keys = {item["key"] for item in page_metafields(payload, spec)}
+    # 没有来源时只写两个 SEO
+    assert keys == {"title_tag", "description_tag"}
+
+
+def test_custom_still_enforces_universal_rules():
+    """模板自由 ≠ 没有规则：禁 h1、外链安全标记仍然生效。"""
+    spec = PAGE_CHANNEL_SPECS["custom"]
+    raw = {
+        "title": "Custom page",
+        "meta_title": "MT",
+        "meta_description": "MD" * 30,
+        "url": "/pages/custom-page",
+        "template": "tpl",
+        "html": '<div><h1>Bad</h1><p><a href="https://example.com/x" title="t">link text</a></p></div>',
+    }
+    payload = build_page_payload(
+        raw, channel_id="custom", spec=spec, source_file="Custom/a.json"
+    )
+    errors = validate_page_payload(payload, spec)
+
+    assert any("<h1>" in error for error in errors)
+    assert any('target="_blank"' in error for error in errors)

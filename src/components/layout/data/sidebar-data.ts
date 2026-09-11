@@ -1,6 +1,7 @@
 import {
   BookOpenCheck,
   Boxes,
+  Sparkles,
   FileText,
   GitCompareArrows,
   LifeBuoy,
@@ -21,6 +22,8 @@ import { type SidebarData } from '../types'
  * （不含 React 依赖），后端也能复用同一份定义。
  */
 const CHANNEL_ICONS: Record<string, React.ElementType> = {
+  // 通用页面出口，放在最上面
+  custom: Sparkles,
   'tech-ai-hub': Boxes,
   'support-tips': LifeBuoy,
   'nas-server-setup': Server,

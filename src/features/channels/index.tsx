@@ -114,6 +114,7 @@ export function ChannelPage({ channel }: ChannelPageProps) {
           blogName: candidate.blogName,
           template: candidate.template,
           source: candidate.source,
+          sourceKey: candidate.sourceKey,
           sourceFile: candidate.sourceFile,
         }))
       )

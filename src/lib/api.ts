@@ -307,6 +307,8 @@ export const publishApi = {
         tags: item.candidate.tags,
         // 页面栏目的来源对象（custom.<key> json metafield）
         source: item.candidate.source,
+        // 实际使用的 metafield 键名（Custom 文章由 JSON 决定）
+        sourceKey: item.candidate.sourceKey,
         // 可选反链（用户故事）
         backlink: item.candidate.backlink,
         sourceFile: item.candidate.sourceFile,
