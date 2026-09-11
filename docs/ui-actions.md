@@ -156,11 +156,12 @@ F1「返回上一页」、F2「回到首页」—— 纯前端。
 
 | 脚本 | 文档示例写的 | 常量 + 硬校验要求 | 采用 | 状态 |
 |---|---|---|---|---|
-| Discord | `"template": "discord_post"` | `discord-page` | `discord-page` | ⬜ 待确认 |
+| Discord | `"template": "discord_post"` | `discord-page` | `discord-page` | ✅ **已确认真的是 `discord-page`**（脚本文档示例是笔误） |
 | VS | `"template": "nas-comparison-template-v5-resources"` | `nas-a-vs-b` | `nas-a-vs-b` | ✅ **已确认 `nas-a-vs-b` 是真的**（脚本文档示例是笔误） |
 
-这两处的示例 JSON 都会被脚本自己的 preflight 拒掉。VS 已确认按常量实现正确；
-**Discord 的 `discord_post` 还没确认**（如果 JSON 生成器在用这个名字，那些文件发不出去）。
+**两处示例 JSON 都会被脚本自己的 preflight 拒掉，但都已确认真实模板名就是常量里的值**
+（VS = `nas-a-vs-b`，Discord = `discord-page`）—— 所以脚本文档里的示例是笔误，
+按常量实现是正确的。**如果 JSON 生成器照着文档示例生成，那些文件发不出去。**
 
 ### 页面模板清单（Custom 文章的模板选择器）
 
