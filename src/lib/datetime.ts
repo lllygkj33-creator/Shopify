@@ -14,9 +14,18 @@
 
 /** 常用时区候选（覆盖 Zima 团队协作场景） */
 export const TIMEZONE_OPTIONS = [
-  { value: 'Asia/Shanghai', label: 'Asia/Shanghai（中国标准时间，UTC+8）— 默认' },
-  { value: 'America/New_York', label: 'America/New_York（美国东部，UTC-5/-4）' },
-  { value: 'America/Los_Angeles', label: 'America/Los_Angeles（美国西部，UTC-8/-7）' },
+  {
+    value: 'Asia/Shanghai',
+    label: 'Asia/Shanghai（中国标准时间，UTC+8）— 默认',
+  },
+  {
+    value: 'America/New_York',
+    label: 'America/New_York（美国东部，UTC-5/-4）',
+  },
+  {
+    value: 'America/Los_Angeles',
+    label: 'America/Los_Angeles（美国西部，UTC-8/-7）',
+  },
   { value: 'Europe/London', label: 'Europe/London（伦敦，UTC+0/+1）' },
   { value: 'Europe/Berlin', label: 'Europe/Berlin（柏林，UTC+1/+2）' },
   { value: 'Asia/Tokyo', label: 'Asia/Tokyo（日本，UTC+9）' },
@@ -75,20 +84,26 @@ function partsToUtcMillis(parts: Parts): number {
   )
 }
 
-/** 某时刻在该时区的 UTC 偏移（分钟） */
+/**
+ * 某时刻在该时区的 UTC 偏移（分钟）。
+ *
+ * **必须取整**：墙上时间是从 `Intl` 取到的、只到秒，而 `date.getTime()` 带毫秒，
+ * 两者相减会多出「-毫秒数」这一截。不取整的话，任何毫秒非零的时刻都会算出小数偏移
+ * （实测界面上显示成 `UTC+07:59.988699999999994`，而上海应该是 `UTC+08:00`）。
+ *
+ * 取整在这里是精确的，不是近似：真实时区偏移都是整分钟，
+ * 误差最多 999ms，四舍五入必然还原出正确的分钟数。
+ */
 export function getTimezoneOffsetMinutes(date: Date, timeZone: string): number {
   const parts = getParts(date, timeZone)
-  return (partsToUtcMillis(parts) - date.getTime()) / 60000
+  return Math.round((partsToUtcMillis(parts) - date.getTime()) / 60000)
 }
 
 /**
  * 把某时区的「墙上时间」转成真实的 UTC 瞬间。
  * 迭代两次以正确处理夏令时切换点。
  */
-export function zonedWallTimeToDate(
-  wallTime: string,
-  timeZone: string
-): Date {
+export function zonedWallTimeToDate(wallTime: string, timeZone: string): Date {
   const match = wallTime.match(
     /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2}))?$/
   )
@@ -154,7 +169,10 @@ export function formatInTimezone(
 }
 
 /** 该时区当前的 UTC 偏移文本，例如 UTC+08:00 */
-export function formatTimezoneOffset(timeZone: string, at: Date = new Date()): string {
+export function formatTimezoneOffset(
+  timeZone: string,
+  at: Date = new Date()
+): string {
   const minutes = getTimezoneOffsetMinutes(at, timeZone)
   const sign = minutes >= 0 ? '+' : '-'
   const abs = Math.abs(minutes)

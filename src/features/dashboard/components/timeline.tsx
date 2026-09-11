@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   addDays,
   addMonths,
@@ -380,8 +380,8 @@ type BucketBlockProps = {
  * - 块内细条表示状态构成（多条时才知道有多少是排期、多少是失败）
  * - 悬停展开清单；点击也能展开（触屏和键盘用不了悬停）
  *
- * 悬停关闭加了 150ms 延迟：触发器和浮层之间有一道缝，指针穿过时
- * 会先触发 trigger 的 leave，立即关闭就会闪烁、来不及移到浮层上。
+ * 悬停关闭加了延迟（见 scheduleClose）：触发器和浮层之间有一道缝，
+ * 指针穿过时会先触发 trigger 的 leave，立即关闭就会闪烁、来不及移到浮层上。
  */
 function BucketBlock({
   cell,
@@ -394,6 +394,35 @@ function BucketBlock({
   const meta = CONTENT_STATUS_META[cell.dominant]
   const mixed = cell.composition.length > 1
 
+  /**
+   * 悬停关闭要**延迟**。
+   *
+   * 触发块和浮层之间有一道缝（`sideOffset`），指针从块移到浮层必然经过它，
+   * 触发块的 mouseleave 会先到 —— 立即关闭的话浮层还没等鼠标够到就消失了，
+   * 表现为闪烁、点不中里面的条目。
+   */
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const cancelClose = useCallback(() => {
+    if (closeTimer.current) {
+      clearTimeout(closeTimer.current)
+      closeTimer.current = null
+    }
+  }, [])
+
+  const hoverOpen = useCallback(() => {
+    cancelClose()
+    setOpen(true)
+  }, [cancelClose])
+
+  const scheduleClose = useCallback(() => {
+    cancelClose()
+    closeTimer.current = setTimeout(() => setOpen(false), 160)
+  }, [cancelClose])
+
+  // 组件卸载时别留下定时器
+  useEffect(() => cancelClose, [cancelClose])
+
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
@@ -404,8 +433,33 @@ function BucketBlock({
           data-status={cell.dominant}
           data-tick-index={cell.index}
           aria-label={`${channelLabel} ${tick.label} 共 ${cell.count} 条`}
-          onMouseEnter={() => setOpen(true)}
-          onMouseLeave={() => setOpen(false)}
+          title={
+            cell.count === 1
+              ? cell.bars[0].title
+              : `${cell.count} 条：${cell.bars
+                  .slice(0, 3)
+                  .map((bar) => bar.title)
+                  .join(
+                    '\n'
+                  )}${cell.count > 3 ? `\n…另有 ${cell.count - 3} 条` : ''}`
+          }
+          onMouseEnter={hoverOpen}
+          onMouseLeave={scheduleClose}
+          /*
+            点一下保持打开。
+            Radix 的触发器点击是「切换」；而鼠标点下去之前会先触发 mouseenter
+            （已经把它打开了），紧接着的 click 就会被当成「关掉」——
+            表现是悬停展开后一点就消失。触屏上 mouseenter 与 click 也连着来，
+            同样会一开一关。
+            `preventDefault` 能拦住 Radix 内部的切换（它用 composeEventHandlers，
+            看到 defaultPrevented 就跳过自己的处理）。关闭交给移开鼠标或点别处。
+          */
+          onClick={(event) => {
+            if (open) {
+              event.preventDefault()
+              setOpen(true)
+            }
+          }}
           className={cn(
             'flex h-full w-full flex-col justify-center gap-0.5 overflow-hidden rounded-md border px-1.5 text-left text-xs shadow-sm transition',
             'hover:z-20 hover:shadow-md focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none',
@@ -421,13 +475,17 @@ function BucketBlock({
                 }
           }
         >
-          <span className='flex items-baseline gap-1'>
+          {/*
+            块上只放**简要信息**：条数 + 状态构成，不放标题。
+            一格通常只有一百来像素，塞完整标题必然被裁成
+            「1ZimaBoard 2 vs ZimaBlade: Which Home Se」这种半截字，
+            看着像溢出了格子。完整标题在悬停清单里（那里有宽度）。
+          */}
+          <span className='flex min-w-0 items-baseline gap-1'>
             <span className='font-mono text-sm font-semibold'>
               {cell.count}
             </span>
-            <span className='text-[10px] opacity-80'>
-              {cell.count === 1 ? cell.bars[0].title : '条'}
-            </span>
+            <span className='truncate text-[10px] opacity-80'>条</span>
           </span>
 
           {/* 状态构成细条：只有一种状态时就是一条实色，不额外干扰 */}
@@ -449,8 +507,8 @@ function BucketBlock({
         align='start'
         sideOffset={2}
         className='w-80 p-0'
-        onMouseEnter={() => setOpen(true)}
-        onMouseLeave={() => setOpen(false)}
+        onMouseEnter={hoverOpen}
+        onMouseLeave={scheduleClose}
         onOpenAutoFocus={(event) => event.preventDefault()}
       >
         <div className='border-b px-3 py-2 text-xs'>

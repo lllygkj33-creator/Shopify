@@ -8,7 +8,6 @@
  *  - 3 月 8 日 02:00 → 03:00（春季前移，当天 02:30 这个墙上时间不存在）
  *  - 11 月 1 日 02:00 → 01:00（秋季后移，01:30 出现两次）
  */
-
 import { describe, expect, it } from 'vitest'
 import {
   formatTimezoneOffset,
@@ -49,7 +48,9 @@ describe('wallTimeToIso', () => {
   })
 
   it('UTC 时区原样返回', () => {
-    expect(wallTimeToIso('2026-05-01T00:00', 'UTC')).toBe('2026-05-01T00:00:00.000Z')
+    expect(wallTimeToIso('2026-05-01T00:00', 'UTC')).toBe(
+      '2026-05-01T00:00:00.000Z'
+    )
   })
 
   it('非法格式抛出可读错误', () => {
@@ -60,16 +61,16 @@ describe('wallTimeToIso', () => {
 describe('isoToWallTime', () => {
   it('与 wallTimeToIso 往返一致（冬令时）', () => {
     const wall = '2026-02-10T08:15'
-    expect(isoToWallTime(wallTimeToIso(wall, 'America/Chicago'), 'America/Chicago')).toBe(
-      wall
-    )
+    expect(
+      isoToWallTime(wallTimeToIso(wall, 'America/Chicago'), 'America/Chicago')
+    ).toBe(wall)
   })
 
   it('与 wallTimeToIso 往返一致（夏令时）', () => {
     const wall = '2026-08-20T21:45'
-    expect(isoToWallTime(wallTimeToIso(wall, 'America/Chicago'), 'America/Chicago')).toBe(
-      wall
-    )
+    expect(
+      isoToWallTime(wallTimeToIso(wall, 'America/Chicago'), 'America/Chicago')
+    ).toBe(wall)
   })
 
   it('同一时刻在不同时区显示不同墙上时间', () => {
@@ -85,28 +86,67 @@ describe('isoToWallTime', () => {
 
 describe('getTimezoneOffsetMinutes / formatTimezoneOffset', () => {
   it('冬令时芝加哥偏移为 -360 分钟', () => {
-    expect(getTimezoneOffsetMinutes(new Date('2026-01-15T00:00:00Z'), 'America/Chicago')).toBe(
-      -360
-    )
+    expect(
+      getTimezoneOffsetMinutes(
+        new Date('2026-01-15T00:00:00Z'),
+        'America/Chicago'
+      )
+    ).toBe(-360)
   })
 
   it('夏令时芝加哥偏移为 -300 分钟', () => {
-    expect(getTimezoneOffsetMinutes(new Date('2026-07-15T00:00:00Z'), 'America/Chicago')).toBe(
-      -300
-    )
+    expect(
+      getTimezoneOffsetMinutes(
+        new Date('2026-07-15T00:00:00Z'),
+        'America/Chicago'
+      )
+    ).toBe(-300)
+  })
+
+  it('带毫秒的时刻也得到整分钟偏移', () => {
+    // 回归：墙上时间只到秒，而 getTime() 带毫秒，两者相减会多出小数部分。
+    // 不取整的话界面上会显示成「UTC+07:59.988699999999994」。
+    const withMillis = new Date('2026-01-15T00:00:00.678Z')
+    expect(getTimezoneOffsetMinutes(withMillis, 'Asia/Shanghai')).toBe(480)
+    expect(getTimezoneOffsetMinutes(new Date(), 'Asia/Shanghai')).toBe(480)
+    expect(
+      Number.isInteger(getTimezoneOffsetMinutes(new Date(), 'Asia/Shanghai'))
+    ).toBe(true)
+  })
+
+  it('半小时 / 三刻钟偏移也正确', () => {
+    // 尼泊尔 +05:45、印度 +05:30 —— 钉住「整分钟」这个前提
+    expect(
+      getTimezoneOffsetMinutes(
+        new Date('2026-01-15T00:00:00.4Z'),
+        'Asia/Kathmandu'
+      )
+    ).toBe(345)
+    expect(
+      getTimezoneOffsetMinutes(
+        new Date('2026-01-15T00:00:00.4Z'),
+        'Asia/Kolkata'
+      )
+    ).toBe(330)
   })
 
   it('偏移文本格式为 UTC±HH:MM', () => {
-    expect(formatTimezoneOffset('Asia/Shanghai', new Date('2026-01-15T00:00:00Z'))).toBe(
-      'UTC+08:00'
+    expect(
+      formatTimezoneOffset('Asia/Shanghai', new Date('2026-01-15T00:00:00Z'))
+    ).toBe('UTC+08:00')
+    expect(formatTimezoneOffset('UTC', new Date('2026-01-15T00:00:00Z'))).toBe(
+      'UTC+00:00'
     )
-    expect(formatTimezoneOffset('UTC', new Date('2026-01-15T00:00:00Z'))).toBe('UTC+00:00')
+    // 回归：毫秒非零时不能出现小数
+    expect(formatTimezoneOffset('Asia/Shanghai', new Date())).toBe('UTC+08:00')
   })
 })
 
 describe('zonedWallTimeToDate', () => {
   it('解析出的 Date 在目标时区显示为同一墙上时间', () => {
     const date = zonedWallTimeToDate('2026-04-01T07:00', 'Europe/Berlin')
-    expect(isoToWallTime(date.toISOString(), 'Europe/Berlin')).toBe('2026-04-01T07:00')
+    expect(isoToWallTime(date.toISOString(), 'Europe/Berlin')).toBe(
+      '2026-04-01T07:00'
+    )
   })
 })
