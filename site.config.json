@@ -116,7 +116,7 @@
           "author_avatar_url",
           "author_profile_url"
         ],
-        "sourceKey": "example_source_community_post",
+        "sourceKey": "example_source_1",
         "sourceRequiredNonEmpty": [
           "title",
           "url",
@@ -165,7 +165,7 @@
           "starter_avatar_url",
           "invite_url"
         ],
-        "sourceKey": "example_source_discord",
+        "sourceKey": "example_source_2",
         "sourceRequiredNonEmpty": [
           "title",
           "url",
@@ -214,7 +214,7 @@
           "avatar_url",
           "profile_url"
         ],
-        "sourceKey": "example_source_user_story",
+        "sourceKey": "example_source_3",
         "sourceRequiredNonEmpty": [
           "name",
           "handle",
@@ -337,7 +337,7 @@
           "creator_avatar_url",
           "creator_profile_url"
         ],
-        "sourceKey": "example_source_makerworld",
+        "sourceKey": "example_source_4",
         "sourcePathContains": "/models/",
         "sourceRequiredNonEmpty": [
           "title",
@@ -411,5 +411,6 @@
     "example-cover-1",
     "example-cover-2",
     "example-cover-3"
-  ]
+  ],
+  "backlinkAttribute": "data-user-story-backlink"
 }

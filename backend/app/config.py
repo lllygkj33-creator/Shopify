@@ -194,6 +194,13 @@ def resolved_token_source() -> TokenSource:
     return "auto"
 
 
+def brand_name() -> str:
+    """品牌名（界面标题、API 文档、生成文案都用它）。来自站点配置。"""
+    from .site_config import site
+
+    return site.brand_name
+
+
 def resolved_timezone() -> str:
     return str(get_effective("default_timezone", _env.default_timezone)).strip()
 

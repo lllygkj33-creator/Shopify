@@ -34,6 +34,8 @@ from ..site_config import site
 
 # 标记前缀来自站点配置（写进正文 HTML 的注释，用于幂等识别）
 BACKLINK_MARKER_PREFIX = site.backlink_marker_prefix
+# 写进正文的 HTML 属性名，属于部署侧命名
+BACKLINK_ATTR = str(site.get("backlinkAttribute", "data-user-story-backlink"))
 
 FIND_ARTICLE_QUERY = """
 query FindBacklinkArticle($query: String!) {
@@ -162,7 +164,7 @@ def build_backlink_block(
 
     return (
         f"<!-- {marker} -->\n"
-        f'<p data-zima-user-story-backlink="{data_value}">'
+        f'<p {BACKLINK_ATTR}="{data_value}">'
         f'{lead_in} <a href="{url}" title="{title}">{anchor_text}</a>.'
         f"</p>"
     )

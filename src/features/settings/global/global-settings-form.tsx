@@ -38,6 +38,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ChannelMappingCheck } from './channel-mapping-check'
 import { SyncPanel } from './sync-panel'
+import { site } from '@/config/site'
 import { TokenStatusPanel } from './token-status-panel'
 
 /**
@@ -94,7 +95,7 @@ export function GlobalSettingsForm() {
       apiVersion: '2026-04',
       tokenSource: 'auto',
       accessToken: '',
-      defaultAuthor: 'ZimaSpace',
+      defaultAuthor: site.defaultAuthor,
       defaultReviewers: '',
       relatedProductTitles: '',
       defaultTimezone: 'Asia/Shanghai',

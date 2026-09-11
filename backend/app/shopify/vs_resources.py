@@ -192,7 +192,7 @@ def blog_card(item: dict[str, str], cover_url: str) -> str:
     creator = item["creator"]
     product_label = item["product_label"]
     alt_text = (
-        f"ZimaSpace creator story about {product_label} hardware "
+        f"{site.brand_name} creator story about {product_label} hardware "
         "and a practical home server project"
     )
 

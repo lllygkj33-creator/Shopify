@@ -124,9 +124,9 @@ def _has_credentials() -> bool:
 
 
 app = FastAPI(
-    title="Zima 发布平台 API",
+    title=f"{app_config.brand_name()} API",
     version="0.1.0",
-    description="ZimaSpace 定制发布平台后端：Shopify 内容托管与定时发布。",
+    description=f"{app_config.brand_name()} 后端：Shopify 内容托管与定时发布。",
     lifespan=lifespan,
 )
 

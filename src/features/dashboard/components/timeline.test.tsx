@@ -78,7 +78,7 @@ describe('Timeline 按时间格聚合', () => {
 
     const block = document.querySelector('[data-testid="timeline-bucket"]')
     // 一格只有一百来像素，塞完整标题会被裁成半截字、看着像溢出
-    expect(block?.textContent).not.toContain('ZimaBoard')
+    expect(block?.textContent).not.toContain('Example Product')
   })
 
   it('块不会越出自己那一格', async () => {
