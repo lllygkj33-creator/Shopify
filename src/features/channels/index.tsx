@@ -12,7 +12,13 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import type { Channel } from '@/config/channels'
-import { publishApi, settingsApi, USE_MOCK, validateApi } from '@/lib/api'
+import {
+  publishApi,
+  settingsApi,
+  templatesApi,
+  USE_MOCK,
+  validateApi,
+} from '@/lib/api'
 import {
   DEFAULT_TIMEZONE,
   defaultScheduleWallTime,
@@ -65,6 +71,26 @@ export function ChannelPage({ channel }: ChannelPageProps) {
   const [result, setResult] = useState<PublishResult | null>(null)
   const [batchWallTime, setBatchWallTime] = useState('')
   const [validating, setValidating] = useState(false)
+
+  // 模板自由的栏目（Custom 文章）才需要可选模板清单
+  const templateFree = Boolean(channel.pageSpec?.allowAnyTemplate)
+  const templatesQuery = useQuery({
+    queryKey: ['theme-templates'],
+    queryFn: () => templatesApi.list(),
+    enabled: templateFree,
+  })
+
+  /** 改模板：直接改候选上的 template，改动会自动流进发布载荷 */
+  const setTemplate = useCallback((tempId: string, template: string) => {
+    setParsedFiles((previous) =>
+      previous.map((file) => ({
+        ...file,
+        candidates: file.candidates.map((candidate) =>
+          candidate.tempId === tempId ? { ...candidate, template } : candidate
+        ),
+      }))
+    )
+  }, [])
 
   const settingsQuery = useQuery({
     queryKey: ['settings'],
@@ -556,6 +582,15 @@ export function ChannelPage({ channel }: ChannelPageProps) {
 
                     <CandidateList
                       candidates={candidates}
+                      templateOptions={
+                        templateFree
+                          ? (templatesQuery.data?.templates ??
+                            settingsQuery.data?.templateChoices)
+                          : undefined
+                      }
+                      templateSource={templatesQuery.data?.source}
+                      templateSourceReason={templatesQuery.data?.reason}
+                      onTemplateChange={setTemplate}
                       plans={plans}
                       selected={selected}
                       timezone={timezone}

@@ -402,6 +402,15 @@ allowBuilds:
   esbuild: true
 ```
 
+### pnpm store 位置
+
+本机 `node_modules` 是用工作区内的 store 安装的，pnpm 默认会去找全局 store 并报
+`pnpm now wants to use the store at ...`。安装新依赖时显式指定即可：
+
+```bash
+pnpm add <package> --store-dir .pnpm-store
+```
+
 ### 浏览器测试
 
 模板自带的 `vitest` 是 **browser 模式**，需要下载 Chromium 才能跑 `pnpm test`。

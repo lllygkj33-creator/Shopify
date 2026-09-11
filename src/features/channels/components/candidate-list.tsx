@@ -26,6 +26,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { TemplatePicker } from './template-picker'
 
 export type PublishPlan = {
   mode: PublishMode
@@ -35,6 +36,11 @@ export type PublishPlan = {
 
 type CandidateListProps = {
   candidates: ParsedCandidate[]
+  /** 模板自由的栏目（Custom 文章）才会传：可选模板清单 */
+  templateOptions?: string[]
+  templateSource?: 'shopify' | 'manual'
+  templateSourceReason?: string | null
+  onTemplateChange?: (tempId: string, template: string) => void
   plans: Record<string, PublishPlan>
   selected: Set<string>
   timezone: string
@@ -46,6 +52,10 @@ type CandidateListProps = {
 
 export function CandidateList({
   candidates,
+  templateOptions,
+  templateSource,
+  templateSourceReason,
+  onTemplateChange,
   plans,
   selected,
   timezone,
@@ -129,9 +139,23 @@ export function CandidateList({
                       <Badge variant='secondary' className='font-normal'>
                         页面
                       </Badge>
-                      <p className='font-mono text-muted-foreground'>
-                        {candidate.template ?? '默认模板'}
-                      </p>
+                      {templateOptions ? (
+                        // 模板自由的栏目（Custom 文章）：可搜索选定
+                        <TemplatePicker
+                          value={candidate.template ?? ''}
+                          options={templateOptions}
+                          source={templateSource}
+                          sourceReason={templateSourceReason}
+                          disabled={busy}
+                          onChange={(template) =>
+                            onTemplateChange?.(candidate.tempId, template)
+                          }
+                        />
+                      ) : (
+                        <p className='font-mono text-muted-foreground'>
+                          {candidate.template ?? '默认模板'}
+                        </p>
+                      )}
                     </div>
                   )}
                 </TableCell>

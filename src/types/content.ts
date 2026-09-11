@@ -284,6 +284,18 @@ export type GlobalSettings = {
   relatedProductTitles: string[]
   defaultTimezone: string
   defaultPublishTime: string
+  /** 页面模板清单（Custom 文章的模板选择器用） */
+  templateChoices: string[]
+}
+
+/** GET /api/theme/templates 返回：可选的页面模板（Custom 文章用） */
+export type TemplateList = {
+  /** shopify = 读自店铺主题；manual = 来自设置里维护的清单 */
+  source: 'shopify' | 'manual'
+  templates: string[]
+  themeName?: string | null
+  /** 回退到手动清单的原因 */
+  reason?: string | null
 }
 
 /** GET /api/blogs 返回：用于核对「栏目 → Shopify Blog」映射 */
@@ -304,6 +316,7 @@ export type SettingsUpdatePayload = {
   relatedProductTitles?: string[]
   defaultTimezone?: string
   defaultPublishTime?: string
+  templateChoices?: string[]
 }
 
 /** 连接自检结果（校验 token 权限：read_content / write_content） */

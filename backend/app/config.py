@@ -95,6 +95,7 @@ class RuntimeSettings:
 
     _FIELDS = (
         "shop_domain",
+        "template_choices",
         "api_version",
         "token_source",
         "default_author",
@@ -198,6 +199,30 @@ def resolved_default_reviewers() -> list[str]:
 def resolved_related_products() -> list[str]:
     value = runtime.get("related_product_titles")
     return [str(item) for item in value] if isinstance(value, list) else []
+
+
+# 已知的模板后缀（各栏目的参考脚本里核对过的），作为清单默认值
+KNOWN_PAGE_TEMPLATES = (
+    "community_post",
+    "discord-page",
+    "user-story",
+    "nas-a-vs-b",
+    "makerworld-page",
+)
+
+
+def resolved_template_choices() -> list[str]:
+    """页面模板清单。
+
+    - 用户在全局设置里维护过 → 用它
+    - 否则用已知的 5 个栏目模板打底
+    """
+    value = runtime.get("template_choices")
+    if isinstance(value, list):
+        cleaned = [str(item).strip() for item in value if str(item).strip()]
+        if cleaned:
+            return cleaned
+    return list(KNOWN_PAGE_TEMPLATES)
 
 
 def resolved_default_publish_time() -> str:

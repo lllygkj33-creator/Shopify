@@ -35,6 +35,7 @@
 import axios, { AxiosError } from 'axios'
 import type {
   BlogItem,
+  TemplateList,
   ConnectionCheck,
   ValidateResultItem,
   ContentItem,
@@ -166,6 +167,33 @@ export const settingsApi = {
   refreshToken(): Promise<GlobalSettings> {
     if (USE_MOCK) return mockDelay(mockApi.refreshToken(), 600)
     return send<GlobalSettings>('post', '/api/settings/token/refresh')
+  },
+}
+
+// ---------------------------------------------------------------------------
+// 页面模板（Custom 文章的模板选择器）
+// ---------------------------------------------------------------------------
+
+export const templatesApi = {
+  /**
+   * 列出可选模板。后端是**双来源**：优先读店铺主题（需要 `read_themes`），
+   * 无权限时回退到全局设置里维护的清单，并在 `reason` 里说明原因。
+   */
+  list(): Promise<TemplateList> {
+    if (USE_MOCK) {
+      return mockDelay({
+        source: 'manual' as const,
+        templates: [
+          'community_post',
+          'discord-page',
+          'user-story',
+          'nas-a-vs-b',
+          'makerworld-page',
+        ],
+        reason: '演示模式：未连接后端，展示内置清单',
+      })
+    }
+    return get<TemplateList>('/api/theme/templates')
   },
 }
 

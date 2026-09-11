@@ -24,6 +24,7 @@ from .shopify.backlink import (
     load_backlink,
 )
 from .shopify.client import ShopifyError, shopify_client
+from .shopify.templates import TemplateList, template_service
 from .shopify.vs_resources import ResourceInjectionError, inject_resources
 from .shopify.page_publisher import (
     PagePublishError,
@@ -102,6 +103,8 @@ class SettingsResponse(BaseModel):
     relatedProductTitles: list[str] = Field(default_factory=list)
     defaultTimezone: str
     defaultPublishTime: str
+    # 页面模板清单（Custom 文章的模板选择器用）
+    templateChoices: list[str] = Field(default_factory=list)
 
 
 class SettingsUpdate(BaseModel):
@@ -115,6 +118,7 @@ class SettingsUpdate(BaseModel):
     relatedProductTitles: list[str] | None = None
     defaultTimezone: str | None = None
     defaultPublishTime: str | None = None
+    templateChoices: list[str] | None = None
 
 
 class ConnectionCheckResponse(BaseModel):
@@ -295,6 +299,7 @@ async def _build_settings_response() -> SettingsResponse:
         relatedProductTitles=app_config.resolved_related_products(),
         defaultTimezone=app_config.resolved_timezone(),
         defaultPublishTime=app_config.resolved_default_publish_time(),
+        templateChoices=app_config.resolved_template_choices(),
     )
 
 
@@ -340,6 +345,10 @@ async def update_settings(payload: SettingsUpdate) -> SettingsResponse:
         patch["default_timezone"] = payload.defaultTimezone.strip()
     if payload.defaultPublishTime is not None:
         patch["default_publish_time"] = payload.defaultPublishTime.strip()
+    if payload.templateChoices is not None:
+        patch["template_choices"] = [
+            item.strip() for item in payload.templateChoices if item.strip()
+        ]
 
     app_config.runtime.update(patch)
 
@@ -401,6 +410,20 @@ async def refresh_token() -> SettingsResponse:
     except TokenError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
     return await _build_settings_response()
+
+
+@app.get("/api/theme/templates", response_model=TemplateList)
+async def list_theme_templates() -> TemplateList:
+    """列出可选的页面模板（templateSuffix）。
+
+    **双来源**：
+      1. 店铺主题（`read_themes` 权限可用时）—— 读 `templates/page.<suffix>.liquid`
+      2. 全局设置里维护的模板清单（兜底）
+
+    Shopify 对**不存在的 templateSuffix 是静默回退**到主题默认模板，不报错，
+    所以「模板名写错」会静默发错样式。这个清单就是为了避免这种情况。
+    """
+    return await template_service.list_templates()
 
 
 @app.get("/api/blogs", response_model=list[BlogItem])

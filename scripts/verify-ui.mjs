@@ -309,6 +309,54 @@ if (flowErrors.length > 0) problems.push(`上传流程 page errors: ${flowErrors
 await flow.close()
 
 // ===========================================================================
+// Custom 文章：模板自由 + 可搜索选定的模板选择器
+// ===========================================================================
+const custom = await context.newPage()
+const customErrors = []
+custom.on('pageerror', (error) => customErrors.push(error.message))
+try {
+  await custom.goto(`${BASE}/channels/custom`, { waitUntil: 'networkidle' })
+  await custom.locator('input[type="file"]').setInputFiles('scripts/fixtures/Custom')
+  await custom.waitForSelector('text=已导入', { timeout: 10_000 })
+
+  // 模板选择器（role=combobox）应显示 JSON 里的模板名
+  const trigger = custom.locator('[role="combobox"]').first()
+  await trigger.waitFor({ timeout: 8_000 })
+  const shown = (await trigger.textContent())?.trim()
+
+  await trigger.click()
+  const search = custom.locator('input[placeholder="搜索模板名…"]')
+  await search.waitFor({ timeout: 8_000 })
+  const optionCount = await custom.locator('[cmdk-item]').count()
+
+  // 搜索过滤
+  await search.fill('makerworld')
+  await custom.waitForTimeout(300)
+  const filtered = await custom.locator('[cmdk-item]').count()
+  await custom.screenshot({ path: `${OUT_DIR}/custom-template-picker.png` })
+
+  console.log('\n---------- Custom 文章模板选择器 ----------')
+  console.log(`按钮显示模板      : ${shown}`)
+  console.log(`可选模板数量      : ${optionCount}`)
+  console.log(`搜索 "makerworld" 后: ${filtered}`)
+
+  if (!shown?.includes('custom-articles-template-v1')) {
+    problems.push(`模板选择器没有显示 JSON 里的模板名，实际：${shown}`)
+  }
+  if (optionCount < 5) {
+    problems.push(`模板清单应至少 5 项，实际 ${optionCount}`)
+  }
+  if (filtered !== 1) {
+    problems.push(`搜索 "makerworld" 应只剩 1 项，实际 ${filtered}`)
+  }
+} catch (error) {
+  problems.push(`Custom 模板选择器: ${error.message}`)
+  console.log(`✗ Custom 模板选择器失败：${error.message}`)
+}
+if (customErrors.length > 0) problems.push(`Custom 页 page errors: ${customErrors.join(' | ')}`)
+await custom.close()
+
+// ===========================================================================
 // 设置页：令牌有效期可视 + 栏目 → 博客映射自检
 // ===========================================================================
 const settings = await context.newPage()

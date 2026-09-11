@@ -65,6 +65,7 @@ const schema = z.object({
   defaultPublishTime: z
     .string()
     .regex(/^\d{2}:\d{2}$/, '格式应为 HH:mm'),
+  templateChoices: z.string().optional(),
 })
 
 type FormValues = z.infer<typeof schema>
@@ -97,6 +98,7 @@ export function GlobalSettingsForm() {
       relatedProductTitles: '',
       defaultTimezone: 'Asia/Shanghai',
       defaultPublishTime: '09:30',
+      templateChoices: '',
     },
   })
 
@@ -112,6 +114,7 @@ export function GlobalSettingsForm() {
       relatedProductTitles: data.relatedProductTitles.join('\n'),
       defaultTimezone: data.defaultTimezone,
       defaultPublishTime: data.defaultPublishTime,
+      templateChoices: data.templateChoices.join('\n'),
     })
   }, [data, form])
 
@@ -130,6 +133,7 @@ export function GlobalSettingsForm() {
         relatedProductTitles: toLines(values.relatedProductTitles),
         defaultTimezone: values.defaultTimezone,
         defaultPublishTime: values.defaultPublishTime,
+        templateChoices: toLines(values.templateChoices),
       }),
     onSuccess: () => {
       toast.success('设置已保存，所有栏目发布器立即生效')
@@ -504,6 +508,30 @@ export function GlobalSettingsForm() {
                 </FormControl>
                 <FormDescription>
                   reviewer metaobject 引用，缺失时发布器会跳过该字段。
+                </FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name='templateChoices'
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>页面模板清单</FormLabel>
+                <FormControl>
+                  <Textarea
+                    placeholder='每行一个 templateSuffix，例如 community_post'
+                    className='min-h-24 font-mono text-xs'
+                    {...field}
+                  />
+                </FormControl>
+                <FormDescription>
+                  「Custom 文章」的模板选择器会列出这些模板。留空则用内置的 5 个栏目模板。
+                  <br />
+                  如果能读店铺主题（需要 <code>read_themes</code> 权限），会优先列出主题里
+                  实际的 <code>templates/page.*.liquid</code>，这份清单作为兜底。
                 </FormDescription>
                 <FormMessage />
               </FormItem>

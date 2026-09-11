@@ -57,6 +57,13 @@ function buildMockSettings(): GlobalSettings {
     ],
     defaultTimezone: 'Asia/Shanghai',
     defaultPublishTime: '09:30',
+    templateChoices: [
+      'community_post',
+      'discord-page',
+      'user-story',
+      'nas-a-vs-b',
+      'makerworld-page',
+    ],
   }
 }
 
