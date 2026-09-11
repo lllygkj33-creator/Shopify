@@ -1,5 +1,10 @@
-import { AlertTriangle, CalendarClock, CheckCircle2, FileEdit } from 'lucide-react'
 import type { DashboardStats } from '@/types/content'
+import {
+  AlertTriangle,
+  CalendarClock,
+  CheckCircle2,
+  FileEdit,
+} from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 

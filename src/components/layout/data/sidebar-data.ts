@@ -1,3 +1,5 @@
+import { CHANNELS, type Channel } from '@/config/channels'
+import { site } from '@/config/site'
 import {
   BookOpenCheck,
   Boxes,
@@ -14,9 +16,7 @@ import {
   Users,
 } from 'lucide-react'
 import { BrandMark } from '@/assets/brand-mark'
-import { CHANNELS, type Channel } from '@/config/channels'
 import { type SidebarData } from '../types'
-import { site } from '@/config/site'
 
 /**
  * 栏目 id → 图标。

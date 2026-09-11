@@ -1,11 +1,8 @@
 import { useQuery } from '@tanstack/react-query'
+import { CONTENT_STATUS_META, type ContentStatus } from '@/types/content'
 import { ExternalLink, RefreshCw } from 'lucide-react'
 import { historyApi } from '@/lib/api'
 import { formatInTimezone, relativeTime } from '@/lib/datetime'
-import {
-  CONTENT_STATUS_META,
-  type ContentStatus,
-} from '@/types/content'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -17,7 +14,11 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 
 type HistoryTableProps = {
   channelId: string
@@ -61,7 +62,9 @@ export function HistoryTable({ channelId, timezone }: HistoryTableProps) {
           onClick={() => refetch()}
           disabled={isFetching}
         >
-          <RefreshCw className={isFetching ? 'size-4 animate-spin' : 'size-4'} />
+          <RefreshCw
+            className={isFetching ? 'size-4 animate-spin' : 'size-4'}
+          />
           刷新
         </Button>
       </div>

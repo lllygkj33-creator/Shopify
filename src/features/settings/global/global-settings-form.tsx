@@ -1,17 +1,18 @@
 import { useEffect, useState } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { zodResolver } from '@hookform/resolvers/zod'
-import { Eye, EyeOff, Loader2, Plug, Save } from 'lucide-react'
-import { useForm, useWatch } from 'react-hook-form'
-import { toast } from 'sonner'
 import { z } from 'zod'
-import { settingsApi } from '@/lib/api'
-import { TIMEZONE_OPTIONS } from '@/lib/datetime'
+import { useForm, useWatch } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { site } from '@/config/site'
 import {
   TOKEN_SOURCE_META,
   type ConnectionCheck,
   type TokenSource,
 } from '@/types/content'
+import { Eye, EyeOff, Loader2, Plug, Save } from 'lucide-react'
+import { toast } from 'sonner'
+import { settingsApi } from '@/lib/api'
+import { TIMEZONE_OPTIONS } from '@/lib/datetime'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -34,11 +35,10 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Separator } from '@/components/ui/separator'
-import { Textarea } from '@/components/ui/textarea'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Textarea } from '@/components/ui/textarea'
 import { ChannelMappingCheck } from './channel-mapping-check'
 import { SyncPanel } from './sync-panel'
-import { site } from '@/config/site'
 import { TokenStatusPanel } from './token-status-panel'
 
 /**
@@ -64,9 +64,7 @@ const schema = z.object({
   defaultReviewers: z.string().optional(),
   relatedProductTitles: z.string().optional(),
   defaultTimezone: z.string().min(1),
-  defaultPublishTime: z
-    .string()
-    .regex(/^\d{2}:\d{2}$/, '格式应为 HH:mm'),
+  defaultPublishTime: z.string().regex(/^\d{2}:\d{2}$/, '格式应为 HH:mm'),
   templateChoices: z.string().optional(),
 })
 
@@ -153,7 +151,11 @@ export function GlobalSettingsForm() {
       else toast.error(result.error ?? '连接失败')
     },
     onError: (error: Error) => {
-      setCheck({ ok: false, checkedAt: new Date().toISOString(), error: error.message })
+      setCheck({
+        ok: false,
+        checkedAt: new Date().toISOString(),
+        error: error.message,
+      })
       toast.error(error.message)
     },
   })
@@ -246,9 +248,10 @@ export function GlobalSettingsForm() {
             </AlertTitle>
             <AlertDescription className='text-xs'>
               Shopify 的 <code>client_credentials</code> 换来的 shpat_ 令牌实测
-              86398 秒（24 小时）后失效。所以平台把它当作**派生凭据**而不是配置：
-              长期保存的是 CLIENT_ID / CLIENT_SECRET，access token 在内存里缓存并在
-              到期前自动续期。请优先使用「自动续期」。
+              86398 秒（24
+              小时）后失效。所以平台把它当作**派生凭据**而不是配置：
+              长期保存的是 CLIENT_ID / CLIENT_SECRET，access token
+              在内存里缓存并在 到期前自动续期。请优先使用「自动续期」。
             </AlertDescription>
           </Alert>
 
@@ -264,48 +267,53 @@ export function GlobalSettingsForm() {
                     onValueChange={field.onChange}
                     className='gap-3'
                   >
-                    {(['auto', 'env', 'manual'] as TokenSource[]).map((value) => {
-                      const meta = TOKEN_SOURCE_META[value]
-                      const disabled =
-                        value === 'auto' && data ? !data.hasClientCredentials : false
-                      return (
-                        <div
-                          key={value}
-                          className='flex items-start gap-3 rounded-md border p-3'
-                        >
-                          <RadioGroupItem
-                            value={value}
-                            id={`token-${value}`}
-                            className='mt-0.5'
-                            disabled={disabled}
-                          />
-                          <div className='space-y-1'>
-                            <label
-                              htmlFor={`token-${value}`}
-                              className='flex items-center gap-2 text-sm font-medium'
-                            >
-                              {meta.label}
-                              {meta.autoRenew && (
-                                <Badge
-                                  variant='outline'
-                                  className='border-emerald-500/40 text-[10px] font-normal text-emerald-600'
-                                >
-                                  不会过期
-                                </Badge>
-                              )}
-                            </label>
-                            <p className='text-xs text-muted-foreground'>
-                              {meta.hint}
-                            </p>
-                            {disabled && (
-                              <p className='text-xs text-amber-600'>
-                                未检测到 CLIENT_ID / CLIENT_SECRET，请在 .env 中配置后重启后端。
+                    {(['auto', 'env', 'manual'] as TokenSource[]).map(
+                      (value) => {
+                        const meta = TOKEN_SOURCE_META[value]
+                        const disabled =
+                          value === 'auto' && data
+                            ? !data.hasClientCredentials
+                            : false
+                        return (
+                          <div
+                            key={value}
+                            className='flex items-start gap-3 rounded-md border p-3'
+                          >
+                            <RadioGroupItem
+                              value={value}
+                              id={`token-${value}`}
+                              className='mt-0.5'
+                              disabled={disabled}
+                            />
+                            <div className='space-y-1'>
+                              <label
+                                htmlFor={`token-${value}`}
+                                className='flex items-center gap-2 text-sm font-medium'
+                              >
+                                {meta.label}
+                                {meta.autoRenew && (
+                                  <Badge
+                                    variant='outline'
+                                    className='border-emerald-500/40 text-[10px] font-normal text-emerald-600'
+                                  >
+                                    不会过期
+                                  </Badge>
+                                )}
+                              </label>
+                              <p className='text-xs text-muted-foreground'>
+                                {meta.hint}
                               </p>
-                            )}
+                              {disabled && (
+                                <p className='text-xs text-amber-600'>
+                                  未检测到 CLIENT_ID / CLIENT_SECRET，请在 .env
+                                  中配置后重启后端。
+                                </p>
+                              )}
+                            </div>
                           </div>
-                        </div>
-                      )
-                    })}
+                        )
+                      }
+                    )}
                   </RadioGroup>
                 </FormControl>
               </FormItem>
@@ -327,9 +335,7 @@ export function GlobalSettingsForm() {
           */}
           {data && (
             <SyncPanel
-              hasCredentials={
-                data.hasAccessToken || data.hasClientCredentials
-              }
+              hasCredentials={data.hasAccessToken || data.hasClientCredentials}
               timezone={data.defaultTimezone}
             />
           )}
@@ -366,8 +372,8 @@ export function GlobalSettingsForm() {
                     </div>
                   </FormControl>
                   <FormDescription>
-                    保存到本地 0600 权限文件，界面只显示掩码。若 token 已在仓库中出现过，
-                    建议在 Shopify 后台重新签发。
+                    保存到本地 0600 权限文件，界面只显示掩码。若 token
+                    已在仓库中出现过， 建议在 Shopify 后台重新签发。
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -414,12 +420,13 @@ export function GlobalSettingsForm() {
                     缺少权限：{check.missingScopes.join(', ')}
                   </span>
                 )}
-                {check.blogMissingScopes && check.blogMissingScopes.length > 0 && (
-                  <span className='mt-1 block text-xs'>
-                    发页面不受影响；但发博客文章还需要：
-                    {check.blogMissingScopes.join('、')}
-                  </span>
-                )}
+                {check.blogMissingScopes &&
+                  check.blogMissingScopes.length > 0 && (
+                    <span className='mt-1 block text-xs'>
+                      发页面不受影响；但发博客文章还需要：
+                      {check.blogMissingScopes.join('、')}
+                    </span>
+                  )}
               </AlertDescription>
             </Alert>
           )}
@@ -432,8 +439,8 @@ export function GlobalSettingsForm() {
           <div>
             <h3 className='text-base font-medium'>栏目 → 博客映射自检</h3>
             <p className='text-sm text-muted-foreground'>
-              把配置里的 blogName / blogHandle 与店铺实际数据逐条对比。
-              Shopify 侧的博客标题一旦被改，按标题匹配的发布器就会立刻失效，
+              把配置里的 blogName / blogHandle 与店铺实际数据逐条对比。 Shopify
+              侧的博客标题一旦被改，按标题匹配的发布器就会立刻失效，
               所以这里提前暴露不一致。
             </p>
           </div>
@@ -543,10 +550,12 @@ export function GlobalSettingsForm() {
                   />
                 </FormControl>
                 <FormDescription>
-                  「Custom 文章」的模板选择器会列出这些模板。留空则用内置的 5 个栏目模板。
+                  「Custom 文章」的模板选择器会列出这些模板。留空则用内置的 5
+                  个栏目模板。
                   <br />
-                  如果能读店铺主题（需要 <code>read_themes</code> 权限），会优先列出主题里
-                  实际的 <code>templates/page.*.liquid</code>，这份清单作为兜底。
+                  如果能读店铺主题（需要 <code>read_themes</code>{' '}
+                  权限），会优先列出主题里 实际的{' '}
+                  <code>templates/page.*.liquid</code>，这份清单作为兜底。
                 </FormDescription>
                 <FormMessage />
               </FormItem>

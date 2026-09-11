@@ -31,7 +31,6 @@
  *  4. 批量发布要**逐条返回结果**，单条失败不能影响其他条目
  *     （对应 PublishResult.items[].error）。
  */
-
 import axios, { AxiosError } from 'axios'
 import type {
   BlogItem,
@@ -117,7 +116,10 @@ function toApiError(error: unknown): ApiError {
   return new ApiError(String(error))
 }
 
-async function get<T>(url: string, params?: Record<string, unknown>): Promise<T> {
+async function get<T>(
+  url: string,
+  params?: Record<string, unknown>
+): Promise<T> {
   try {
     const { data } = await http.get<T>(url, { params })
     return data
@@ -158,7 +160,9 @@ export const settingsApi = {
   update(payload: SettingsUpdatePayload): Promise<GlobalSettings> {
     if (USE_MOCK) {
       return mockDelay(
-        mockApi.updateSettings(payload as Parameters<typeof mockApi.updateSettings>[0])
+        mockApi.updateSettings(
+          payload as Parameters<typeof mockApi.updateSettings>[0]
+        )
       )
     }
     return send<GlobalSettings>('put', '/api/settings', payload)

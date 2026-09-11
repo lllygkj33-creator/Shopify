@@ -1,3 +1,4 @@
+import { TOKEN_SOURCE_META, type GlobalSettings } from '@/types/content'
 import {
   AlertTriangle,
   CheckCircle2,
@@ -7,10 +8,6 @@ import {
   ShieldAlert,
 } from 'lucide-react'
 import { formatInTimezone, relativeTime } from '@/lib/datetime'
-import {
-  TOKEN_SOURCE_META,
-  type GlobalSettings,
-} from '@/types/content'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
@@ -61,11 +58,7 @@ export function TokenStatusPanel({
   const expiringSoon =
     !expired && remaining != null && remaining < WARN_THRESHOLD
 
-  const statusColor = expired
-    ? '#ef4444'
-    : expiringSoon
-      ? '#f59e0b'
-      : '#22c55e'
+  const statusColor = expired ? '#ef4444' : expiringSoon ? '#f59e0b' : '#22c55e'
 
   return (
     <div className='space-y-3 rounded-md border p-3'>
@@ -86,9 +79,7 @@ export function TokenStatusPanel({
               )}
               {settings.accessTokenMasked}
             </Badge>
-            <span className='text-muted-foreground'>
-              {sourceMeta.label}
-            </span>
+            <span className='text-muted-foreground'>{sourceMeta.label}</span>
           </>
         ) : settings.tokenSource === 'auto' && settings.hasClientCredentials ? (
           // auto 模式下后端是懒加载令牌：凭据齐全但还没换过，
@@ -97,7 +88,10 @@ export function TokenStatusPanel({
             凭据已配置，首次调用时自动换取令牌
           </Badge>
         ) : (
-          <Badge variant='outline' className='border-amber-500/50 text-amber-600'>
+          <Badge
+            variant='outline'
+            className='border-amber-500/50 text-amber-600'
+          >
             未配置 token，无法发布
           </Badge>
         )}
@@ -115,7 +109,9 @@ export function TokenStatusPanel({
           <span className='flex items-center gap-1.5'>
             <Clock className='size-3.5' style={{ color: statusColor }} />
             {settings.tokenNeverExpires ? (
-              <span className='text-muted-foreground'>长期有效（该来源不会自动续期）</span>
+              <span className='text-muted-foreground'>
+                长期有效（该来源不会自动续期）
+              </span>
             ) : (
               <span style={{ color: statusColor }}>
                 剩余 {formatRemaining(remaining)}
@@ -160,7 +156,9 @@ export function TokenStatusPanel({
       )}
 
       {settings.tokenError && (
-        <p className='text-xs text-destructive'>最近一次错误：{settings.tokenError}</p>
+        <p className='text-xs text-destructive'>
+          最近一次错误：{settings.tokenError}
+        </p>
       )}
 
       {/* ---- 不会自动续期的来源要明确告警 ---- */}

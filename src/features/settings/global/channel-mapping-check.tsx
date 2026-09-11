@@ -1,7 +1,8 @@
 import { useQuery } from '@tanstack/react-query'
-import { AlertTriangle, CheckCircle2, RefreshCw } from 'lucide-react'
 import { CHANNELS } from '@/config/channels'
+import { AlertTriangle, CheckCircle2, RefreshCw } from 'lucide-react'
 import { blogsApi } from '@/lib/api'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -13,7 +14,6 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 
 /**
  * 栏目 → Shopify Blog 映射自检
@@ -107,7 +107,9 @@ export function ChannelMappingCheck() {
           onClick={() => refetch()}
           disabled={isFetching}
         >
-          <RefreshCw className={isFetching ? 'size-3 animate-spin' : 'size-3'} />
+          <RefreshCw
+            className={isFetching ? 'size-3 animate-spin' : 'size-3'}
+          />
           重新核对
         </Button>
       </div>
@@ -120,12 +122,14 @@ export function ChannelMappingCheck() {
           </AlertTitle>
           <AlertDescription>
             <span>
-              {broken.map((row) => row.channel.name).join('、')}
-              {' '}的名称与店铺实际不符。发布这些栏目会直接失败（运行时找不到 Blog）。
+              {broken.map((row) => row.channel.name).join('、')}{' '}
+              的名称与店铺实际不符。发布这些栏目会直接失败（运行时找不到
+              Blog）。
             </span>
             <span className='mt-1 block text-xs'>
-              修法：把 <code>src/config/channels.ts</code> 里的 <code>blogName</code>{' '}
-              改成右侧「店铺实际」的值，或在 Shopify 后台把博客改成配置里的名字。
+              修法：把 <code>src/config/channels.ts</code> 里的{' '}
+              <code>blogName</code> 改成右侧「店铺实际」的值，或在 Shopify
+              后台把博客改成配置里的名字。
             </span>
           </AlertDescription>
         </Alert>
@@ -137,9 +141,11 @@ export function ChannelMappingCheck() {
           <AlertTitle>全部栏目都能匹配到店铺博客</AlertTitle>
           {titleOnly.length > 0 && (
             <AlertDescription>
-              其中 {titleOnly.length} 个是**靠标题**匹配成功的（handle 不一致）：
+              其中 {titleOnly.length} 个是**靠标题**匹配成功的（handle
+              不一致）：
               {titleOnly.map((row) => row.channel.name).join('、')}。
-              标题随时可能被改动，建议把 <code>blogHandle</code> 也修正为店铺实际值。
+              标题随时可能被改动，建议把 <code>blogHandle</code>{' '}
+              也修正为店铺实际值。
             </AlertDescription>
           )}
         </Alert>
@@ -213,7 +219,9 @@ export function ChannelMappingCheck() {
       {unusedBlogs.length > 0 && (
         <p className='text-xs text-muted-foreground'>
           店铺里未被任何栏目使用的博客：
-          {unusedBlogs.map((blog) => `${blog.name}（${blog.handle}）`).join('、')}
+          {unusedBlogs
+            .map((blog) => `${blog.name}（${blog.handle}）`)
+            .join('、')}
         </p>
       )}
     </div>

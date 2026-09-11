@@ -1,5 +1,5 @@
-import { AlertCircle, AlertTriangle } from 'lucide-react'
 import type { ParsedCandidate, PublishMode } from '@/types/content'
+import { AlertCircle, AlertTriangle } from 'lucide-react'
 import {
   formatTimezoneOffset,
   isPastWallTime,
@@ -25,7 +25,11 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 import { TemplatePicker } from './template-picker'
 
 export type PublishPlan = {
@@ -92,7 +96,9 @@ export function CandidateList({
               wallTime: '',
             }
             const errors = candidate.issues.filter((i) => i.level === 'error')
-            const warnings = candidate.issues.filter((i) => i.level === 'warning')
+            const warnings = candidate.issues.filter(
+              (i) => i.level === 'warning'
+            )
             const blocked = errors.length > 0
 
             return (
@@ -119,7 +125,8 @@ export function CandidateList({
                     </p>
                     <p className='truncate text-xs text-muted-foreground/70'>
                       {candidate.sourceFile}
-                      {candidate.sourceIndex > 0 && ` #${candidate.sourceIndex + 1}`}
+                      {candidate.sourceIndex > 0 &&
+                        ` #${candidate.sourceIndex + 1}`}
                     </p>
                   </div>
                 </TableCell>

@@ -1,5 +1,5 @@
-import { Link } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
+import { Link } from '@tanstack/react-router'
 import { AlertTriangle, ChevronRight, Plug } from 'lucide-react'
 import { settingsApi, USE_MOCK } from '@/lib/api'
 import { Badge } from '@/components/ui/badge'

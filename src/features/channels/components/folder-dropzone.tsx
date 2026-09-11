@@ -62,7 +62,11 @@ async function walkEntry(
     })
     while (batch.length > 0) {
       for (const child of batch) {
-        await walkEntry(child, prefix ? `${prefix}/${entry.name}` : entry.name, out)
+        await walkEntry(
+          child,
+          prefix ? `${prefix}/${entry.name}` : entry.name,
+          out
+        )
       }
       batch = await new Promise<FileSystemEntry[]>((resolve) => {
         reader.readEntries(
@@ -137,9 +141,11 @@ export function FolderDropzone({
       const entries = items
         .map((item) =>
           'webkitGetAsEntry' in item
-            ? (item as DataTransferItem & {
-                webkitGetAsEntry: () => FileSystemEntry | null
-              }).webkitGetAsEntry()
+            ? (
+                item as DataTransferItem & {
+                  webkitGetAsEntry: () => FileSystemEntry | null
+                }
+              ).webkitGetAsEntry()
             : null
         )
         .filter((entry): entry is FileSystemEntry => Boolean(entry))

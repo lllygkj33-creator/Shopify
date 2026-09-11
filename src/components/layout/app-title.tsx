@@ -7,8 +7,8 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from '@/components/ui/sidebar'
-import { sidebarData } from './data/sidebar-data'
 import { Button } from '../ui/button'
+import { sidebarData } from './data/sidebar-data'
 
 /** 侧边栏顶部品牌区（替代模板的 workspace 切换器） */
 export function AppTitle() {

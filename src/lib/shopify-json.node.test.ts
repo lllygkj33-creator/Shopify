@@ -22,7 +22,9 @@ import {
 
 /** 4 个 H2，满足 related_products 占位符注入条件 */
 // 正文 class 属于**部署配置**（栏目的 htmlClass），测试从配置取
-const BUYING_GUIDE = CHANNELS.find((c) => c.contentType === 'blog_article' && c.htmlClass)
+const BUYING_GUIDE = CHANNELS.find(
+  (c) => c.contentType === 'blog_article' && c.htmlClass
+)
 const BLOG_CLASS = BUYING_GUIDE?.htmlClass ?? 'example-blog-a-article'
 // 这个栏目的 class 名与 id 不同形（comparisons / comparison），专门用来钉住映射
 const PC = CHANNELS.find((c) => c.id === 'product-comparison')!
@@ -67,8 +69,7 @@ describe('parseJsonContent —— 博客文章（数组 schema）', () => {
       {
         'blog title': 'X',
         url: 'x',
-        html代码:
-          `<article class="${PC.htmlClass}"><h2>a</h2></article>`,
+        html代码: `<article class="${PC.htmlClass}"><h2>a</h2></article>`,
       },
     ])
 
@@ -93,8 +94,11 @@ describe('parseJsonContent —— 博客文章（数组 schema）', () => {
       },
     ])
 
-    const [candidate] = parseJsonContent(text, 'a.json', BUYING_GUIDE!.id)
-      .candidates
+    const [candidate] = parseJsonContent(
+      text,
+      'a.json',
+      BUYING_GUIDE!.id
+    ).candidates
 
     expect(candidate.channelId).toBe(BUYING_GUIDE!.id)
     // 落回的是**该栏目配置的博客名**
@@ -340,7 +344,10 @@ describe('resolveBlogName', () => {
     const result = resolveBlogName(
       `<article class="${BUYING_GUIDE!.htmlClass}"></article>`
     )
-    expect(result).toEqual({ blogName: BUYING_GUIDE!.blogName, source: 'class' })
+    expect(result).toEqual({
+      blogName: BUYING_GUIDE!.blogName,
+      source: 'class',
+    })
   })
 
   it('无 class 且无栏目兜底时来源为 none', () => {
@@ -360,7 +367,6 @@ const PAGE_HTML_OK =
   // 第三方外链必须带 _blank + noopener + noreferrer + nofollow（平台外链规则）
   '<a href="https://e.com" title="链接" target="_blank" rel="nofollow noopener noreferrer">l</a></div>'
 
-
 /**
  * 域名与来源前缀是**部署信息**（site.config.json / gitignored 的 local），
  * 测试不能写死成某一家的 —— 否则一份干净的克隆跑测试就红。
@@ -373,7 +379,6 @@ const PROFILE_PREFIX =
   'https://community.example.com/u/'
 const STOREFRONT = site.storefrontDomain
 const FIRST_PARTY = site.firstPartySuffixes[0] ?? 'example.com'
-
 
 /** 用户故事的固定文案与博客名都来自配置，测试不写死 */
 const US_SPEC = CHANNELS.find((c) => c.id === 'user-story')?.pageSpec
@@ -491,8 +496,11 @@ describe('上传阶段校验 —— 博客文章', () => {
     ])
     // HTML_WITH_4_H2 带的是配置里那个博客栏目的 class，要在对应栏目里上传，
     // 否则会命中「这份 JSON 属于别的栏目」的新规则（那是另一条用例的事）
-    const [candidate] = parseJsonContent(raw, 'f.json', BUYING_GUIDE!.id)
-      .candidates
+    const [candidate] = parseJsonContent(
+      raw,
+      'f.json',
+      BUYING_GUIDE!.id
+    ).candidates
 
     expect(errorsOf(candidate)).toEqual([])
   })
@@ -931,8 +939,7 @@ describe('上传阶段校验 —— 用户故事', () => {
       userStory({
         backlink: {
           enabled: true,
-          article_url:
-            `https://${STOREFRONT}/blogs/tech-ai-hub/user-builds-so-far`,
+          article_url: `https://${STOREFRONT}/blogs/tech-ai-hub/user-builds-so-far`,
           lead_in: 'Read the full build story:',
           anchor_text: 'a 350 TB array',
         },
@@ -1395,8 +1402,11 @@ describe('上传栏目与 JSON 归属不一致 → 直接报错', () => {
         html代码: HTML_WITH_4_H2,
       },
     ])
-    const [candidate] = parseJsonContent(raw, 'f.json', BUYING_GUIDE!.id)
-      .candidates
+    const [candidate] = parseJsonContent(
+      raw,
+      'f.json',
+      BUYING_GUIDE!.id
+    ).candidates
 
     expect(errorsOf(candidate)).toEqual([])
   })

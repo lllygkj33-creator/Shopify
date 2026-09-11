@@ -11,7 +11,11 @@ import {
   CommandItem,
   CommandList,
 } from '@/components/ui/command'
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
 
 type TemplatePickerProps = {
   value: string
@@ -99,7 +103,7 @@ export function TemplatePicker({
       {value && options.length > 0 && !options.includes(value) && (
         <p
           className='flex items-start gap-1 text-[10px] text-amber-600'
-          title={source === 'manual' ? sourceReason ?? undefined : undefined}
+          title={source === 'manual' ? (sourceReason ?? undefined) : undefined}
         >
           <AlertTriangle className='mt-0.5 size-3 shrink-0' />
           <span>
@@ -128,9 +132,7 @@ export function TemplatePicker({
               来自设置清单
             </Badge>
           )}
-          {source === 'manual' && (
-            <Info className='size-3' />
-          )}
+          {source === 'manual' && <Info className='size-3' />}
         </p>
       )}
     </div>

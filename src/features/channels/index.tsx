@@ -1,5 +1,11 @@
 import { useCallback, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import type { Channel } from '@/config/channels'
+import type {
+  ParsedCandidate,
+  ParsedFile,
+  PublishResult,
+} from '@/types/content'
 import {
   CalendarClock,
   CheckCircle2,
@@ -11,7 +17,6 @@ import {
   XCircle,
 } from 'lucide-react'
 import { toast } from 'sonner'
-import type { Channel } from '@/config/channels'
 import {
   publishApi,
   settingsApi,
@@ -27,16 +32,6 @@ import {
   wallTimeToIso,
 } from '@/lib/datetime'
 import { parseJsonContent } from '@/lib/shopify-json'
-import type {
-  ParsedCandidate,
-  ParsedFile,
-  PublishResult,
-} from '@/types/content'
-import { ConfigDrawer } from '@/components/config-drawer'
-import { Header } from '@/components/layout/header'
-import { Main } from '@/components/layout/main'
-import { Search } from '@/components/search'
-import { ThemeSwitch } from '@/components/theme-switch'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -49,12 +44,12 @@ import {
 } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from '@/components/ui/tabs'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { ConfigDrawer } from '@/components/config-drawer'
+import { Header } from '@/components/layout/header'
+import { Main } from '@/components/layout/main'
+import { Search } from '@/components/search'
+import { ThemeSwitch } from '@/components/theme-switch'
 import { CandidateList, type PublishPlan } from './components/candidate-list'
 import { FolderDropzone, type PickedFile } from './components/folder-dropzone'
 import { HistoryTable } from './components/history-table'
@@ -362,7 +357,10 @@ export function ChannelPage({ channel }: ChannelPageProps) {
             </h1>
             <p className='flex flex-wrap items-center gap-2 text-sm text-muted-foreground'>
               <span>
-                默认文件夹 <code className='rounded bg-muted px-1'>{channel.defaultFolder}/</code>
+                默认文件夹{' '}
+                <code className='rounded bg-muted px-1'>
+                  {channel.defaultFolder}/
+                </code>
               </span>
               <Badge variant='secondary' className='font-normal'>
                 {channel.contentType === 'blog_article' ? '博客文章' : '页面'}
@@ -409,8 +407,9 @@ export function ChannelPage({ channel }: ChannelPageProps) {
                     <div className='flex items-center justify-between'>
                       <p className='flex items-center gap-2 text-sm'>
                         <FileJson className='size-4 text-muted-foreground' />
-                        已导入 <strong>{parsedFiles.length}</strong> 个文件，解析出{' '}
-                        <strong>{candidates.length}</strong> 条内容
+                        已导入 <strong>{parsedFiles.length}</strong>{' '}
+                        个文件，解析出 <strong>{candidates.length}</strong>{' '}
+                        条内容
                         {validating && (
                           <span className='text-muted-foreground'>
                             （正在做后端权威校验…）
@@ -446,7 +445,9 @@ export function ChannelPage({ channel }: ChannelPageProps) {
                           ) : (
                             <span className='text-muted-foreground'>
                               {file.candidates.length} 条 ·{' '}
-                              {file.detected === 'blog_article' ? '文章' : '页面'}
+                              {file.detected === 'blog_article'
+                                ? '文章'
+                                : '页面'}
                             </span>
                           )}
                         </Badge>
@@ -456,14 +457,17 @@ export function ChannelPage({ channel }: ChannelPageProps) {
                     {fileErrors.length > 0 && (
                       <Alert variant='destructive'>
                         <AlertTitle>
-                          {fileErrors.length} 个文件解析失败（其余文件可正常发布）
+                          {fileErrors.length}{' '}
+                          个文件解析失败（其余文件可正常发布）
                         </AlertTitle>
                         <AlertDescription>
                           <ul className='mt-1 list-disc space-y-0.5 ps-4 text-xs'>
                             {fileErrors.map((file) => (
                               <li key={file.filePath}>
-                                <span className='font-mono'>{file.fileName}</span>：
-                                {file.error}
+                                <span className='font-mono'>
+                                  {file.fileName}
+                                </span>
+                                ：{file.error}
                               </li>
                             ))}
                           </ul>
@@ -483,8 +487,8 @@ export function ChannelPage({ channel }: ChannelPageProps) {
                     <CardTitle className='text-base'>2. 设置发布方式</CardTitle>
                     <CardDescription>
                       可逐篇调整；下面的批量设置作用于已勾选的{' '}
-                      {publishableSelected.length} 篇。时间按{' '}
-                      {timezone}（{formatTimezoneOffset(timezone)}）解释。
+                      {publishableSelected.length} 篇。时间按 {timezone}（
+                      {formatTimezoneOffset(timezone)}）解释。
                     </CardDescription>
                   </CardHeader>
                   <CardContent className='flex flex-wrap items-end gap-3'>
@@ -570,7 +574,8 @@ export function ChannelPage({ channel }: ChannelPageProps) {
                           有 {scheduleInPast.length} 篇的发布时间已经过去
                         </AlertTitle>
                         <AlertDescription>
-                          为避免内容立即公开，Shopify 侧不接受已过去的时间。请改到未来时间，或改用「立即发布」。
+                          为避免内容立即公开，Shopify
+                          侧不接受已过去的时间。请改到未来时间，或改用「立即发布」。
                           <span className='mt-1 block text-xs'>
                             {scheduleInPast
                               .map((candidate) => candidate.title)
@@ -674,9 +679,7 @@ function PublishResultPanel({ result }: { result: PublishResult }) {
               {item.backlinkResult && (
                 <span className='ml-2 text-muted-foreground'>
                   反链：
-                  {item.backlinkResult === 'ADDED'
-                    ? '已追加'
-                    : '已存在，跳过'}
+                  {item.backlinkResult === 'ADDED' ? '已追加' : '已存在，跳过'}
                 </span>
               )}
               {item.backlinkError && (

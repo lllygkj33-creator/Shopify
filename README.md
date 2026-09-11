@@ -11,6 +11,46 @@ ZimaSpace 的 **Shopify 内容托管发布平台**：本地选文件夹 → 上�
 
 ---
 
+## 站点配置：换一家店铺只改这一个文件
+
+代码里**不含任何真实域名、品牌名、产品名、主题模板名** —— 那些是「谁在部署」的信息，
+统一放在仓库根目录的站点配置里。
+
+| 文件                     | 提交？       | 内容                                                                 |
+| ------------------------ | ------------ | -------------------------------------------------------------------- |
+| `site.config.json`       | ✅           | 通用占位值（`example-store.test`）。克隆下来即可跑演示模式与全部测试 |
+| `site.config.local.json` | ❌ gitignore | 你自己的值，**深度覆盖**上一层                                       |
+
+合并规则（前后端一致，各有一份加载器）：字典逐层合并、**数组整体替换**、
+带 `"$replace": true` 的字典整体替换上一层。字符串里的 `${a.b}` 按配置自身展开
+（避免同一个域名写两遍）。
+
+配置里有三块：
+
+```jsonc
+{
+  "brand": { "name": "...", "subtitle": "..." },
+  "storefront": { "domain": "shop.example-store.test" }, // 拼已发布内容的 URL
+  "firstPartySuffixes": ["example-store.test"], // 这些域名按站内处理
+  "community": { "threadPrefix": "...", "userPrefix": "..." },
+  "defaults": { "author": "...", "reviewers": [], "relatedProducts": [] },
+  "coverImageNames": ["..."], // 可作为封面的图片名
+  "vs": { "productLabels": {}, "resourceLibrary": {} },
+  "channels": [
+    /* 栏目表：id/名称/颜色/博客名/模板/校验规格 */
+  ],
+}
+```
+
+前后端读同一份文件：`src/config/site.ts`（前端，用 `import.meta.glob` 读可选的本地覆盖）
+与 `backend/app/site_config.py`（后端）。
+
+**栏目表是配置，不是代码**：侧边栏菜单、发布校验规则、博客归属、模板名全部由它驱动。
+`hidden: true` 的栏目不进菜单但解析器仍认得。
+
+接自己的店铺：把 `site.config.json` 复制成 `site.config.local.json`，
+填自己的域名、品牌、博客名与主题模板名即可（`.env` 里放凭据，两者都不提交）。
+
 ## 快速开始
 
 ### 前端
@@ -185,10 +225,10 @@ PRD §4.3 写的是「由 `html代码` 里的 class 推断博客」。但核对�
 这样的排期页面，平台一条都不知道。不拉进来的话仪表盘的「排期全景」是残缺的：
 用户明明排了 100 多条，界面写 0。所以同步要做两件事：
 
-| | 做什么 | 成本 |
-|---|---|---|
-| **拉未来排期** | `published_status:unpublished` 且时间在未来的内容入库 | 1 次请求（实测 12 文章 + 184 页面各一页）|
-| **对账已知对象** | 按本地 GID 直查，纠正线上改动 | `nodes(ids:)` 一次 250 个 |
+|                  | 做什么                                                | 成本                                      |
+| ---------------- | ----------------------------------------------------- | ----------------------------------------- |
+| **拉未来排期**   | `published_status:unpublished` 且时间在未来的内容入库 | 1 次请求（实测 12 文章 + 184 页面各一页） |
+| **对账已知对象** | 按本地 GID 直查，纠正线上改动                         | `nodes(ids:)` 一次 250 个                 |
 
 两者成本都**不随店铺历史增长**。
 
@@ -241,19 +281,19 @@ Shopify 的 `client_credentials` 流程换来的 `shpat_` 令牌**只有约 24 �
 
 ### 三道保险（`backend/app/shopify/token.py`）
 
-| | 机制 | 作用 |
-|---|---|---|
-| 1 | **提前刷新** | 距过期不足 30 分钟就先换新的，而不是等请求失败 |
-| 2 | **并发去重** | `asyncio.Lock` 保证同时只有一个刷新请求，批量发布不会打爆换 token 接口 |
-| 3 | **401 自愈** | 万一还是撞上 401（时钟偏差、Shopify 提前作废），客户端会作废缓存 → 换新 → **重试原请求一次** |
+|     | 机制         | 作用                                                                                         |
+| --- | ------------ | -------------------------------------------------------------------------------------------- |
+| 1   | **提前刷新** | 距过期不足 30 分钟就先换新的，而不是等请求失败                                               |
+| 2   | **并发去重** | `asyncio.Lock` 保证同时只有一个刷新请求，批量发布不会打爆换 token 接口                       |
+| 3   | **401 自愈** | 万一还是撞上 401（时钟偏差、Shopify 提前作废），客户端会作废缓存 → 换新 → **重试原请求一次** |
 
 ### 三种来源（`token_source`）
 
-| 值 | 含义 | 自动续期 |
-|---|---|---|
-| `auto` ★推荐 | client_credentials 换发 | ✅ 到期前自动换 |
-| `env` | `.env` 里的静态 token（仅适合不过期的自定义应用长期 token） | ❌ |
-| `manual` | 界面手动粘贴 | ❌（若是 24h token，次日就失效） |
+| 值           | 含义                                                        | 自动续期                         |
+| ------------ | ----------------------------------------------------------- | -------------------------------- |
+| `auto` ★推荐 | client_credentials 换发                                     | ✅ 到期前自动换                  |
+| `env`        | `.env` 里的静态 token（仅适合不过期的自定义应用长期 token） | ❌                               |
+| `manual`     | 界面手动粘贴                                                | ❌（若是 24h token，次日就失效） |
 
 选 `env` / `manual` 时，设置页会明确告警「该来源不会自动续期」，
 并显示**剩余有效期倒计时**，避免用户不知道当前令牌已经悄悄失效。
@@ -273,13 +313,13 @@ Shopify 的 `client_credentials` 流程换来的 `shpat_` 令牌**只有约 24 �
 `publish_articles.py` 的 `find_blog_gid()` 用 `casefold()` 做**精确标题匹配**，
 匹配不上直接 `raise RuntimeError`。而 `GEO/config.json` 里写的名称有两个与店铺实际不符：
 
-| 栏目 | `GEO/config.json` 写的 | 店铺实际 | 结果 |
-|---|---|---|---|
-| tech-ai-hub | `Tech & AI Hub` | `Tech & AI HUB` | ✅ casefold 能匹配（HUB 大小写差异） |
-| support-tips | `Support & Tips` | `Support & Tips` | ✅ |
-| product-comparison | `Product Comparisons` | `Product Comparisons` | ✅（但 handle 是复数 `product-comparisons`） |
-| **nas-server-setup** | `NAS Server Setup` | `NAS & Server Setup` | ❌ **发不出去** |
-| **buying-guide** | `Buying Guides` | `Buying Guide` | ❌ **发不出去** |
+| 栏目                 | `GEO/config.json` 写的 | 店铺实际              | 结果                                         |
+| -------------------- | ---------------------- | --------------------- | -------------------------------------------- |
+| tech-ai-hub          | `Tech & AI Hub`        | `Tech & AI HUB`       | ✅ casefold 能匹配（HUB 大小写差异）         |
+| support-tips         | `Support & Tips`       | `Support & Tips`      | ✅                                           |
+| product-comparison   | `Product Comparisons`  | `Product Comparisons` | ✅（但 handle 是复数 `product-comparisons`） |
+| **nas-server-setup** | `NAS Server Setup`     | `NAS & Server Setup`  | ❌ **发不出去**                              |
+| **buying-guide**     | `Buying Guides`        | `Buying Guide`        | ❌ **发不出去**                              |
 
 本项目已把 `src/config/channels.ts` 改成**店铺实际值**（并保留 handle），
 同时在设置页加了「栏目 → 博客映射自检」，把「配置值 vs 店铺实际值」直接摆出来，
@@ -306,23 +346,23 @@ Shopify 的 `client_credentials` 流程换来的 `shpat_` 令牌**只有约 24 �
 
 后端（FastAPI）按下列接口实现即可对接。完整注释见 `src/lib/api.ts`。
 
-| 方法 | 路径 | 返回 |
-|---|---|---|
-| GET | `/api/health` | `{ ok, version }` |
-| GET | `/api/settings` | `GlobalSettings` |
-| PUT | `/api/settings` | `GlobalSettings` |
-| POST | `/api/settings/verify` | `ConnectionCheck` |
-| POST | `/api/settings/token/refresh` | `GlobalSettings`（强制换新令牌） |
-| GET | `/api/blogs` | `{ id, name, handle }[]` |
-| GET | `/api/contents?channel_id=` | `ContentItem[]` |
-| GET | `/api/contents/timeline` | `TimelineBar[]` |
-| GET | `/api/contents/stats` | `DashboardStats` |
-| POST | `/api/publish` | `PublishResult` |
-| PATCH | `/api/contents/{id}` | `ContentItem`（改期） |
-| DELETE | `/api/contents/{id}/schedule` | `ContentItem`（取消排期） |
-| GET | `/api/history?channel_id=` | `PublishHistoryEntry[]` |
-| GET | `/api/sync/status` | `SyncStatus`（跟踪条数 / 排期中条数 / 上次同步 / 间隔） |
-| POST | `/api/sync/run` | `SyncReport`（拉未来排期 + 按 GID 对账） |
+| 方法   | 路径                          | 返回                                                    |
+| ------ | ----------------------------- | ------------------------------------------------------- |
+| GET    | `/api/health`                 | `{ ok, version }`                                       |
+| GET    | `/api/settings`               | `GlobalSettings`                                        |
+| PUT    | `/api/settings`               | `GlobalSettings`                                        |
+| POST   | `/api/settings/verify`        | `ConnectionCheck`                                       |
+| POST   | `/api/settings/token/refresh` | `GlobalSettings`（强制换新令牌）                        |
+| GET    | `/api/blogs`                  | `{ id, name, handle }[]`                                |
+| GET    | `/api/contents?channel_id=`   | `ContentItem[]`                                         |
+| GET    | `/api/contents/timeline`      | `TimelineBar[]`                                         |
+| GET    | `/api/contents/stats`         | `DashboardStats`                                        |
+| POST   | `/api/publish`                | `PublishResult`                                         |
+| PATCH  | `/api/contents/{id}`          | `ContentItem`（改期）                                   |
+| DELETE | `/api/contents/{id}/schedule` | `ContentItem`（取消排期）                               |
+| GET    | `/api/history?channel_id=`    | `PublishHistoryEntry[]`                                 |
+| GET    | `/api/sync/status`            | `SyncStatus`（跟踪条数 / 排期中条数 / 上次同步 / 间隔） |
+| POST   | `/api/sync/run`               | `SyncReport`（拉未来排期 + 按 GID 对账）                |
 
 ### 后端必须遵守的约定
 
@@ -380,12 +420,12 @@ Shopify 的 `client_credentials` 流程换来的 `shpat_` 令牌**只有约 24 �
 本项目的 Shopify API 逻辑**参考并移植** `GEO/publish_articles.py`（1587 行，明文可读）。
 移植时核对出几处与 PRD 描述不符的事实，已按实际代码为准：
 
-| PRD 说法 | 实际情况 |
-|---|---|
-| 现有 `.py` 带 `%TSD-Header-###%` 混淆前缀，需按已知逻辑重写 | **全仓库搜索零命中**，脚本都是明文 Python，可直接移植 |
-| `page_geo.py` 为混淆文件 | 该文件**不存在**；GEO 只有博客 `articleCreate`，**页面发布器是全新工作** |
-| 发布时机靠日期文件夹决定 | 确实如此；新平台由 createdAt/publishDate 驱动，已脱离文件夹 |
-| Token 分散在各脚本 | 确实如此（且 `app_config.json` 里还是明文）；新平台收敛为一处 |
+| PRD 说法                                                    | 实际情况                                                                 |
+| ----------------------------------------------------------- | ------------------------------------------------------------------------ |
+| 现有 `.py` 带 `%TSD-Header-###%` 混淆前缀，需按已知逻辑重写 | **全仓库搜索零命中**，脚本都是明文 Python，可直接移植                    |
+| `page_geo.py` 为混淆文件                                    | 该文件**不存在**；GEO 只有博客 `articleCreate`，**页面发布器是全新工作** |
+| 发布时机靠日期文件夹决定                                    | 确实如此；新平台由 createdAt/publishDate 驱动，已脱离文件夹              |
+| Token 分散在各脚本                                          | 确实如此（且 `app_config.json` 里还是明文）；新平台收敛为一处            |
 
 默认值差异已收敛：`GEO/config.json` 用 `America/Chicago`，`geo_app/app_config.json` 用
 `Asia/Shanghai` + 23:59 —— 新平台**统一为 `Asia/Shanghai`**，这也与店铺实际的
@@ -401,15 +441,15 @@ Shopify 的 `client_credentials` 流程换来的 `shpat_` 令牌**只有约 24 �
 
 ## 里程碑状态
 
-| | 内容 | 状态 |
-|---|---|---|
-| M1 | UI 骨架：侧边栏 + 布局 + 主题切换 | ✅ 完成 |
-| M2 | 全局设置页、Token 统一管理、环境变量读取 | ✅ **界面 + 后端令牌链路均完成**（24h 自动续期、401 自愈、映射自检） |
-| M3 | 栏目发布页：文件夹选择、JSON 解析预览、发布、历史 | ✅ **界面 + 11 个栏目的发布器** |
-| M4 | 调度引擎（状态回写 / 重试） | ✅ 定时发布交给 Shopify 原生机制 + 对账回写状态 |
-| M5 | 仪表盘时间轴可视化 | ✅ 时间轴 + 状态 + 改期弹窗完成 |
-| M6 | 数据层：本地库 + 对账 | ✅ **只记平台自己发过的；按 GID 直查对账** |
-| M7 | 打磨：错误处理、部署打包 | ⬜ 进行中 |
+|     | 内容                                              | 状态                                                                 |
+| --- | ------------------------------------------------- | -------------------------------------------------------------------- |
+| M1  | UI 骨架：侧边栏 + 布局 + 主题切换                 | ✅ 完成                                                              |
+| M2  | 全局设置页、Token 统一管理、环境变量读取          | ✅ **界面 + 后端令牌链路均完成**（24h 自动续期、401 自愈、映射自检） |
+| M3  | 栏目发布页：文件夹选择、JSON 解析预览、发布、历史 | ✅ **界面 + 11 个栏目的发布器**                                      |
+| M4  | 调度引擎（状态回写 / 重试）                       | ✅ 定时发布交给 Shopify 原生机制 + 对账回写状态                      |
+| M5  | 仪表盘时间轴可视化                                | ✅ 时间轴 + 状态 + 改期弹窗完成                                      |
+| M6  | 数据层：本地库 + 对账                             | ✅ **只记平台自己发过的；按 GID 直查对账**                           |
+| M7  | 打磨：错误处理、部署打包                          | ⬜ 进行中                                                            |
 
 ### 下一步待确认 / 待办
 

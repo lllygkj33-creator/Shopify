@@ -1,11 +1,11 @@
 /// <reference types="vitest/config" />
-import fs from 'node:fs'
 import path from 'path'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { tanstackRouter } from '@tanstack/router-plugin/vite'
 import { playwright } from '@vitest/browser-playwright'
+import fs from 'node:fs'
 
 /**
  * 浏览器测试用哪个 Chrome。

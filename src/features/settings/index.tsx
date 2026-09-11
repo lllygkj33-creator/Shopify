@@ -1,11 +1,11 @@
 import { Outlet } from '@tanstack/react-router'
 import { Palette, Settings2 } from 'lucide-react'
+import { Separator } from '@/components/ui/separator'
 import { ConfigDrawer } from '@/components/config-drawer'
 import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
 import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
-import { Separator } from '@/components/ui/separator'
 import { SidebarNav } from './components/sidebar-nav'
 
 /** 设置分区：只保留本平台真正需要的两项（不含模板的 Profile/Billing/Notifications） */

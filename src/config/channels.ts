@@ -1,3 +1,16 @@
+/** 10 个内容栏目，顺序即菜单顺序（§3.2） */
+/**
+ * 三组栏目都**从站点配置构建**（site.config.json / site.config.local.json）。
+ *
+ * 栏目里的模板名、博客标题、metafield 键、来源 URL 前缀都是「谁在部署」的信息，
+ * 不再是代码里的事实 —— 换一家店铺只要改配置，不用改这个文件。
+ * 配置里的顺序就是菜单顺序；带 `hidden: true` 的不进菜单但解析器仍认得。
+ *
+ * 类型定义留在本文件（Channel / PageSpec），构建逻辑在 site.ts，
+ * 那边对本文件只有 type-only 依赖，所以不会形成运行时循环。
+ */
+import { ALL_CHANNELS } from './site'
+
 /**
  * 栏目注册表 —— 全站唯一事实来源（single source of truth）
  *
@@ -137,21 +150,7 @@ export type PageSpec = {
   verified: boolean
 }
 
-/** 10 个内容栏目，顺序即菜单顺序（§3.2） */
-/**
- * 三组栏目都**从站点配置构建**（site.config.json / site.config.local.json）。
- *
- * 栏目里的模板名、博客标题、metafield 键、来源 URL 前缀都是「谁在部署」的信息，
- * 不再是代码里的事实 —— 换一家店铺只要改配置，不用改这个文件。
- * 配置里的顺序就是菜单顺序；带 `hidden: true` 的不进菜单但解析器仍认得。
- *
- * 类型定义留在本文件（Channel / PageSpec），构建逻辑在 site.ts，
- * 那边对本文件只有 type-only 依赖，所以不会形成运行时循环。
- */
-import { ALL_CHANNELS } from './site'
-
 export { CHANNELS } from './site'
-
 
 export function getChannel(id: string): Channel | undefined {
   return ALL_CHANNELS.find((channel) => channel.id === id)

@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
+import { getChannel } from '@/config/channels'
+import { CONTENT_STATUS_META, type TimelineBar } from '@/types/content'
 import { ExternalLink, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { contentApi } from '@/lib/api'
@@ -11,11 +13,6 @@ import {
   relativeTime,
   wallTimeToIso,
 } from '@/lib/datetime'
-import {
-  CONTENT_STATUS_META,
-  type TimelineBar,
-} from '@/types/content'
-import { getChannel } from '@/config/channels'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -71,11 +68,7 @@ type ContentProps = {
   onOpenChange: (open: boolean) => void
 }
 
-function ScheduleDialogContent({
-  bar,
-  timezone,
-  onOpenChange,
-}: ContentProps) {
+function ScheduleDialogContent({ bar, timezone, onOpenChange }: ContentProps) {
   const queryClient = useQueryClient()
   const navigate = useNavigate()
   const [wallTime, setWallTime] = useState(() => {
@@ -96,15 +89,20 @@ function ScheduleDialogContent({
     onSuccess: (result) => {
       // 本地记录与 Shopify 侧是两件事，必须分开告诉用户
       if (!result.sync.ok) {
-        toast.warning(result.sync.warning ?? result.sync.error ?? '线上排期未同步')
+        toast.warning(
+          result.sync.warning ?? result.sync.error ?? '线上排期未同步'
+        )
       } else if (result.sync.attempted) {
         toast.success('排期已更新，并已同步到 Shopify')
       } else {
         // 没有 Shopify 对象的条目（例如发布失败过的）：只记录了时间，
         // 状态保持原样，要重新发布才会生效 —— 必须说清楚
-        toast.info('已记录新的排期时间；该条目在 Shopify 上还没有对象，需重新发布才会生效', {
-          duration: 8000,
-        })
+        toast.info(
+          '已记录新的排期时间；该条目在 Shopify 上还没有对象，需重新发布才会生效',
+          {
+            duration: 8000,
+          }
+        )
       }
       invalidate()
       onOpenChange(false)
@@ -270,7 +268,9 @@ function ScheduleDialogContent({
                 disabled={busy}
                 onClick={() => cancel.mutate(bar.id)}
               >
-                {cancel.isPending && <Loader2 className='size-4 animate-spin' />}
+                {cancel.isPending && (
+                  <Loader2 className='size-4 animate-spin' />
+                )}
                 取消排期
               </Button>
             )}

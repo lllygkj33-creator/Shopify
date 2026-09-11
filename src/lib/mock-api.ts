@@ -8,9 +8,7 @@
  * 这里的数据是确定性生成的（不用随机数），保证刷新后画面稳定，
  * 方便对照截图与回归。
  */
-
 import { CHANNELS } from '@/config/channels'
-import { isoToWallTime, wallTimeToIso } from './datetime'
 import type {
   BlogItem,
   ContentItem,
@@ -23,6 +21,7 @@ import type {
   SyncReport,
   SyncStatus,
 } from '@/types/content'
+import { isoToWallTime, wallTimeToIso } from './datetime'
 
 const HOUR = 3600_000
 const DAY = 24 * HOUR
@@ -77,12 +76,28 @@ function buildMockSettings(): GlobalSettings {
  */
 const MOCK_BLOGS: BlogItem[] = [
   { id: 'gid://shopify/Blog/1', name: 'News', handle: 'news' },
-  { id: 'gid://shopify/Blog/2', name: 'Zima Campaign Hub', handle: 'zima-campaign-hub' },
+  {
+    id: 'gid://shopify/Blog/2',
+    name: 'Zima Campaign Hub',
+    handle: 'zima-campaign-hub',
+  },
   { id: 'gid://shopify/Blog/3', name: 'Tech & AI HUB', handle: 'tech-ai-hub' },
-  { id: 'gid://shopify/Blog/4', name: 'Support & Tips', handle: 'support-tips' },
-  { id: 'gid://shopify/Blog/5', name: 'Product Comparisons', handle: 'product-comparisons' },
+  {
+    id: 'gid://shopify/Blog/4',
+    name: 'Support & Tips',
+    handle: 'support-tips',
+  },
+  {
+    id: 'gid://shopify/Blog/5',
+    name: 'Product Comparisons',
+    handle: 'product-comparisons',
+  },
   { id: 'gid://shopify/Blog/6', name: 'Buying Guide', handle: 'buying-guide' },
-  { id: 'gid://shopify/Blog/7', name: 'NAS & Server Setup', handle: 'nas-server-setup' },
+  {
+    id: 'gid://shopify/Blog/7',
+    name: 'NAS & Server Setup',
+    handle: 'nas-server-setup',
+  },
 ]
 
 type Seed = {
@@ -101,7 +116,8 @@ type Seed = {
 const SEEDS: Seed[] = [
   {
     channelId: 'tech-ai-hub',
-    title: 'What Features Enable a Home AI Trust Boundary Around Sensitive Files?',
+    title:
+      'What Features Enable a Home AI Trust Boundary Around Sensitive Files?',
     handle: 'home-ai-trust-boundary-sensitive-files-features',
     status: 'published',
     dayOffset: -3,
@@ -323,7 +339,10 @@ export const mockApi = {
       return {
         ...settings,
         tokenExpiresAt: new Date(expiresAt).toISOString(),
-        tokenExpiresInSeconds: Math.max(0, Math.round((expiresAt - Date.now()) / 1000)),
+        tokenExpiresInSeconds: Math.max(
+          0,
+          Math.round((expiresAt - Date.now()) / 1000)
+        ),
       }
     }
     return { ...settings }

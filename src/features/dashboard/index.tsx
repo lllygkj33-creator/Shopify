@@ -1,16 +1,11 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
-import { CalendarPlus, ChevronDown, RefreshCw } from 'lucide-react'
 import { CHANNELS } from '@/config/channels'
+import type { TimelineBar, TimelineScale } from '@/types/content'
+import { CalendarPlus, ChevronDown, RefreshCw } from 'lucide-react'
 import { contentApi, settingsApi, USE_MOCK } from '@/lib/api'
 import { DEFAULT_TIMEZONE } from '@/lib/datetime'
-import type { TimelineBar, TimelineScale } from '@/types/content'
-import { ConfigDrawer } from '@/components/config-drawer'
-import { Header } from '@/components/layout/header'
-import { Main } from '@/components/layout/main'
-import { Search } from '@/components/search'
-import { ThemeSwitch } from '@/components/theme-switch'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import {
@@ -30,6 +25,11 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { ConfigDrawer } from '@/components/config-drawer'
+import { Header } from '@/components/layout/header'
+import { Main } from '@/components/layout/main'
+import { Search } from '@/components/search'
+import { ThemeSwitch } from '@/components/theme-switch'
 import { ScheduleDialog } from './components/schedule-dialog'
 import { StatCards } from './components/stat-cards'
 import { Timeline } from './components/timeline'
@@ -157,7 +157,9 @@ export function Dashboard() {
                 >
                   <RefreshCw
                     className={
-                      timelineQuery.isFetching ? 'size-4 animate-spin' : 'size-4'
+                      timelineQuery.isFetching
+                        ? 'size-4 animate-spin'
+                        : 'size-4'
                     }
                   />
                 </Button>
@@ -188,10 +190,10 @@ export function Dashboard() {
                     看起来像加载失败或连错了库。
                   */}
                   {bars.length === 0 && (
-                    <div className='mb-4 mx-6 rounded-md border border-dashed p-3 text-xs text-muted-foreground'>
-                      还没有任何排期内容。去左侧任一栏目页上传 JSON 文件并设置发布时间 ——
-                      发布后（或排期到点由 Shopify 上线）内容就会出现在这里。
-                      点色块可以改期或取消。
+                    <div className='mx-6 mb-4 rounded-md border border-dashed p-3 text-xs text-muted-foreground'>
+                      还没有任何排期内容。去左侧任一栏目页上传 JSON
+                      文件并设置发布时间 —— 发布后（或排期到点由 Shopify
+                      上线）内容就会出现在这里。 点色块可以改期或取消。
                     </div>
                   )}
                   <Timeline
