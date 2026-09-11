@@ -191,12 +191,24 @@ try {
     problems.push(`Custom 文章应排在仪表盘之后第一位，实际第 2 项是「${facts.navLabels[1]}」`)
   }
 
-  // ---------- 交互：展开内容块 → 点单项 → 详情弹窗 ----------
+  // ---------- 交互：点内容块 → 详情弹窗 ----------
+  //
+  // 块里只有一条时点它**直接**开详情；有多条时才先展开清单再点单项。
+  // 两种都要覆盖，所以按 data-count 分支。
   const bucket = page.locator('[data-testid="timeline-bucket"]').first()
   if (await bucket.count()) {
-    await bucket.click() // 点击也能展开（触屏/键盘用不了悬停）
-    await page.waitForSelector('[data-testid="timeline-chip"]', { timeout: 8000 })
-    await page.locator('[data-testid="timeline-chip"]').first().click()
+    const count = Number((await bucket.getAttribute('data-count')) ?? '1')
+
+    if (count > 1) {
+      await bucket.click() // 点击也能展开（触屏/键盘用不了悬停）
+      await page.waitForSelector('[data-testid="timeline-chip"]', {
+        timeout: 8000,
+      })
+      await page.locator('[data-testid="timeline-chip"]').first().click()
+    } else {
+      await bucket.click()
+    }
+
     await page.waitForSelector('text=排期时间', { timeout: 8000 })
     await page.screenshot({ path: `${OUT_DIR}/schedule-dialog.png` })
     const dialogTitle = await page

@@ -182,6 +182,23 @@ describe('Timeline 按时间格聚合', () => {
     expect(onSelect.mock.calls[0][0].title).toContain('ZimaBoard')
   })
 
+  it('只有一条时点了直接开详情，不弹清单', async () => {
+    const { onSelect } = await renderTimeline(barsToday(1))
+
+    const block = document.querySelector(
+      '[data-testid="timeline-bucket"]'
+    ) as HTMLElement
+    expect(block.getAttribute('data-count')).toBe('1')
+
+    await userEvent.click(block)
+
+    // 为了一行而弹出 320px 宽的面板（≈2.4 列）会盖住相邻格，还多一次点击
+    expect(onSelect).toHaveBeenCalledTimes(1)
+    expect(
+      document.querySelectorAll('[data-testid="timeline-chip"]').length
+    ).toBe(0)
+  })
+
   it('没有内容的栏目显示「暂无排期」', async () => {
     await renderTimeline([])
 

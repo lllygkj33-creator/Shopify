@@ -378,10 +378,10 @@ type BucketBlockProps = {
  *
  * - **条数写在块上**：不折叠、不隐藏，一眼能看出这天有多少条
  * - 块内细条表示状态构成（多条时才知道有多少是排期、多少是失败）
- * - 悬停展开清单；点击也能展开（触屏和键盘用不了悬停）
- *
- * 悬停关闭加了延迟（见 scheduleClose）：触发器和浮层之间有一道缝，
- * 指针穿过时会先触发 trigger 的 leave，立即关闭就会闪烁、来不及移到浮层上。
+ * - **只有一条时点了直接开排期详情**，不弹清单：
+ *   为了显示一行而弹出 320px 宽的面板（≈2.4 列）会盖住相邻格，
+ *   还多一次点击。多条才需要清单。
+ * - 多条时悬停展开清单；点击也展开（触屏和键盘用不了悬停）
  */
 function BucketBlock({
   cell,
@@ -390,10 +390,6 @@ function BucketBlock({
   timezone,
   onSelect,
 }: BucketBlockProps) {
-  const [open, setOpen] = useState(false)
-  const meta = CONTENT_STATUS_META[cell.dominant]
-  const mixed = cell.composition.length > 1
-
   /**
    * 悬停关闭要**延迟**。
    *
@@ -401,6 +397,7 @@ function BucketBlock({
    * 触发块的 mouseleave 会先到 —— 立即关闭的话浮层还没等鼠标够到就消失了，
    * 表现为闪烁、点不中里面的条目。
    */
+  const [open, setOpen] = useState(false)
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const cancelClose = useCallback(() => {
@@ -423,6 +420,38 @@ function BucketBlock({
   // 组件卸载时别留下定时器
   useEffect(() => cancelClose, [cancelClose])
 
+  const meta = CONTENT_STATUS_META[cell.dominant]
+  const face = <BlockFace cell={cell} />
+  const blockClass = cn(BLOCK_BUTTON_CLASS, BLOCK_HOVER_CLASS)
+  const blockStyle =
+    cell.dominant === 'draft'
+      ? { color: meta.color, borderStyle: 'dashed' as const }
+      : {
+          backgroundColor: `${meta.color}1a`,
+          borderColor: `${meta.color}66`,
+          color: meta.color,
+        }
+
+  // 只有一条：直接开详情，不弹清单
+  if (cell.count === 1) {
+    return (
+      <button
+        type='button'
+        data-testid='timeline-bucket'
+        data-count={cell.count}
+        data-status={cell.dominant}
+        data-tick-index={cell.index}
+        aria-label={`${channelLabel} ${tick.label} ${cell.bars[0].title}`}
+        title={cell.bars[0].title}
+        onClick={() => onSelect(cell.bars[0])}
+        className={blockClass}
+        style={blockStyle}
+      >
+        {face}
+      </button>
+    )
+  }
+
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
@@ -433,16 +462,12 @@ function BucketBlock({
           data-status={cell.dominant}
           data-tick-index={cell.index}
           aria-label={`${channelLabel} ${tick.label} 共 ${cell.count} 条`}
-          title={
-            cell.count === 1
-              ? cell.bars[0].title
-              : `${cell.count} 条：${cell.bars
-                  .slice(0, 3)
-                  .map((bar) => bar.title)
-                  .join(
-                    '\n'
-                  )}${cell.count > 3 ? `\n…另有 ${cell.count - 3} 条` : ''}`
-          }
+          title={`${cell.count} 条：${cell.bars
+            .slice(0, 3)
+            .map((bar) => bar.title)
+            .join(
+              '\n'
+            )}${cell.count > 3 ? `\n…另有 ${cell.count - 3} 条` : ''}`}
           onMouseEnter={hoverOpen}
           onMouseLeave={scheduleClose}
           /*
@@ -460,53 +485,21 @@ function BucketBlock({
               setOpen(true)
             }
           }}
-          className={cn(
-            'flex h-full w-full flex-col justify-center gap-0.5 overflow-hidden rounded-md border px-1.5 text-left text-xs shadow-sm transition',
-            'hover:z-20 hover:shadow-md focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none',
-            cell.dominant === 'draft' && 'border-dashed bg-transparent'
-          )}
-          style={
-            cell.dominant === 'draft'
-              ? { color: meta.color }
-              : {
-                  backgroundColor: `${meta.color}1a`,
-                  borderColor: `${meta.color}66`,
-                  color: meta.color,
-                }
-          }
+          className={blockClass}
+          style={blockStyle}
         >
-          {/*
-            块上只放**简要信息**：条数 + 状态构成，不放标题。
-            一格通常只有一百来像素，塞完整标题必然被裁成
-            「1ZimaBoard 2 vs ZimaBlade: Which Home Se」这种半截字，
-            看着像溢出了格子。完整标题在悬停清单里（那里有宽度）。
-          */}
-          <span className='flex min-w-0 items-baseline gap-1'>
-            <span className='font-mono text-sm font-semibold'>
-              {cell.count}
-            </span>
-            <span className='truncate text-[10px] opacity-80'>条</span>
-          </span>
-
-          {/* 状态构成细条：只有一种状态时就是一条实色，不额外干扰 */}
-          <span className='flex h-1 w-full overflow-hidden rounded-full'>
-            {cell.composition.map(([status, count]) => (
-              <span
-                key={status}
-                style={{
-                  width: `${(count / cell.count) * 100}%`,
-                  backgroundColor: CONTENT_STATUS_META[status].color,
-                }}
-              />
-            ))}
-          </span>
+          {face}
         </button>
       </PopoverTrigger>
 
       <PopoverContent
         align='start'
         sideOffset={2}
-        className='w-80 p-0'
+        /*
+          面板别太宽：一格只有一百来像素，面板宽了会盖住相邻的两三格，
+          看起来就像「内容占了两格」。
+        */
+        className='w-64 p-0'
         onMouseEnter={hoverOpen}
         onMouseLeave={scheduleClose}
         onOpenAutoFocus={(event) => event.preventDefault()}
@@ -520,7 +513,7 @@ function BucketBlock({
               {cell.count} 条
             </span>
           </div>
-          {mixed && (
+          {cell.composition.length > 1 && (
             <div className='mt-0.5 text-[10px] text-muted-foreground'>
               {cell.composition
                 .map(
@@ -547,6 +540,43 @@ function BucketBlock({
         </div>
       </PopoverContent>
     </Popover>
+  )
+}
+
+const BLOCK_BUTTON_CLASS =
+  'flex h-full w-full flex-col justify-center gap-0.5 overflow-hidden rounded-md border px-1.5 text-left text-xs shadow-sm transition'
+
+const BLOCK_HOVER_CLASS =
+  'hover:z-20 hover:shadow-md focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none'
+
+/** 块的可见内容：条数 + 状态构成细条。不放标题（见块上的注释）。 */
+function BlockFace({ cell }: { cell: Bucket }) {
+  return (
+    <>
+      {/*
+        块上只放**简要信息**：条数 + 状态构成，不放标题。
+        一格通常只有一百来像素，塞完整标题必然被裁成
+        「1ZimaBoard 2 vs ZimaBlade: Which Home Se」这种半截字，
+        看着像溢出了格子。完整标题在悬停清单里（那里有宽度）。
+      */}
+      <span className='flex min-w-0 items-baseline gap-1'>
+        <span className='font-mono text-sm font-semibold'>{cell.count}</span>
+        <span className='truncate text-[10px] opacity-80'>条</span>
+      </span>
+
+      {/* 状态构成细条：只有一种状态时就是一条实色，不额外干扰 */}
+      <span className='flex h-1 w-full overflow-hidden rounded-full'>
+        {cell.composition.map(([status, count]) => (
+          <span
+            key={status}
+            style={{
+              width: `${(count / cell.count) * 100}%`,
+              backgroundColor: CONTENT_STATUS_META[status].color,
+            }}
+          />
+        ))}
+      </span>
+    </>
   )
 }
 

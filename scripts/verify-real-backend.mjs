@@ -148,9 +148,18 @@ const bucketCount = await firstBucket.getAttribute('data-count')
 console.log('\n---------- 时间轴 ----------')
 console.log('第一个时间格的条数:', bucketCount)
 
-await firstBucket.hover()
-await page.waitForSelector('[data-testid="timeline-chip"]', { timeout: 10000 })
-await page.locator('[data-testid="timeline-chip"]').first().click()
+const bucketItemCount = Number(bucketCount ?? '1')
+
+if (bucketItemCount > 1) {
+  // 多条：悬停展开清单，再点单项
+  await firstBucket.hover()
+  await page.waitForSelector('[data-testid="timeline-chip"]', { timeout: 10000 })
+  await page.locator('[data-testid="timeline-chip"]').first().click()
+} else {
+  // 只有一条：点块直接开详情（不弹清单，否则 320px 的面板会盖住相邻格）
+  await firstBucket.click()
+}
+
 await page.waitForSelector('text=排期时间', { timeout: 10000 })
 console.log('排期详情弹窗 : 已打开')
 
