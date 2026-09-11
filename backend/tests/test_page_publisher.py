@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import json
+import re
 from datetime import datetime, timezone
 
 import pytest
@@ -29,6 +30,16 @@ from app.shopify.page_publisher import (
 SPEC = get_page_spec("community-post")
 assert SPEC is not None
 
+# 域名与来源前缀都是**部署信息**（site.config.json / gitignored 的 local），
+# 测试不能写死成某一家的 —— 否则一份干净的克隆跑测试就红。
+from app.site_config import site  # noqa: E402
+
+# 社区主题链接与用户主页链接的前缀，取自 community-post 栏目的规格
+_PREFIXES = dict(SPEC.source_field_prefixes)
+TOPIC_PREFIX = _PREFIXES.get("url", site.get("community.threadPrefix"))
+PROFILE_PREFIX = _PREFIXES.get("author_profile_url", site.get("community.userPrefix"))
+STOREFRONT = site.storefront_domain
+
 GOOD_HTML = (
     "<div><h2>Overview</h2>"
     '<img src="a.png" alt="A photo" title="A photo">'
@@ -40,11 +51,11 @@ GOOD_HTML = (
 
 SOURCE = {
     "title": "Prowlarr + Radarr on CasaOS",
-    "url": "https://community.zimaspace.com/t/prowlarr-radarr-casaos/1234",
+    "url": f"{TOPIC_PREFIX}prowlarr-radarr-casaos/1234",
     "excerpt": "A short excerpt",
     "author_name": "someuser",
-    "author_avatar_url": "https://community.zimaspace.com/user_avatar/x/45.png",
-    "author_profile_url": "https://community.zimaspace.com/u/someuser",
+    "author_avatar_url": f"{PROFILE_PREFIX.rstrip('/')}/../user_avatar/x/45.png",
+    "author_profile_url": f"{PROFILE_PREFIX}someuser",
 }
 
 
@@ -81,11 +92,11 @@ def build(raw=None, **kwargs):
         ("pages/qwen3-8b-hardware-requirements", "qwen3-8b-hardware-requirements"),
         ("/qwen3-8b-hardware-requirements/", "qwen3-8b-hardware-requirements"),
         (
-            "https://shop.zimaspace.com/pages/qwen3-8b-hardware-requirements",
+            f"https://{STOREFRONT}/pages/qwen3-8b-hardware-requirements",
             "qwen3-8b-hardware-requirements",
         ),
         (
-            "https://shop.zimaspace.com/pages/x-y?utm=1#frag",
+            f"https://{STOREFRONT}/pages/x-y?utm=1#frag",
             "x-y",
         ),
     ],
@@ -102,7 +113,7 @@ def test_normalize_page_handle_rejects_invalid(value):
 
 
 def test_full_page_url_uses_storefront_domain():
-    assert full_page_url("x-y") == "https://shop.zimaspace.com/pages/x-y"
+    assert full_page_url("x-y") == f"https://{STOREFRONT}/pages/x-y"
 
 
 # ---------------------------------------------------------------------------
@@ -136,13 +147,13 @@ def test_load_source_rejects_empty_required_value():
 
 def test_load_source_enforces_community_topic_url():
     broken = dict(SOURCE, url="https://example.com/t/x")
-    with pytest.raises(PagePublishError, match="必须以 https://community.zimaspace.com/t/ 开头"):
+    with pytest.raises(PagePublishError, match=f"必须以 {re.escape(TOPIC_PREFIX)} 开头"):
         load_source({"community_source": broken}, SPEC)
 
 
 def test_load_source_enforces_author_profile_url():
     broken = dict(SOURCE, author_profile_url="https://example.com/u/x")
-    with pytest.raises(PagePublishError, match="必须以 https://community.zimaspace.com/u/ 开头"):
+    with pytest.raises(PagePublishError, match=f"必须以 {re.escape(PROFILE_PREFIX)} 开头"):
         load_source({"community_source": broken}, SPEC)
 
 
@@ -890,8 +901,8 @@ assert USER_SPEC is not None
 USER_INFO = {
     "name": "ExampleBuilder",
     "handle": "example-builder",
-    "avatar_url": "https://community.zimaspace.com/user_avatar/x/45.png",
-    "profile_url": "https://community.zimaspace.com/u/example-builder",
+    "avatar_url": f"{PROFILE_PREFIX.rstrip('/')}/../user_avatar/x/45.png",
+    "profile_url": f"{PROFILE_PREFIX}example-builder",
 }
 
 USER_HTML = (
@@ -980,7 +991,7 @@ def test_user_info_avatar_may_be_blank():
 def test_user_info_profile_url_must_be_complete_url():
     with pytest.raises(PagePublishError, match="profile_url"):
         build_user(
-            raw_user(user_info={**USER_INFO, "profile_url": "community.zimaspace.com/u/x"})
+            raw_user(user_info={**USER_INFO, "profile_url": PROFILE_PREFIX.replace("https://", "") + "x"})
         )
 
 

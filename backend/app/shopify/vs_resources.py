@@ -26,6 +26,7 @@ YouTube 与博客各自**独立随机**。
 """
 
 from __future__ import annotations
+from ..site_config import site
 
 import html as html_lib
 import random
@@ -39,196 +40,18 @@ import httpx
 # 产品识别
 # ---------------------------------------------------------------------------
 
-PRODUCT_ALIASES: dict[str, tuple[str, ...]] = {
-    "zimacube-2": ("zimacube 2", "zimacube2"),
-    "zimaboard-2": ("zimaboard 2", "zimaboard2"),
-    "zimablade": ("zimablade", "zima blade"),
-}
+# 值是**部署内容**（自家视频与博客清单/产品名），来自站点配置
+PRODUCT_ALIASES = site.get("vs.productAliases", {})
 
-PRODUCT_LABELS: dict[str, str] = {
-    "zimacube-2": "ZimaCube 2",
-    "zimaboard-2": "ZimaBoard 2",
-    "zimablade": "ZimaBlade",
-}
+# 值是**部署内容**（自家视频与博客清单/产品名），来自站点配置
+PRODUCT_LABELS = site.get("vs.productLabels", {})
 
 # ---------------------------------------------------------------------------
 # 维护中的资源库（与脚本保持一致）
 # ---------------------------------------------------------------------------
 
-PRODUCT_RESOURCE_LIBRARY: dict[str, dict[str, list[dict[str, str]]]] = {
-    "zimacube-2": {
-        "youtube": [
-            {
-                "title": "ZimaCube 2 First Look - The Value Is Insane",
-                "url": "https://www.youtube.com/watch?v=3lpoIns7WUE",
-                "video_id": "3lpoIns7WUE",
-                "creator": "Learn To HomeLab",
-            },
-            {
-                "title": "This One Device Replaced My Entire Cloud (And Added AI)",
-                "url": "https://www.youtube.com/watch?v=p0Ve70od8pw",
-                "video_id": "p0Ve70od8pw",
-                "creator": "Alpha Nerd Tech",
-            },
-            {
-                "title": "【未来】NASにAIを入れたら“脳”になったwww",
-                "url": "https://www.youtube.com/watch?v=5QV-oxdh6rc",
-                "video_id": "5QV-oxdh6rc",
-                "creator": "野市 零 / Zero Noichi",
-            },
-        ],
-        "blog": [
-            {
-                "title": "ZimaCube 2 First Look — The Value Is Insane for a 6-Bay NAS",
-                "url": "https://shop.zimaspace.com/blogs/zima-campaign-hub/zimacube-2-standard-nas-review",
-                "creator": "Learn To HomeLab",
-            },
-            {
-                "title": "Build Your Own Cloud with ZimaCube 2",
-                "url": "https://shop.zimaspace.com/blogs/zima-campaign-hub/zimacube-2-self-hosting-powerhouse",
-                "creator": "Alpha Nerd Tech",
-            },
-            {
-                "title": "Surprising Thing ZimaCube 2’s AI NAS Can Really Do",
-                "url": "https://shop.zimaspace.com/blogs/zima-campaign-hub/zimacube-2-ai-nas-workflow",
-                "creator": "Zero Noichi",
-            },
-            {
-                "title": (
-                    "Local AI on the ZimaCube 2 — PCIe Expansion, Ollama, "
-                    "and Future-Proofing Your Homelab"
-                ),
-                "url": "https://shop.zimaspace.com/blogs/zima-campaign-hub/zimacube-2-local-ai-homelab-review",
-                "creator": "Michael Luckenbill",
-            },
-        ],
-    },
-    "zimaboard-2": {
-        "youtube": [
-            {
-                "title": "ZimaBoard 2 Review - THE ULTIMATE HOME SERVER",
-                "url": "https://www.youtube.com/watch?v=w_aARXB7K28",
-                "video_id": "w_aARXB7K28",
-                "creator": "TechteamGB",
-            },
-            {
-                "title": (
-                    "The Zimaboard 2 1664 hardware review. "
-                    "Who is this board well-suited for?"
-                ),
-                "url": "https://www.youtube.com/watch?v=eTalCoGcWUQ",
-                "video_id": "eTalCoGcWUQ",
-                "creator": "Raspberry Pi Cloud",
-            },
-            {
-                "title": (
-                    "ON TEST ZIMA OS ! L’INTERFACE QUI ACCOMPAGNE VOTRE "
-                    "ZIMABOARD PARTOUT DANS LE MONDE ! ✅"
-                ),
-                "url": "https://www.youtube.com/watch?v=ekJISMRrut4",
-                "video_id": "ekJISMRrut4",
-                "creator": "YOTECH",
-            },
-            {
-                "title": "Tiny Server That Can Also Game",
-                "url": "https://www.youtube.com/watch?v=u5G84ExpQZc",
-                "video_id": "u5G84ExpQZc",
-                "creator": "schvabek",
-            },
-            {
-                "title": "This Tiny Board Runs My Entire Home Network",
-                "url": "https://www.youtube.com/watch?v=v9V6ZgRVY6s",
-                "video_id": "v9V6ZgRVY6s",
-                "creator": "Hobby Support International",
-            },
-        ],
-        "blog": [
-            {
-                "title": "How YOTECH Evaluates ZimaBoard 2 as a Compact Home Server",
-                "url": "https://shop.zimaspace.com/blogs/zima-campaign-hub/yotech-zimaboard-2-home-server-review",
-                "creator": "YOTECH",
-            },
-            {
-                "title": (
-                    "How schvabek Turns ZimaBoard 2 Into a Tiny Server "
-                    "That Can Also Game"
-                ),
-                "url": "https://shop.zimaspace.com/blogs/zima-campaign-hub/schvabek-zimaboard-2-tiny-gaming-server",
-                "creator": "schvabek",
-            },
-            {
-                "title": "1 Tiny Board, Endless Power: Why the ZimaBoard 2 1664 Shocked Us",
-                "url": "https://shop.zimaspace.com/blogs/zima-campaign-hub/home-lab-server-zimaboard-review",
-                "creator": "Tech with Gerard",
-            },
-            {
-                "title": "Can ZimaBoard 2 Run a Local AI Assistant?",
-                "url": "https://shop.zimaspace.com/blogs/zima-campaign-hub/zimaboard-2-local-ai-assistant",
-                "creator": "Core Works Lab",
-            },
-            {
-                "title": "How Jake Simmons Explores the Possibilities of ZimaBoard 2",
-                "url": "https://shop.zimaspace.com/blogs/zima-campaign-hub/jake-simmons-explores-zimaboard-2",
-                "creator": "Jake Simmons",
-            },
-            {
-                "title": "How Mart Tests ZimaBoard 2 as a Compact Gaming PC",
-                "url": "https://shop.zimaspace.com/blogs/zima-campaign-hub/mart-tests-gaming-on-zimaboard-2",
-                "creator": "Mart",
-            },
-        ],
-    },
-    "zimablade": {
-        "youtube": [
-            {
-                "title": (
-                    "Setting Up My Own Home Server! ZimaBlade 7700 - "
-                    "Running Windows, Linux"
-                ),
-                "url": "https://www.youtube.com/watch?v=YAtmQnVLcuA",
-                "video_id": "YAtmQnVLcuA",
-                "creator": "Adi 4 u",
-            },
-            {
-                "title": (
-                    "Tiny NAS! ZimaBlade NAS Kit Review - Jellyfin Install, "
-                    "Linux/CasaOS, & 2 NAS HDDs"
-                ),
-                "url": "https://www.youtube.com/watch?v=2eP0ff2nmIM",
-                "video_id": "2eP0ff2nmIM",
-                "creator": "Tek Syndicate",
-            },
-            {
-                "title": "BEST Budget NAS? ZimaBlade Review",
-                "url": "https://www.youtube.com/watch?v=ps-NGEe55NM",
-                "video_id": "ps-NGEe55NM",
-                "creator": "Michael Leen",
-            },
-        ],
-        "blog": [
-            {
-                "title": (
-                    "How SjslTech Unboxes and Prepares the ZimaBlade 7700 Mini Server"
-                ),
-                "url": "https://shop.zimaspace.com/blogs/zima-campaign-hub/sjsltech-zimablade-7700-unboxing",
-                "creator": "SjslTech",
-            },
-            {
-                "title": (
-                    "From Sparcstation to ZimaBlade: A 57-Year-Old Geek’s "
-                    "Self-Hosting Journey"
-                ),
-                "url": "https://shop.zimaspace.com/blogs/zima-campaign-hub/zimablade-backup-server-build",
-                "creator": "Julien",
-            },
-            {
-                "title": "Zima Member Day: What’s in Your Stack?",
-                "url": "https://shop.zimaspace.com/blogs/zima-campaign-hub/zima-member-day-sept-2025-whats-in-your-stack",
-                "creator": "Zima Community",
-            },
-        ],
-    },
-}
+# 值是**部署内容**（自家视频与博客清单/产品名），来自站点配置
+PRODUCT_RESOURCE_LIBRARY = site.get("vs.resourceLibrary", {})
 
 RESOURCES_OPEN_MARKER = "<!-- COMPARE:RESOURCES -->"
 RESOURCES_CLOSE_MARKER = "<!-- /COMPARE:RESOURCES -->"
@@ -237,7 +60,7 @@ RESOURCES_CLOSE_MARKER = "<!-- /COMPARE:RESOURCES -->"
 #
 # 注意 URL 里不能出现 VS 校验禁止的占位串（PLACEHOLDER / TODO 等），
 # 否则结构校验会把它当成「未替换的占位串」而误报。
-PENDING_COVER = "https://shop.zimaspace.com/cdn/cover-image-pending.png"
+PENDING_COVER = str(site.get("vs.pendingCover", ""))
 
 _rng = random.SystemRandom()
 

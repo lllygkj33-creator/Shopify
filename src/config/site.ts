@@ -24,7 +24,20 @@ import type { Channel, PageSpec } from './channels'
 type Json = Record<string, unknown>
 
 /** 字典逐层合并；其他类型（含数组）整体替换 —— 与后端 `_deep_merge` 一致 */
+/**
+ * 与后端 `_deep_merge` 同一套规则：字典逐层合并、数组整体替换，
+ * 带 `"$replace": true` 的字典整体替换上一层（避免占位示例与真实值混在一起）。
+ */
 function deepMerge(base: unknown, override: unknown): unknown {
+  if (
+    override &&
+    typeof override === 'object' &&
+    !Array.isArray(override) &&
+    (override as Json).$replace === true
+  ) {
+    const { $replace: _drop, ...rest } = override as Json
+    return rest
+  }
   if (
     base &&
     override &&

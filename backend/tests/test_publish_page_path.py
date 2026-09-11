@@ -21,7 +21,14 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app import main
+from app.site_config import site
 from app.storage import ContentStore
+
+# 模板名、来源前缀、前台域名都是**部署信息**，从配置取，测试不写死
+COMMUNITY_SPEC = main.get_page_spec("community-post")
+_PREFIXES = dict(COMMUNITY_SPEC.source_field_prefixes)
+TOPIC_PREFIX = _PREFIXES["url"]
+PROFILE_PREFIX = _PREFIXES["author_profile_url"]
 
 NOW = datetime(2026, 9, 11, 12, 0, tzinfo=timezone.utc)
 
@@ -66,15 +73,15 @@ def schedule_item(**overrides) -> main.PublishItemIn:
         "bodyHtml": "<div><h2>Fix</h2><p>Do the thing.</p></div>",
         "metaTitle": "ZimaBlade Tip",
         "metaDescription": "A short tip.",
-        "template": "community_post",
+        "template": COMMUNITY_SPEC.template,
         "sourceFile": "community-post/a.json",
         "source": {
             "title": "ZimaBlade Tip",
-            "url": "https://community.zimaspace.com/t/zimablade-tip/1",
+            "url": f"{TOPIC_PREFIX}zimablade-tip/1",
             "excerpt": "Do the thing.",
             "author_name": "someone",
-            "author_avatar_url": "https://community.zimaspace.com/a.png",
-            "author_profile_url": "https://community.zimaspace.com/u/someone",
+            "author_avatar_url": f"{PROFILE_PREFIX.rstrip('/')}/../a.png",
+            "author_profile_url": f"{PROFILE_PREFIX}someone",
         },
     }
     base.update(overrides)
@@ -96,7 +103,9 @@ async def test_publish_page_persists_published_url(store):
     row = rows[0]
     assert row["status"] == "scheduled"
     assert row["shopify_gid"] == "gid://shopify/Page/999"
-    assert row["published_url"] == f"https://shop.zimaspace.com/pages/{row['handle']}"
+    assert row["published_url"] == (
+        f"https://{site.storefront_domain}/pages/{row['handle']}"
+    )
 
 
 @pytest.mark.anyio

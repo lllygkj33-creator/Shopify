@@ -376,5 +376,35 @@
       "template": "app-hardware-requirements",
       "hidden": true
     }
-  ]
+  ],
+  "vs": {
+    "productAliases": {
+      "example-product": [
+        "example-product",
+        "example product"
+      ]
+    },
+    "productLabels": {
+      "example-product": "Example Product"
+    },
+    "resourceLibrary": {
+      "example-product": {
+        "youtube": [
+          {
+            "title": "Example Product review",
+            "url": "https://www.youtube.com/watch?v=EXAMPLEVIDEO1",
+            "channel": "Example Channel"
+          }
+        ],
+        "blogs": [
+          {
+            "title": "Example Product hands-on",
+            "url": "https://${storefront.domain}/blogs/example-blog/example-product-hands-on",
+            "author": "Example Author"
+          }
+        ]
+      }
+    },
+    "pendingCover": "https://${storefront.domain}/cdn/cover-image-pending.png"
+  }
 }

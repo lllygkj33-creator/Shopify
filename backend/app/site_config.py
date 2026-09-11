@@ -42,8 +42,15 @@ _TOKEN = re.compile(r"\$\{([A-Za-z0-9_.]+)\}")
 
 
 def _deep_merge(base: Any, override: Any) -> Any:
-    """字典逐层合并；其他类型（含数组）整体替换。"""
+    """字典逐层合并；其他类型（含数组）整体替换。
+
+    带 `"$replace": true` 的字典**整体替换**上一层，而不是逐键合并。
+    需要它的场景：占位值里有示例条目（例如资源库示例产品），
+    逐键合并会把示例和真实值混在一起。
+    """
     if isinstance(base, dict) and isinstance(override, dict):
+        if override.get("$replace") is True:
+            return {key: value for key, value in override.items() if key != "$replace"}
         merged = dict(base)
         for key, value in override.items():
             merged[key] = _deep_merge(base.get(key), value)
