@@ -61,9 +61,12 @@ export type Channel = {
   htmlClass?: string
   /** 页面专用：期望的模板后缀（JSON 内的 template 优先） */
   template?: string
-  /** 页面专用：JSON 内来源信息的键名，如 community_source */
-  sourceKey?: string
-  /** 页面专用：发布规格，用于上传阶段的即时校验 */
+  /**
+   * 页面专用：发布规格（模板、来源 metafield 及各项校验规则）。
+   *
+   * 注意：来源键名只在 pageSpec.sourceKey 里维护一份。
+   * 之前顶层还有一个同名的 sourceKey，两处容易改漏——已经合并掉。
+   */
   pageSpec?: PageSpec
 }
 
@@ -90,6 +93,16 @@ export type PageSpec = {
   sourceHttpUrlFields?: string[]
   /** 需要剥掉前导 `#` 的字段（Discord 的 channel_name） */
   stripHashPrefix?: string[]
+  /** 来源 URL 的 host 白名单（后缀匹配） */
+  sourceHostAllowlist?: string[]
+  /** 来源 URL 路径必须包含的片段（MakerWorld 的 /models/） */
+  sourcePathContains?: string
+  /** 字段 → 固定值（大小写不敏感） */
+  sourceExactValues?: Record<string, string>
+  /** 非空时必须纯数字的字段 */
+  sourceDigitFields?: string[]
+  /** summary 最小长度；0 表示不检查 */
+  summaryMin?: number
 
   /** 正文至少需要多少个 <h2>（社区 1 个，Discord 4 个） */
   h2Min?: number
@@ -166,7 +179,6 @@ export const CHANNELS: Channel[] = [
     color: '#8b5cf6',
     template: 'community_post',
     // ✅ 已核对：真实脚本写的是 custom.community_source
-    sourceKey: 'community_source',
     // ✅ 已对照 publish_community_pages.py 核对
     pageSpec: {
       template: 'community_post',
@@ -197,7 +209,6 @@ export const CHANNELS: Channel[] = [
     contentType: 'page',
     color: '#5865f2',
     template: 'discord-page',
-    sourceKey: 'discord_source',
     // ✅ 已对照 publish_discord_pages.py 核对
     //
     // 注意 Discord 比社区严得多：H2 至少 4 个、meta_title ≤ 65、
@@ -243,7 +254,6 @@ export const CHANNELS: Channel[] = [
     contentType: 'page',
     color: '#22c55e',
     template: 'user-story',
-    sourceKey: 'user_source',
     pageSpec: {
       template: 'user-story',
       sourceKey: 'user_source',
@@ -258,7 +268,6 @@ export const CHANNELS: Channel[] = [
     contentType: 'page',
     color: '#ef4444',
     template: 'nas-a-vs-b',
-    sourceKey: 'vs_source',
     pageSpec: {
       template: 'nas-a-vs-b',
       sourceKey: 'vs_source',
@@ -272,11 +281,49 @@ export const CHANNELS: Channel[] = [
     contentType: 'page',
     color: '#06b6d4',
     template: 'makerworld-page',
-    sourceKey: 'makerworld_source',
+    // ✅ 已对照 publish_maker_pages.py 核对
+    //
+    // 三个脚本里最严的：summary≥80、图片 alt 必须 50~100 且 loading="lazy"、
+    // 链接的 anchor 文本 / target / rel / nofollow 都有规则、正文必须引用来源 URL。
+    // 其中"链接与图片"那一组规则只在后端实现（POST /api/validate），
+    // 避免同一套规则在 TS 与 Python 各写一遍后慢慢漂移。
     pageSpec: {
       template: 'makerworld-page',
-      sourceKey: 'makerworld_source',
-      verified: false,
+      // 注意：脚本用的是 maker_source，不是 makerworld_source
+      sourceKey: 'maker_source',
+      sourceFields: [
+        'title',
+        'url',
+        'excerpt',
+        'creator_name',
+        'creator_avatar_url',
+        'creator_profile_url',
+        'platform',
+        'model_id',
+        'license',
+      ],
+      sourceRequiredNonEmpty: [
+        'title',
+        'url',
+        'excerpt',
+        'creator_name',
+        'platform',
+      ],
+      sourceHttpUrlFields: [
+        'url',
+        'creator_avatar_url',
+        'creator_profile_url',
+      ],
+      sourceHostAllowlist: ['makerworld.com'],
+      sourcePathContains: '/models/',
+      sourceExactValues: { platform: 'makerworld' },
+      sourceDigitFields: ['model_id'],
+      h2Min: 4,
+      metaTitleMax: 65,
+      metaDescriptionMin: 120,
+      metaDescriptionMax: 170,
+      summaryMin: 80,
+      verified: true,
     },
   },
 ]
@@ -294,7 +341,6 @@ const HIDDEN_CHANNELS: Channel[] = [
     contentType: 'page',
     color: '#a855f7',
     template: 'local-ai-model-hardware',
-    sourceKey: 'model_source',
   },
   {
     id: 'app-hardware-requirements',
@@ -303,7 +349,6 @@ const HIDDEN_CHANNELS: Channel[] = [
     contentType: 'page',
     color: '#84cc16',
     template: 'app-hardware-requirements',
-    sourceKey: 'app_source',
   },
 ]
 

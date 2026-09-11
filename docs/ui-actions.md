@@ -45,7 +45,7 @@
 | **C1** | 拖拽文件夹 / 「选择文件夹」 | 浏览器端读取 JSON 文本，**按两种 schema 自动识别类型**（数组→博客、单对象→页面），逐条归一化 + 校验 | 🔲 **待确认**：解析是否要以后端为权威？若是，需要 `POST /api/parse`（前端预检仅供即时反馈） |
 | **C2** | 「清空」 | 清空已导入文件与状态 | ⚪ 纯前端 |
 | **C3** | 文件 Badge 列表 | 显示每个文件解析出的条数、类型、解析失败原因 | ⚪ 用 C1 结果 |
-| **C4** | 每日志的「校验」列 | 显示错误 / 提示数量，hover 看详情。**已按发布脚本的硬规则做上传阶段拦截**（见下方规则表） | ✅ 前端规则；后端在发布时同样校验一次 |
+| **C4** | 每日志的「校验」列 | 显示错误 / 提示数量，hover 看详情。**已按发布脚本的硬规则做上传阶段拦截**（见下方规则表） | ✅ 前端本地规则 + 后端权威校验 `POST /api/validate` |
 | **C5** | 「统一发布时间」输入 | 设为批量时间（墙上时间） | ⚪ 纯前端状态 |
 | **C6** | 「全部定时发布」/「全部立即发布」/「全部存为草稿」 | 对已勾选条目批量设置发布方式 | ⚪ 纯前端状态 |
 | **C7** | 每行勾选框 | 选中/取消；有错误的条目禁止勾选 | ⚪ 纯前端 |
@@ -129,19 +129,25 @@ F1「返回上一页」、F2「回到首页」—— 纯前端。
 
 按栏目差异的部分（对照各自脚本）：
 
-| 规则 | 社区 `community_post` | Discord `discord-page` |
-|---|---|---|
-| 最少 `<h2>` 数 | **1** | **4** |
-| `meta_title` 上限 | 无限制 | **≤ 65** |
-| `meta description` 长度 | 无限制 | **120 ~ 170** |
-| 来源 metafield | `custom.community_source` | `custom.discord_source` |
-| 来源必需字段 | `title` `url` `excerpt` `author_name` `author_avatar_url` `author_profile_url` | `title` `url` `excerpt` `starter_name` `starter_avatar_url` `channel_name` `invite_url` |
-| 必须非空的来源字段 | 除 `author_avatar_url` / `author_profile_url` 外的前 4 个 | 除 `invite_url` 外的 6 个 |
-| 来源 url 校验 | 前缀 `https://community.zimaspace.com/t/` | 正则 `https://discord.com/channels/<guild>/<channel>/<msg>` |
-| 其他来源校验 | `author_profile_url` 前缀 `/u/` | `starter_avatar_url` / `invite_url` 必须完整链接；`channel_name` 自动剥掉前导 `#` |
-| 额外键 | 丢弃 | **保留** |
+| 规则 | 社区 `community_post` | Discord `discord-page` | MakerWorld `makerworld-page` |
+|---|---|---|---|
+| 最少 `<h2>` 数 | **1** | **4** | **4** |
+| `meta_title` 上限 | 无限制 | **≤ 65** | **≤ 65** |
+| `meta description` | 无限制 | **120 ~ 170** | **120 ~ 170** |
+| `summary` 下限 | 无 | 无 | **≥ 80** |
+| 来源 metafield | `custom.community_source` | `custom.discord_source` | `custom.maker_source` |
+| 额外 metafield | — | — | **`custom.maker_summary`**（multi_line_text_field） |
+| 来源必需字段 | `title` `url` `excerpt` `author_name` `author_avatar_url` `author_profile_url` | `title` `url` `excerpt` `starter_name` `starter_avatar_url` `channel_name` `invite_url` | `title` `url` `excerpt` `creator_name` `creator_avatar_url` `creator_profile_url` `platform` `model_id` `license` |
+| 来源 url 校验 | 前缀 `community.zimaspace.com/t/` | 正则 Discord 消息链接 | **host 必须 makerworld.com 且路径含 `/models/`** |
+| 其他来源校验 | `author_profile_url` 前缀 `/u/` | `channel_name` 剥掉 `#` | `platform` 必须 `MakerWorld`、`model_id` 纯数字 |
+| 图片规则 | `alt` + `title` | 同左 | 再加 **`alt` 长度 50~100**、**必须 `loading="lazy"`** |
+| 链接规则 | `title` | 同左 | 再加：禁止 anchor 文本（`docs`/`see…guide`/`click here`…）、内链不得 `target="_blank"`、外链必须 `_blank`+`noopener`+`noreferrer`、第三方必须 `nofollow` |
+| 正文要求 | — | — | **必须引用原始模型页 URL** |
 
-未核对规格的栏目（用户故事 / VS / MakerWorld）只做宽松校验，来源缺失仅提示。
+> 复杂的图片/链接规则只在**后端**实现（`POST /api/validate`）：前端解析后会自动调一次这个接口，
+> 把结果合并进校验列；后端不可用时退回本地规则。这样同一套规则不会在 TS 与 Python 里各写一遍后漂移。
+
+未核对规格的栏目（用户故事 / VS）只做宽松校验，来源缺失仅提示。
 
 ### 权限要求（分两档）
 
@@ -174,6 +180,7 @@ F1「返回上一页」、F2「回到首页」—— 纯前端。
 | `POST /api/settings/verify` | ✅ | D4 |
 | `POST /api/settings/token/refresh` | ✅ | D5 |
 | `GET /api/blogs` | ✅ | D13 |
+| `POST /api/validate` | ✅ | **C1 / C4** 上传阶段权威校验（只读，各栏目规则） |
 | `GET /api/contents/stats` | 🔲 | B1 |
 | `GET /api/contents/timeline` | 🔲 | B3、B5 |
 | `GET /api/contents?channel_id=` | 🔲 | （栏目页回看已入库内容） |

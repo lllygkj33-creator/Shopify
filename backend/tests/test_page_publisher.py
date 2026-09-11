@@ -519,11 +519,11 @@ def test_community_spec_is_marked_verified():
 
 def test_other_page_channels_are_registered_but_unverified():
     """
-    剩余 3 个页面栏目的规格来自 PRD，尚未用真实脚本核对 —— 这里把状态钉住，
+    剩余 2 个页面栏目的规格来自 PRD，尚未用真实脚本核对 —— 这里把状态钉住，
     等拿到各自脚本后收紧校验并把 verified 改成 True。
-    （Discord 已对照 publish_discord_pages.py 核对）
+    （社区 / Discord / MakerWorld 都已对照各自脚本核对）
     """
-    for channel_id in ("user-story", "vs", "makerworld"):
+    for channel_id in ("user-story", "vs"):
         spec = PAGE_CHANNEL_SPECS[channel_id]
         assert spec.verified is False
         assert spec.source_key.endswith("_source")
@@ -720,3 +720,207 @@ def test_without_content_scopes_publishing_is_blocked():
 
     blocking, _ = missing_scopes(["read_files", "read_products"])
     assert len(blocking) == 2
+
+
+# ---------------------------------------------------------------------------
+# MakerWorld 栏目：三个脚本里校验最严的一个
+# ---------------------------------------------------------------------------
+
+MAKER_SPEC = get_page_spec("makerworld")
+assert MAKER_SPEC is not None
+
+MAKER_SOURCE_URL = "https://makerworld.com/en/models/3034621-minimal-balmuda-style-nas-case"
+
+MAKER_SOURCE = {
+    "title": "Minimal BALMUDA Style ZimaBoard 2 NAS Case",
+    "url": MAKER_SOURCE_URL,
+    "excerpt": "A minimal BALMUDA-style case with dual 3.5-inch bays.",
+    "creator_name": "ExampleCreator",
+    "creator_avatar_url": "https://makerworld.com/avatar/1.png",
+    "creator_profile_url": "https://makerworld.com/en/@examplecreator",
+    "platform": "MakerWorld",
+    "model_id": "3034621",
+    "license": "BY-NC",
+}
+
+MAKER_META_DESCRIPTION = (
+    "A minimal BALMUDA-style ZimaBoard 2 NAS case with dual 3.5-inch HDD bays, "
+    "printed panels, and a quiet airflow path for a home server build."
+)
+MAKER_SUMMARY = (
+    "This minimal BALMUDA-style enclosure holds a ZimaBoard 2 with two 3.5-inch drives, "
+    "keeps cabling internal, and leaves the front panel clean."
+)
+
+# alt 必须落在 50~100 字符
+MAKER_IMG_ALT = (
+    "Front view of the printed BALMUDA style NAS case holding two 3.5 inch drives"
+)
+
+
+def maker_html(**overrides):
+    src = overrides.get("source_url", MAKER_SOURCE_URL)
+    return (
+        "<div>"
+        "<h2>Design goals</h2><p>Quiet and minimal.</p>"
+        "<h2>Print settings</h2><p>PETG at 0.2mm.</p>"
+        "<h2>Assembly</h2><p>Screw the bays in place.</p>"
+        "<h2>Source model</h2>"
+        f'<p><a href="{src}" title="Original MakerWorld model page" '
+        'target="_blank" rel="noopener noreferrer nofollow">BALMUDA NAS case model</a></p>'
+        f'<img src="https://cdn.shopify.com/a.png" alt="{MAKER_IMG_ALT}" '
+        'title="Printed enclosure front view" loading="lazy">'
+        "</div>"
+    )
+
+
+def raw_maker(**overrides):
+    base = {
+        "title": "Minimal BALMUDA-Style ZimaBoard 2 NAS Case with Dual HDD Bays",
+        "meta_title": "ZimaBoard 2 NAS Case with Dual 3.5-Inch HDD Bays",
+        "td": MAKER_META_DESCRIPTION,
+        "summary": MAKER_SUMMARY,
+        "url": "/pages/zimaboard-2-balmuda-style-nas-case-dual-hdd",
+        "template": "makerworld-page",
+        "html": maker_html(),
+        "maker_source": dict(MAKER_SOURCE),
+    }
+    base.update(overrides)
+    return base
+
+
+def build_maker(raw=None, **kwargs):
+    return build_page_payload(
+        raw if raw is not None else raw_maker(),
+        channel_id="makerworld",
+        spec=MAKER_SPEC,
+        **kwargs,
+    )
+
+
+def test_makerworld_spec_matches_script():
+    assert MAKER_SPEC.verified is True
+    assert MAKER_SPEC.template == "makerworld-page"
+    # 脚本用的是 maker_source，不是 makerworld_source
+    assert MAKER_SPEC.source_key == "maker_source"
+    assert ("maker_summary", "multi_line_text_field", "summary") in MAKER_SPEC.extra_metafields
+    assert MAKER_SPEC.h2_min == 4
+    assert MAKER_SPEC.summary_min == 80
+
+
+def test_makerworld_valid_payload_passes():
+    payload = build_maker()
+    assert validate_page_payload(payload, MAKER_SPEC) == []
+
+
+def test_makerworld_requires_summary_of_at_least_80_chars():
+    payload = build_maker(raw_maker(summary="Too thin."))
+    errors = validate_page_payload(payload, MAKER_SPEC)
+
+    assert any("summary 应至少 80" in error for error in errors)
+
+
+def test_makerworld_requires_lazy_loading():
+    html = maker_html().replace(' loading="lazy"', "")
+    payload = build_maker(raw_maker(html=html))
+    errors = validate_page_payload(payload, MAKER_SPEC)
+
+    assert any('loading="lazy"' in error for error in errors)
+
+
+def test_makerworld_enforces_alt_length_range():
+    too_short = maker_html().replace(MAKER_IMG_ALT, "short alt")
+    payload = build_maker(raw_maker(html=too_short))
+    errors = validate_page_payload(payload, MAKER_SPEC)
+    assert any("alt 应在 50~100" in error for error in errors)
+
+    too_long = maker_html().replace(MAKER_IMG_ALT, "x" * 101)
+    payload = build_maker(raw_maker(html=too_long))
+    errors = validate_page_payload(payload, MAKER_SPEC)
+    assert any("alt 应在 50~100" in error for error in errors)
+
+
+def test_makerworld_rejects_forbidden_anchor_text():
+    html = maker_html().replace("BALMUDA NAS case model", "click here")
+    payload = build_maker(raw_maker(html=html))
+    errors = validate_page_payload(payload, MAKER_SPEC)
+
+    assert any("anchor 文本不合适" in error for error in errors)
+
+
+def test_makerworld_requires_third_party_nofollow():
+    html = maker_html().replace("noopener noreferrer nofollow", "noopener noreferrer")
+    payload = build_maker(raw_maker(html=html))
+    errors = validate_page_payload(payload, MAKER_SPEC)
+
+    assert any("nofollow" in error for error in errors)
+
+
+def test_makerworld_requires_external_target_blank_and_rel():
+    html = maker_html().replace(' target="_blank" rel="noopener noreferrer nofollow"', "")
+    payload = build_maker(raw_maker(html=html))
+    errors = validate_page_payload(payload, MAKER_SPEC)
+
+    assert any('target="_blank"' in error for error in errors)
+    assert any("rel 令牌" in error for error in errors)
+
+
+def test_makerworld_internal_link_must_not_use_blank():
+    html = maker_html().replace(
+        f'<a href="{MAKER_SOURCE_URL}" title="Original MakerWorld model page" '
+        'target="_blank" rel="noopener noreferrer nofollow">BALMUDA NAS case model</a>',
+        f'<a href="{MAKER_SOURCE_URL}" title="t" target="_blank" rel="noopener noreferrer nofollow">m</a>'
+        '<a href="/collections/all" title="Collection page" target="_blank">collection</a>',
+    )
+    payload = build_maker(raw_maker(html=html))
+    errors = validate_page_payload(payload, MAKER_SPEC)
+
+    assert any("站内链接" in error for error in errors)
+
+
+def test_makerworld_body_must_cite_source_url():
+    html = maker_html().replace(MAKER_SOURCE_URL, "https://example.com/other")
+    payload = build_maker(raw_maker(html=html))
+    errors = validate_page_payload(payload, MAKER_SPEC)
+
+    assert any("原始 MakerWorld 模型页" in error for error in errors)
+
+
+def test_makerworld_source_url_must_be_makerworld_model_page():
+    with pytest.raises(PagePublishError, match="必须指向 makerworld.com"):
+        build_maker(
+            raw_maker(maker_source={**MAKER_SOURCE, "url": "https://example.com/models/1"})
+        )
+
+
+def test_makerworld_platform_must_be_makerworld():
+    with pytest.raises(PagePublishError, match="必须是 'makerworld'"):
+        build_maker(
+            raw_maker(maker_source={**MAKER_SOURCE, "platform": "Thingiverse"})
+        )
+
+
+def test_makerworld_model_id_must_be_digits():
+    with pytest.raises(PagePublishError, match="只能包含数字"):
+        build_maker(raw_maker(maker_source={**MAKER_SOURCE, "model_id": "abc123"}))
+
+
+def test_makerworld_creator_profile_must_be_makerworld():
+    with pytest.raises(PagePublishError, match="creator_profile_url"):
+        build_maker(
+            raw_maker(
+                maker_source={**MAKER_SOURCE, "creator_profile_url": "https://example.com/u"}
+            )
+        )
+
+
+def test_makerworld_metafields_include_maker_summary():
+    metafields = page_metafields(build_maker(), MAKER_SPEC)
+    by_key = {item["key"]: item for item in metafields}
+
+    assert set(by_key) == {"title_tag", "description_tag", "maker_source", "maker_summary"}
+    assert by_key["maker_summary"]["namespace"] == "custom"
+    assert by_key["maker_summary"]["type"] == "multi_line_text_field"
+    assert by_key["maker_summary"]["value"] == MAKER_SUMMARY
+    # 依旧不碰 related_products
+    assert "related_products" not in by_key

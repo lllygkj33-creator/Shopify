@@ -178,6 +178,13 @@ export type ParsedCandidate = {
   duplicateOf?: string
 }
 
+/** 后端权威校验的单条结果（POST /api/validate） */
+export type ValidateResultItem = {
+  candidateTempId: string
+  publishable: boolean
+  issues: ValidationIssue[]
+}
+
 /** 单个文件的解析结果 */
 export type ParsedFile = {
   fileName: string

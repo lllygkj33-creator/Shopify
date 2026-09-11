@@ -1,0 +1,23 @@
+{
+  "title": "Minimal BALMUDA-Style ZimaBoard 2 NAS Case with Dual HDD Bays",
+  "meta_title": "ZimaBoard 2 NAS Case with Dual 3.5-Inch HDD Bays",
+  "td": "A minimal BALMUDA-style ZimaBoard 2 NAS case with dual 3.5-inch HDD bays, printed panels, and a quiet airflow path for a home server build.",
+  "summary": "This minimal BALMUDA-style enclosure holds a ZimaBoard 2 with two 3.5-inch drives, keeps cabling internal, and leaves the front panel clean.",
+  "url": "/pages/zimaboard-2-balmuda-style-nas-case-dual-hdd",
+  "template": "makerworld-page",
+  "published": true,
+  "maker_source": {
+    "title": "Minimal BALMUDA Style ZimaBoard 2 NAS Case",
+    "url": "https://makerworld.com/en/models/3034621-minimal-balmuda-style-nas-case",
+    "excerpt": "A minimal BALMUDA-style case with dual 3.5-inch bays.",
+    "creator_name": "ExampleCreator",
+    "creator_avatar_url": "https://makerworld.com/avatar/1.png",
+    "creator_profile_url": "https://makerworld.com/en/@examplecreator",
+    "platform": "MakerWorld",
+    "model_id": "3034621",
+    "license": "BY-NC"
+  },
+  "related_products": [],
+  "images": [],
+  "html": "<div><h2>Design goals</h2><p>Quiet, minimal, and easy to print.</p><h2>Print settings</h2><p>PETG, 0.2 mm layers, 4 perimeters.</p><h2>Assembly</h2><p>Mount the drives, then close the front panel.</p><h2>Source model</h2><p><a href=\"https://makerworld.com/en/models/3034621-minimal-balmuda-style-nas-case\" title=\"Original MakerWorld model page\" target=\"_blank\" rel=\"noopener noreferrer nofollow\">BALMUDA style NAS case model</a></p><img src=\"https://cdn.shopify.com/s/files/1/0001/files/nas-case-front.png\" alt=\"Front view of the printed BALMUDA style NAS case holding two 3.5 inch drives\" title=\"Printed enclosure front view\" loading=\"lazy\"></div>"
+}

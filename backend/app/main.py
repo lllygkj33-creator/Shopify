@@ -183,6 +183,44 @@ class PublishResponse(BaseModel):
     items: list[PublishResultItem]
 
 
+class ValidateIssue(BaseModel):
+    level: str  # error | warning
+    field: str | None = None
+    message: str
+
+
+class ValidateItemIn(BaseModel):
+    """与 PublishItemIn 同形（不含发布方式），用于上传阶段的权威校验。"""
+
+    candidateTempId: str
+    channelId: str
+    contentType: str
+    title: str | None = None
+    handle: str | None = None
+    bodyHtml: str | None = None
+    summary: str | None = None
+    metaTitle: str | None = None
+    metaDescription: str | None = None
+    blogName: str | None = None
+    template: str | None = None
+    source: dict[str, Any] | None = None
+    sourceFile: str | None = None
+
+
+class ValidateRequest(BaseModel):
+    items: list[ValidateItemIn]
+
+
+class ValidateResultItem(BaseModel):
+    candidateTempId: str
+    publishable: bool
+    issues: list[ValidateIssue] = Field(default_factory=list)
+
+
+class ValidateResponse(BaseModel):
+    items: list[ValidateResultItem]
+
+
 class BlogItem(BaseModel):
     id: str
     name: str
@@ -376,6 +414,98 @@ async def list_blogs() -> list[BlogItem]:
         )
         for node in nodes
     ]
+
+
+@app.post("/api/validate", response_model=ValidateResponse)
+async def validate(payload: ValidateRequest) -> ValidateResponse:
+    """上传阶段的**权威**校验（对应前端 C1/C4）。
+
+    为什么要放在后端：各栏目的规则差异很大（Discord 要 4 个 H2、MakerWorld 还要求
+    alt 长度区间 / loading=lazy / 链接的 target·rel·nofollow / 正文引用来源 URL）。
+    这些规则在后端已经有一份完整实现，前端只保留少量结构校验做即时反馈，
+    避免同一套规则在两种语言里各写一遍、然后慢慢漂移。
+
+    只读接口：不写任何东西，纯校验。
+    """
+    results: list[ValidateResultItem] = []
+
+    for item in payload.items:
+        issues: list[ValidateIssue] = []
+
+        if item.contentType == "page":
+            spec = get_page_spec(item.channelId)
+            if spec is None:
+                issues.append(
+                    ValidateIssue(
+                        level="error",
+                        message=f"栏目「{item.channelId}」没有页面发布规格",
+                    )
+                )
+            else:
+                try:
+                    raw: dict[str, Any] = {
+                        "title": item.title,
+                        "meta_title": item.metaTitle,
+                        "meta_description": item.metaDescription,
+                        "summary": item.summary,
+                        "url": item.handle,
+                        "template": item.template,
+                        "html": item.bodyHtml,
+                        spec.source_key: item.source,
+                    }
+                    page = build_page_payload(
+                        raw,
+                        channel_id=item.channelId,
+                        spec=spec,
+                        source_file=item.sourceFile or "",
+                    )
+                    # 结构化错误（缺字段、来源不合法…）
+                    issues.extend(
+                        ValidateIssue(level="error", message=message)
+                        for message in validate_page_payload(page, spec)
+                    )
+                except (PagePublishError, ShopifyError) as error:
+                    issues.append(ValidateIssue(level="error", message=str(error)))
+
+        elif item.contentType == "blog_article":
+            # 博客的规则前端已有本地实现，这里只做一次权威兜底
+            reviewers = (
+                app_config.resolved_default_reviewers() or DEFAULT_REVIEWERS_FALLBACK
+            )
+            products = (
+                app_config.resolved_related_products() or RELATED_PRODUCT_TITLES_FALLBACK
+            )
+            try:
+                normalize_article(
+                    {
+                        "blog title": item.title,
+                        "url": item.handle,
+                        "meta title": item.metaTitle,
+                        "meta description": item.metaDescription,
+                        "summary": item.summary,
+                        "html代码": item.bodyHtml,
+                    },
+                    blog_name=item.blogName or "",
+                    default_author=app_config.resolved_default_author(),
+                    reviewers=reviewers,
+                    product_titles=products,
+                )
+            except PublishError as error:
+                issues.append(ValidateIssue(level="error", message=str(error)))
+        else:
+            issues.append(
+                ValidateIssue(level="error", message=f"未知的内容类型：{item.contentType}")
+            )
+
+        results.append(
+            ValidateResultItem(
+                candidateTempId=item.candidateTempId,
+                publishable=not any(issue.level == "error" for issue in issues),
+                issues=issues,
+            )
+        )
+
+    return ValidateResponse(items=results)
 
 
 @app.post("/api/publish", response_model=PublishResponse)
@@ -612,6 +742,8 @@ async def _publish_page(item: PublishItemIn, now: datetime) -> PublishResultItem
             "title": item.title,
             "meta_title": item.metaTitle,
             "meta_description": item.metaDescription,
+            # MakerWorld 的 summary 是独立必填字段（会成为 custom.maker_summary）
+            "summary": item.summary,
             "url": item.handle,
             "template": item.template,
             "html": item.bodyHtml,

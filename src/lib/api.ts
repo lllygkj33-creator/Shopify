@@ -36,6 +36,7 @@ import axios, { AxiosError } from 'axios'
 import type {
   BlogItem,
   ConnectionCheck,
+  ValidateResultItem,
   ContentItem,
   DashboardStats,
   GlobalSettings,
@@ -221,6 +222,40 @@ type PublishPayloadItem = {
   mode: PublishMode
   /** mode=schedule 必填：已按设置时区换算成带偏移的 ISO 8601 */
   scheduledAt?: string
+}
+
+/**
+ * 上传阶段的**权威**校验（对应栏目页 C1/C4）。
+ *
+ * 各栏目规则差异很大（MakerWorld 还要求 alt 长度区间、loading="lazy"、
+ * 链接的 target/rel/nofollow、正文引用来源 URL）。这些规则在后端只有一份实现，
+ * 前端调这个接口取结果，避免两套规则各自漂移。
+ */
+export const validateApi = {
+  check(
+    items: {
+      candidateTempId: string
+      channelId: string
+      contentType: string
+      title?: string
+      handle?: string
+      bodyHtml?: string
+      summary?: string
+      metaTitle?: string
+      metaDescription?: string
+      blogName?: string
+      template?: string
+      source?: Record<string, unknown>
+      sourceFile?: string
+    }[]
+  ): Promise<ValidateResultItem[]> {
+    if (!items.length) return Promise.resolve([])
+    // 演示模式没有后端，直接用前端本地校验结果
+    if (USE_MOCK) return Promise.resolve([])
+    return send<{ items: ValidateResultItem[] }>('post', '/api/validate', {
+      items,
+    }).then((data) => data.items)
+  },
 }
 
 /**

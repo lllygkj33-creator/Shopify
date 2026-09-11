@@ -144,6 +144,37 @@ class PageChannelSpec:
     meta_description_max: int = 0
     """meta description 上限；0 表示不限制。"""
 
+    source_host_allowlist: tuple[str, ...] = ()
+    """来源 URL 的 host 必须在这些域名内（支持后缀匹配，如 makerworld.com）。"""
+
+    source_path_contains: str = ""
+    """来源 URL 的路径必须包含该片段（如 /models/）。"""
+
+    source_exact_values: tuple[tuple[str, str], ...] = ()
+    """字段 → 固定值（大小写不敏感），如 platform 必须是 MakerWorld。"""
+
+    source_digit_fields: tuple[str, ...] = ()
+    """非空时必须是纯数字的字段。"""
+
+    extra_metafields: tuple[tuple[str, str, str], ...] = ()
+    """额外的 metafield：(key, type, 载荷字段名)，如 MakerWorld 的 maker_summary。"""
+
+    summary_min: int = 0
+    """summary 最小长度；0 表示不检查。"""
+
+    img_alt_min: int = 0
+    img_alt_max: int = 0
+    """图片 alt 的长度区间；0 表示不检查。"""
+
+    require_lazy_loading: bool = False
+    """是否要求所有 <img> 带 loading="lazy"。"""
+
+    enforce_anchor_rules: bool = False
+    """是否启用链接规则（禁止的 anchor 文本、target/rel/nofollow）。"""
+
+    require_source_url_in_body: bool = False
+    """正文里必须出现来源 URL（MakerWorld 要求引用原始模型页）。"""
+
     keep_source_extras: bool = False
     """是否保留来源对象里除必需字段外的其他键（Discord 脚本会保留）。"""
 
@@ -219,7 +250,7 @@ PAGE_CHANNEL_SPECS: dict[str, PageChannelSpec] = {
         meta_description_max=170,
         verified=True,
     ),
-    # ⚠️ 以下 3 个规格来自 PRD §3.2，**尚未**用真实脚本核对：
+    # ⚠️ 以下 2 个规格来自 PRD §3.2，**尚未**用真实脚本核对：
     #    template 与来源键名按命名规律推断，来源字段不做强校验。
     #    拿到各自脚本后按上面两个栏目那样收紧。
     "user-story": PageChannelSpec(
@@ -230,15 +261,96 @@ PAGE_CHANNEL_SPECS: dict[str, PageChannelSpec] = {
         template="nas-a-vs-b",
         source_key="vs_source",
     ),
+    # ✅ 已对照 publish_maker_pages.py 核对
+    #
+    # 这是三个脚本里校验最严的：除了 h2≥4 / meta_title≤65 / description 120~170，
+    # 还要求 summary≥80、图片 alt 长度 50~100 且必须 loading="lazy"、
+    # 链接的 anchor 文本 / target / rel / nofollow 全部有规则，
+    # 并且正文必须引用原始 MakerWorld 模型页。
     "makerworld": PageChannelSpec(
         template="makerworld-page",
-        source_key="makerworld_source",
+        # 注意：不是 makerworld_source
+        source_key="maker_source",
+        source_fields=(
+            "title",
+            "url",
+            "excerpt",
+            "creator_name",
+            "creator_avatar_url",
+            "creator_profile_url",
+            "platform",
+            "model_id",
+            "license",
+        ),
+        source_required_nonempty=("title", "url", "excerpt", "creator_name", "platform"),
+        source_http_url_fields=("url", "creator_avatar_url", "creator_profile_url"),
+        source_host_allowlist=("makerworld.com",),
+        source_path_contains="/models/",
+        source_exact_values=(("platform", "makerworld"),),
+        source_digit_fields=("model_id",),
+        # 额外的 metafield：maker_summary（正文摘要，与 SEO description 不同）
+        extra_metafields=(("maker_summary", "multi_line_text_field", "summary"),),
+        h2_min=4,
+        meta_title_max=65,
+        meta_description_min=120,
+        meta_description_max=170,
+        summary_min=80,
+        img_alt_min=50,
+        img_alt_max=100,
+        require_lazy_loading=True,
+        enforce_anchor_rules=True,
+        require_source_url_in_body=True,
+        verified=True,
     ),
 }
 
 
 def get_page_spec(channel_id: str) -> PageChannelSpec | None:
     return PAGE_CHANNEL_SPECS.get(channel_id)
+
+
+# 禁止的 anchor 文本（MakerWorld 脚本的反模式清单）
+FORBIDDEN_ANCHOR_PATTERNS = (
+    r"\bdocument(?:ation|s)?\b",
+    r"\bdocs\b",
+    r"\bsee\b.{0,50}\bguide\b",
+    r"\bread\b.{0,50}\bguide\b",
+    r"\bclick here\b",
+    r"\blearn more here\b",
+)
+
+# 第三方链接必须 nofollow；自家域名豁免
+NOFOLLOW_EXEMPT_HOST_SUFFIXES = ("zimaspace.com",)
+
+
+def strip_html_text(value: str) -> str:
+    import html as html_module
+
+    text = re.sub(r"<[^>]+>", " ", value, flags=re.IGNORECASE | re.DOTALL)
+    text = html_module.unescape(text)
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def get_attr(tag: str, attr: str) -> str:
+    match = re.search(
+        rf"\b{re.escape(attr)}\s*=\s*([\"'])(.*?)\1",
+        tag,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+    return match.group(2).strip() if match else ""
+
+
+def get_rel_tokens(tag: str) -> set[str]:
+    return {
+        token.strip().lower()
+        for token in re.split(r"\s+", get_attr(tag, "rel"))
+        if token.strip()
+    }
+
+
+def host_matches_allowlist(host: str, allowlist: tuple[str, ...]) -> bool:
+    host = (host or "").lower().strip(".")
+    return any(host == allowed or host.endswith("." + allowed) for allowed in allowlist)
 
 
 # ---------------------------------------------------------------------------
@@ -255,6 +367,7 @@ class PagePayload:
     handle: str
     body_html: str
     template_suffix: str
+    summary: str = ""
     source: dict[str, str] = field(default_factory=dict)
     source_file: str = ""
     # 脚本解析了 published 但**没有**用进 create/update input；
@@ -431,6 +544,48 @@ def load_source(data: dict[str, Any], spec: PageChannelSpec) -> dict[str, str]:
                 f"{spec.source_key}.{field_name} 必须是完整的 http(s) 链接"
             )
 
+    # host 白名单（如 url 必须指向 makerworld.com）
+    if spec.source_host_allowlist:
+        for field_name in spec.source_http_url_fields:
+            value = normalized.get(field_name, "")
+            if not value:
+                continue
+            from urllib.parse import urlparse
+
+            host = (urlparse(value).hostname or "").lower()
+            if not host_matches_allowlist(host, spec.source_host_allowlist):
+                allowed = " / ".join(spec.source_host_allowlist)
+                raise PagePublishError(
+                    f"{spec.source_key}.{field_name} 必须指向 {allowed}"
+                )
+
+    # 路径必须包含片段（如 MakerWorld 的 /models/）
+    if spec.source_path_contains:
+        from urllib.parse import urlparse
+
+        url_value = normalized.get("url", "")
+        if url_value and spec.source_path_contains not in urlparse(url_value).path:
+            raise PagePublishError(
+                f"{spec.source_key}.url 必须指向模型页"
+                f"（路径需包含 {spec.source_path_contains}）"
+            )
+
+    # 固定值字段（如 platform 必须是 MakerWorld）
+    for field_name, expected in spec.source_exact_values:
+        value = normalized.get(field_name, "")
+        if value and value.casefold() != expected.casefold():
+            raise PagePublishError(
+                f"{spec.source_key}.{field_name} 必须是 {expected!r}；当前 {value!r}"
+            )
+
+    # 纯数字字段（如 model_id）
+    for field_name in spec.source_digit_fields:
+        value = normalized.get(field_name, "")
+        if value and not re.fullmatch(r"\d+", value):
+            raise PagePublishError(
+                f"{spec.source_key}.{field_name} 只能包含数字或留空"
+            )
+
     return normalized
 
 
@@ -444,8 +599,12 @@ def _is_complete_http_url(value: str) -> bool:
 def validate_page_payload(payload: PagePayload, spec: PageChannelSpec) -> list[str]:
     """与各栏目脚本 `validate_payload()` 对应的硬校验。
 
-    注意规则**按栏目不同**：社区只要求 ≥1 个 H2，Discord 要求 ≥4 个，
-    且 Discord 还有 meta 长度区间。
+    规则**按栏目不同**（都由 spec 声明）：
+      - 社区：≥1 个 H2，无 meta 长度要求
+      - Discord：≥4 个 H2，meta_title ≤65，description 120~170
+      - MakerWorld：在 Discord 基础上再加 summary≥80、图片 alt 50~100 且必须
+        loading="lazy"、链接的 anchor 文本 / target / rel / nofollow、
+        以及正文必须引用来源 URL
     """
     errors: list[str] = []
     html_lower = payload.body_html.lower()
@@ -471,30 +630,140 @@ def validate_page_payload(payload: PagePayload, spec: PageChannelSpec) -> list[s
 
     description_length = len(payload.meta_description)
     if spec.meta_description_min or spec.meta_description_max:
-        if spec.meta_description_min and description_length < spec.meta_description_min:
-            errors.append(
-                f"meta description 应在 {spec.meta_description_min}"
-                f"~{spec.meta_description_max} 字符之间；当前 {description_length}"
-            )
-        elif spec.meta_description_max and description_length > spec.meta_description_max:
+        too_short = bool(spec.meta_description_min) and description_length < spec.meta_description_min
+        too_long = bool(spec.meta_description_max) and description_length > spec.meta_description_max
+        if too_short or too_long:
             errors.append(
                 f"meta description 应在 {spec.meta_description_min}"
                 f"~{spec.meta_description_max} 字符之间；当前 {description_length}"
             )
 
+    if spec.summary_min and len(payload.summary) < spec.summary_min:
+        errors.append(
+            f"summary 应至少 {spec.summary_min} 个字符（应当是有信息量的描述，"
+            f"而不是单薄标签）；当前 {len(payload.summary)}"
+        )
+
+    # -----------------------------------------------------------------------
+    # 图片
+    # -----------------------------------------------------------------------
     for index, image_tag in enumerate(
-        re.findall(r"<img\b[^>]*>", payload.body_html, re.IGNORECASE), start=1
+        re.findall(r"<img\b[^>]*>", payload.body_html, re.IGNORECASE | re.DOTALL),
+        start=1,
     ):
-        if not re.search(r'\balt\s*=\s*["\'][^"\']+["\']', image_tag, re.IGNORECASE):
+        alt = get_attr(image_tag, "alt")
+        title = get_attr(image_tag, "title")
+
+        if not alt:
             errors.append(f"第 {index} 张图片缺少非空 alt 属性")
-        if not re.search(r'\btitle\s*=\s*["\'][^"\']+["\']', image_tag, re.IGNORECASE):
+        elif spec.img_alt_min or spec.img_alt_max:
+            length = len(alt)
+            if spec.img_alt_min and length < spec.img_alt_min:
+                errors.append(
+                    f"第 {index} 张图片的 alt 应在 {spec.img_alt_min}"
+                    f"~{spec.img_alt_max} 字符之间；当前 {length}"
+                )
+            elif spec.img_alt_max and length > spec.img_alt_max:
+                errors.append(
+                    f"第 {index} 张图片的 alt 应在 {spec.img_alt_min}"
+                    f"~{spec.img_alt_max} 字符之间；当前 {length}"
+                )
+
+        if not title:
             errors.append(f"第 {index} 张图片缺少非空 title 属性")
 
-    for index, anchor_tag in enumerate(
-        re.findall(r"<a\b[^>]*>", payload.body_html, re.IGNORECASE), start=1
-    ):
-        if not re.search(r'\btitle\s*=\s*["\'][^"\']+["\']', anchor_tag, re.IGNORECASE):
+        if not get_attr(image_tag, "src"):
+            errors.append(f"第 {index} 张图片缺少 src")
+
+        if spec.require_lazy_loading and get_attr(image_tag, "loading").lower() != "lazy":
+            errors.append(f'第 {index} 张图片必须使用 loading="lazy"')
+
+    # -----------------------------------------------------------------------
+    # 链接
+    # -----------------------------------------------------------------------
+    anchor_matches = list(
+        re.finditer(
+            r"(<a\b[^>]*>)(.*?)</a>", payload.body_html, re.IGNORECASE | re.DOTALL
+        )
+    )
+    store_domain = STORE_DOMAIN.lower()
+
+    for index, match in enumerate(anchor_matches, start=1):
+        tag = match.group(1)
+        inner = match.group(2)
+        href = get_attr(tag, "href")
+        title_attr = get_attr(tag, "title")
+        anchor_text = strip_html_text(inner)
+
+        if not href:
+            errors.append(f"第 {index} 个链接缺少 href")
+        if not title_attr:
             errors.append(f"第 {index} 个链接缺少非空 title 属性")
+        if not anchor_text:
+            errors.append(f"第 {index} 个链接的 anchor 文本为空")
+
+        if not spec.enforce_anchor_rules or not href:
+            continue
+
+        # 禁止的 anchor 文本
+        for pattern in FORBIDDEN_ANCHOR_PATTERNS:
+            if re.search(pattern, anchor_text, flags=re.IGNORECASE):
+                errors.append(
+                    f"第 {index} 个链接的 anchor 文本不合适：{anchor_text!r}"
+                )
+                break
+
+        from urllib.parse import urlparse
+
+        target = get_attr(tag, "target").lower()
+        rel_tokens = get_rel_tokens(tag)
+        parsed = urlparse(href)
+        host = (parsed.hostname or "").lower()
+
+        is_internal = (
+            href.startswith("/")
+            or href.startswith("#")
+            or host == store_domain
+        )
+
+        if is_internal:
+            # 内链（商品 / 集合 / 站内内容）保持同标签页
+            if target == "_blank":
+                errors.append(
+                    f'第 {index} 个链接是站内链接，不应使用 target="_blank"：{href}'
+                )
+            continue
+
+        if href.startswith(("http://", "https://")):
+            if target != "_blank":
+                errors.append(
+                    f'第 {index} 个外部链接必须使用 target="_blank"：{href}'
+                )
+
+            missing_rel = {"noopener", "noreferrer"} - rel_tokens
+            if missing_rel:
+                errors.append(
+                    f"第 {index} 个外部链接缺少 rel 令牌 {sorted(missing_rel)}：{href}"
+                )
+
+            # 第三方域名必须 nofollow（自家域名豁免）
+            if host and not host_matches_allowlist(host, NOFOLLOW_EXEMPT_HOST_SUFFIXES):
+                if "nofollow" not in rel_tokens:
+                    errors.append(
+                        f"第 {index} 个第三方链接必须包含 nofollow：{href}"
+                    )
+
+    # -----------------------------------------------------------------------
+    # 正文必须引用来源 URL（MakerWorld 要求）
+    # -----------------------------------------------------------------------
+    if spec.require_source_url_in_body:
+        source_url = payload.source.get("url", "")
+        if source_url:
+            without_fragment = source_url.split("#", 1)[0]
+            if without_fragment not in payload.body_html:
+                errors.append(
+                    "正文必须包含指向原始 MakerWorld 模型页的链接"
+                )
 
     return errors
 
@@ -548,11 +817,19 @@ def build_page_payload(
         or spec.template
     )
 
+    # summary：MakerWorld 是独立必填字段（与 SEO description 不同）；
+    # 其他栏目没有这个要求，缺失时回落到 meta description
+    summary_raw = first_value(raw, ["summary", "page_summary", "page summary"])
+    summary = str(summary_raw).strip() if isinstance(summary_raw, str) else ""
+    if not summary and not spec.summary_min:
+        summary = meta_description
+
     return PagePayload(
         channel_id=channel_id,
         title=title,
         meta_title=meta_title,
         meta_description=meta_description,
+        summary=summary,
         handle=handle,
         body_html=load_body_html(raw, source_file),
         template_suffix=template_suffix,
@@ -593,7 +870,7 @@ def page_metafields(payload: PagePayload, spec: PageChannelSpec) -> list[dict[st
     刻意**不包含** `custom.related_products`：脚本里有这样一段注释——
     空或缺失的 related_products 要忽略，否则会把已有商品列表 metafield 清空。
     """
-    return [
+    metafields = [
         *seo_metafields(payload.meta_title, payload.meta_description),
         {
             "namespace": "custom",
@@ -604,6 +881,19 @@ def page_metafields(payload: PagePayload, spec: PageChannelSpec) -> list[dict[st
             ),
         },
     ]
+
+    # 栏目专属的额外 metafield（如 MakerWorld 的 custom.maker_summary）
+    for key, metafield_type, payload_attribute in spec.extra_metafields:
+        metafields.append(
+            {
+                "namespace": "custom",
+                "key": key,
+                "type": metafield_type,
+                "value": str(getattr(payload, payload_attribute, "") or ""),
+            }
+        )
+
+    return metafields
 
 
 # 发布方式。页面与博客不同：页面靠 PageCreateInput 的 isPublished / publishDate 组合控制。

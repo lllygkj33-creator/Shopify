@@ -12,7 +12,7 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import type { Channel } from '@/config/channels'
-import { publishApi, settingsApi, USE_MOCK } from '@/lib/api'
+import { publishApi, settingsApi, USE_MOCK, validateApi } from '@/lib/api'
 import {
   DEFAULT_TIMEZONE,
   defaultScheduleWallTime,
@@ -64,6 +64,7 @@ export function ChannelPage({ channel }: ChannelPageProps) {
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [result, setResult] = useState<PublishResult | null>(null)
   const [batchWallTime, setBatchWallTime] = useState('')
+  const [validating, setValidating] = useState(false)
 
   const settingsQuery = useQuery({
     queryKey: ['settings'],
@@ -89,6 +90,75 @@ export function ChannelPage({ channel }: ChannelPageProps) {
 
   const fileErrors = parsedFiles.filter((file) => file.error)
 
+  /**
+   * 后端权威校验：本地规则只做即时反馈，链接/图片那类复杂规则以后端为准。
+   * 把结果合并进候选（用 tempId 对齐），并重新计算勾选状态。
+   */
+  const mergeBackendValidation = useCallback(async (parsed: ParsedFile[]) => {
+    const items = parsed.flatMap((file) => file.candidates)
+    if (USE_MOCK || items.length === 0) return
+
+    setValidating(true)
+    try {
+      const results = await validateApi.check(
+        items.map((candidate) => ({
+          candidateTempId: candidate.tempId,
+          channelId: candidate.channelId,
+          contentType: candidate.contentType,
+          title: candidate.title,
+          handle: candidate.handle,
+          bodyHtml: candidate.bodyHtml,
+          summary: candidate.summary,
+          metaTitle: candidate.metaTitle,
+          metaDescription: candidate.metaDescription,
+          blogName: candidate.blogName,
+          template: candidate.template,
+          source: candidate.source,
+          sourceFile: candidate.sourceFile,
+        }))
+      )
+
+      const byId = new Map(results.map((item) => [item.candidateTempId, item]))
+
+      setParsedFiles((previous) => {
+        const next = previous.map((file) => ({
+          ...file,
+          candidates: file.candidates.map((candidate) => {
+            const verdict = byId.get(candidate.tempId)
+            if (!verdict) return candidate
+            return {
+              ...candidate,
+              // 后端问题追加在后端发现的问题之后
+              issues: [...candidate.issues, ...verdict.issues],
+              publishable: candidate.publishable && verdict.publishable,
+            }
+          }),
+        }))
+
+        // 校验后变成不可发布的条目要取消勾选
+        const stillPublishable = new Set(
+          next
+            .flatMap((file) => file.candidates)
+            .filter((candidate) => candidate.publishable)
+            .map((candidate) => candidate.tempId)
+        )
+        setSelected((previousSelected) => {
+          const filtered = new Set<string>()
+          for (const tempId of previousSelected) {
+            if (stillPublishable.has(tempId)) filtered.add(tempId)
+          }
+          return filtered
+        })
+
+        return next
+      })
+    } catch {
+      // 后端不可用就沿用本地校验结果，不阻断流程
+    } finally {
+      setValidating(false)
+    }
+  }, [])
+
   /** 选择文件夹后：解析 + 初始化每篇的发布方式与默认勾选 */
   const handleFiles = useCallback(
     (files: PickedFile[]) => {
@@ -113,8 +183,11 @@ export function ChannelPage({ channel }: ChannelPageProps) {
       setSelected(nextSelected)
       setResult(null)
       setBatchWallTime(defaultWallTime)
+
+      // 再跑一次后端权威校验（含本地没有的链接/图片规则）
+      void mergeBackendValidation(parsed)
     },
-    [channel.id, defaultWallTime]
+    [channel.id, defaultWallTime, mergeBackendValidation]
   )
 
   const clearFiles = useCallback(() => {
@@ -311,6 +384,11 @@ export function ChannelPage({ channel }: ChannelPageProps) {
                         <FileJson className='size-4 text-muted-foreground' />
                         已导入 <strong>{parsedFiles.length}</strong> 个文件，解析出{' '}
                         <strong>{candidates.length}</strong> 条内容
+                        {validating && (
+                          <span className='text-muted-foreground'>
+                            （正在做后端权威校验…）
+                          </span>
+                        )}
                         {blockedCount > 0 && (
                           <span className='text-destructive'>
                             （{blockedCount} 条有错误无法发布）

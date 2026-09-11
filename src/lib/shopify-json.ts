@@ -128,7 +128,8 @@ function matchPageChannel(record: RawRecord): Channel | undefined {
   }
   // 退而求其次：按来源键名（com_source / discord_source ...）
   for (const channel of CHANNELS) {
-    if (channel.sourceKey && record[channel.sourceKey] !== undefined) {
+    const pageSourceKey = channel.pageSpec?.sourceKey
+    if (pageSourceKey && record[pageSourceKey] !== undefined) {
       return channel
     }
   }
@@ -337,6 +338,58 @@ function checkPageSource(
         field: field(name),
         message: `必须是完整的 http(s) 链接`,
       })
+      continue
+    }
+
+    if ((spec.sourceHostAllowlist ?? []).length > 0) {
+      try {
+        const host = new URL(trimmed).hostname.toLowerCase()
+        const allowed = spec.sourceHostAllowlist ?? []
+        if (!allowed.some((item) => host === item || host.endsWith(`.${item}`))) {
+          issues.push({
+            level: 'error',
+            field: field(name),
+            message: `必须指向 ${allowed.join(' / ')}`,
+          })
+        }
+      } catch {
+        // 上面已经报过"必须是完整链接"
+      }
+    }
+
+    const expected = spec.sourceExactValues?.[name]
+    if (expected && trimmed.toLowerCase() !== expected.toLowerCase()) {
+      issues.push({
+        level: 'error',
+        field: field(name),
+        message: `必须是「${expected}」，当前「${trimmed}」`,
+      })
+    }
+
+    if ((spec.sourceDigitFields ?? []).includes(name) && !/^\d+$/.test(trimmed)) {
+      issues.push({
+        level: 'error',
+        field: field(name),
+        message: '只能包含数字或留空',
+      })
+    }
+  }
+
+  // 来源 URL 路径必须包含片段（MakerWorld 的 /models/）
+  if (spec.sourcePathContains) {
+    const url = source['url']
+    if (typeof url === 'string' && url.trim()) {
+      try {
+        if (!new URL(url).pathname.includes(spec.sourcePathContains)) {
+          issues.push({
+            level: 'error',
+            field: field('url'),
+            message: `必须指向模型页（路径需包含 ${spec.sourcePathContains}）`,
+          })
+        }
+      } catch {
+        // 链接格式问题上面已报
+      }
     }
   }
 
@@ -698,21 +751,35 @@ function normalizePageCandidate(
     }
   }
 
+  if (spec?.summaryMin) {
+    const summaryValue =
+      typeof raw['summary'] === 'string' ? String(raw['summary']).trim() : ''
+    if (summaryValue.length < spec.summaryMin) {
+      issues.push({
+        level: 'error',
+        field: 'summary',
+        message: `summary 应至少 ${spec.summaryMin} 个字符；当前 ${summaryValue.length}`,
+      })
+    }
+  }
+
   // ---- 正文硬规则：禁 h1 / 至少 h2Min 个 h2 / img alt+title / a title ----
   issues.push(...checkPageHtmlRules(html, spec?.h2Min ?? 1))
 
   // ---- 来源对象（custom.<sourceKey> json metafield） ----
-  const rawSource = channel?.sourceKey ? raw[channel.sourceKey] : undefined
+  const rawSource = channel?.pageSpec?.sourceKey
+    ? raw[channel.pageSpec.sourceKey]
+    : undefined
   // 归一化（剥掉 Discord channel_name 的前导 '#'）后再提交给后端
   const source = normalizePageSource(rawSource, spec)
 
   if (spec?.verified) {
     issues.push(...checkPageSource(source, spec))
-  } else if (channel?.sourceKey && !source) {
+  } else if (channel?.pageSpec?.sourceKey && !source) {
     issues.push({
       level: 'warning',
-      field: channel.sourceKey,
-      message: `缺少 ${channel.sourceKey} 来源信息；该栏目规格尚未核对，此处只做提示`,
+      field: channel.pageSpec.sourceKey,
+      message: `缺少 ${channel.pageSpec.sourceKey} 来源信息；该栏目规格尚未核对，此处只做提示`,
     })
   }
 
@@ -735,7 +802,12 @@ function normalizePageCandidate(
     handle,
     template,
     bodyHtml: html,
-    summary: metaDescription,
+    // MakerWorld 的 summary 是独立必填字段（会写成 custom.maker_summary），
+    // 其他栏目没有就用 meta description 兜底
+    summary:
+      typeof raw['summary'] === 'string' && String(raw['summary']).trim()
+        ? String(raw['summary']).trim()
+        : metaDescription,
     metaTitle,
     metaDescription,
     author: pick(raw, 'author'),
