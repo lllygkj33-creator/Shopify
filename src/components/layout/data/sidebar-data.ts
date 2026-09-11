@@ -13,7 +13,7 @@ import {
   Settings,
   Users,
 } from 'lucide-react'
-import { ZimaMark } from '@/assets/zima-mark'
+import { BrandMark } from '@/assets/brand-mark'
 import { CHANNELS, type Channel } from '@/config/channels'
 import { type SidebarData } from '../types'
 import { site } from '@/config/site'
@@ -64,7 +64,7 @@ export const sidebarData: SidebarData = {
     subtitle: site.brandSubtitle,
     // 用 ZimaSpace 官方标识（取自官网 favicon.svg 的路径，
     // 去掉底块并改用 currentColor，以便跟随侧边栏主题色）
-    logo: ZimaMark,
+    logo: BrandMark,
   },
   navGroups: [
     {

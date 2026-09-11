@@ -212,7 +212,7 @@ const SEEDS: Seed[] = [
   {
     channelId: 'vs',
     title: 'ZimaCube 2 vs Synology DS923+ for Home Labs',
-    handle: '/pages/zimacube-2-vs-synology-ds923',
+    handle: '/pages/example-product-a-vs-example-nas',
     status: 'scheduled',
     dayOffset: 5,
     hour: 15,
@@ -221,7 +221,7 @@ const SEEDS: Seed[] = [
   {
     channelId: 'makerworld',
     title: 'MakerWorld: 3D-Printed ZimaBoard Wall Mount',
-    handle: '/pages/makerworld-zimaboard-wall-mount',
+    handle: '/pages/makerworld-example-wall-mount',
     status: 'draft',
     dayOffset: 7,
     hour: 12,

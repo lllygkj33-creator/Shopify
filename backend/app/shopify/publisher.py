@@ -186,7 +186,7 @@ def validate_article_html(html: str, shop_domain: str = "") -> list[str]:
     所以这一段是平台新增的：只做「外链安全标记」这一条最不容易误伤的规则
     （所有链接要有 title；第三方外链要 _blank + noopener + noreferrer + nofollow）。
 
-    站内（shop.zimaspace.com）与自家域名（*.zimaspace.com）不强制新标签页，
+    站内（shop.example-store.test）与自家域名（*.example-store.test）不强制新标签页，
     因此不会误伤既有文章。
     """
     domain = shop_domain or app_config.resolved_shop_domain() or STORE_DOMAIN

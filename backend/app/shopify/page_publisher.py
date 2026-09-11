@@ -433,7 +433,7 @@ def normalize_page_handle(value: Any) -> str:
     接受：
         qwen3-8b-hardware-requirements
         /pages/qwen3-8b-hardware-requirements
-        https://shop.zimaspace.com/pages/qwen3-8b-hardware-requirements
+        https://shop.example-store.test/pages/qwen3-8b-hardware-requirements
     返回：
         qwen3-8b-hardware-requirements
 

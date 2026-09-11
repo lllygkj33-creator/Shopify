@@ -6,7 +6,7 @@ import type { Channel, PageSpec } from './channels'
  *
  * ## 为什么要有它
  *
- * 原来代码里写死了真实域名（`shop.zimaspace.com`、`community.zimaspace.com`）、
+ * 原来代码里写死了真实域名（`shop.example-store.test`、`community.example-store.test`）、
  * 品牌名、产品名、博客标题、主题模板名。那些是**部署信息**，不是程序逻辑；
  * 写死之后仓库不能给别人用，一推公开仓库就把自己的店铺结构带出去了。
  *

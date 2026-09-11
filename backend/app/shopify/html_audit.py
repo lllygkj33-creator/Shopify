@@ -10,12 +10,12 @@
 | 类别 | 判定 | 要求 |
 |---|---|---|
 | 相对路径 | `/...`、`#...` | 只要求非空 `title` |
-| 站内 | host == 店铺域名（`shop.zimaspace.com`） | 只要求非空 `title` |
-| 自家域名 | host ∈ `*.zimaspace.com` | 只要求非空 `title`（不需要 nofollow） |
+| 站内 | host == 店铺域名（`shop.example-store.test`） | 只要求非空 `title` |
+| 自家域名 | host ∈ `*.example-store.test` | 只要求非空 `title`（不需要 nofollow） |
 | **外部/第三方** | 其余 http(s) 链接 | 必须有 `target="_blank"` + `rel` 含 `noopener`、`noreferrer`、`nofollow` |
 
-注意「自家域名」与「外部」的区分：`www.zimaspace.com/docs/...` 这类自家文档站
-按站内处理（不强制新标签页），只有真正跳出 zimaspace 站群的链接才加 `nofollow`。
+注意「自家域名」与「外部」的区分：`www.example-store.test/docs/...` 这类自家文档站
+按站内处理（不强制新标签页），只有真正跳出 自家站群的链接才加 `nofollow`。
 
 MakerWorld / VS 有各自更严格的规则（例如「站内链接不得开新标签页」），
 那部分由各自的 spec 控制，不走这里。

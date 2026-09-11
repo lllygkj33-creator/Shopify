@@ -2,7 +2,7 @@
 
 ## 为什么需要
 
-代码里原本散落着真实域名（`shop.zimaspace.com`、`community.zimaspace.com`）、
+代码里原本散落着真实域名（`shop.example-store.test`、`community.example-store.test`）、
 品牌名、产品名、博客标题、主题模板名 —— 那些是**部署信息**，不是程序逻辑。
 写死之后：仓库不能给别人用，一推公开仓库就把自己的店铺结构带出去了。
 
@@ -20,8 +20,8 @@
 
     from .site_config import site
 
-    site.storefront_domain        # 'shop.zimaspace.com'
-    site.first_party_suffixes     # ('zimaspace.com',)
+    site.storefront_domain        # 'shop.example-store.test'
+    site.first_party_suffixes     # ('example-store.test',)
     site.channels                 # 栏目表（含各自的 page 规格）
     site.channel('community-post')  # 取一个栏目，找不到抛 KeyError
 """

@@ -83,7 +83,7 @@ def parse_blog_article_url(value: str) -> tuple[str, str]:
     if len(parts) < 3 or parts[0] != "blogs":
         raise BacklinkError(
             "backlink.article_url 必须形如 "
-            "https://shop.zimaspace.com/blogs/<blog-handle>/<article-handle>"
+            "https://shop.example-store.test/blogs/<blog-handle>/<article-handle>"
         )
 
     return parts[1], parts[2]

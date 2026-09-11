@@ -366,7 +366,7 @@ function countOccurrences(haystack: string, needle: string): number {
  * 外链规则（所有栏目共用；后端 html_audit.py 是同一套逻辑）。
  *
  * - 所有链接要有非空 `title`
- * - 相对路径 / 站内（shop.zimaspace.com）/ 自家域名（*.zimaspace.com）只要求 title
+ * - 相对路径 / 站内（shop.example-store.test）/ 自家域名（*.example-store.test）只要求 title
  * - 第三方外链要有 target="_blank" + rel 含 noopener / noreferrer / nofollow
  *
  * 站内与自家域名不强制新标签页，所以不会误伤既有文章。
