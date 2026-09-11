@@ -154,12 +154,13 @@ F1「返回上一页」、F2「回到首页」—— 纯前端。
 
 ### 参考脚本自身的三处不一致（都按代码/硬校验实现）
 
-| 脚本 | 文档示例写的 | 常量 + 硬校验要求 | 采用 |
-|---|---|---|---|
-| Discord | `"template": "discord_post"` | `discord-page` | `discord-page` |
-| VS | `"template": "nas-comparison-template-v5-resources"` | `nas-a-vs-b` | `nas-a-vs-b` |
+| 脚本 | 文档示例写的 | 常量 + 硬校验要求 | 采用 | 状态 |
+|---|---|---|---|---|
+| Discord | `"template": "discord_post"` | `discord-page` | `discord-page` | ⬜ 待确认 |
+| VS | `"template": "nas-comparison-template-v5-resources"` | `nas-a-vs-b` | `nas-a-vs-b` | ✅ **已确认 `nas-a-vs-b` 是真的**（脚本文档示例是笔误） |
 
-这两处的示例 JSON 都会被脚本自己的 preflight 拒掉。**如果你们的 JSON 生成器真在用示例里的模板名，那些文件现在发不出去。**
+这两处的示例 JSON 都会被脚本自己的 preflight 拒掉。VS 已确认按常量实现正确；
+**Discord 的 `discord_post` 还没确认**（如果 JSON 生成器在用这个名字，那些文件发不出去）。
 
 ### 页面模板清单（Custom 文章的模板选择器）
 
@@ -176,8 +177,12 @@ F1「返回上一页」、F2「回到首页」—— 纯前端。
 不报错。所以「模板名写错」是一种会静默失败的发布错误。给一个可搜索的清单能显著降低风险。
 
 ⚠️ 当前 token **没有 `read_themes`**（实测 Shopify 返回
-`Access denied for themes field`），所以现在走的是设置清单。
-在 Shopify 后台给应用加上 `read_themes` 后会自动切到读店铺主题，无需改代码。
+`Access denied for themes field`）。**已确认暂时不加该权限**，所以现在以设置清单为准；
+后续在后台加上后会自动切到读店铺主题，无需改代码。
+
+因为清单是手维护的、可能不全，界面还加了一条**兜底告警**：
+候选的模板名不在清单里时显示「不在清单里：Shopify 会静默回退到主题默认模板，请确认拼写」。
+这是没有主题读取权限时最需要防的静默失败。
 
 ### Custom 文章（模板自由，平台新增）
 

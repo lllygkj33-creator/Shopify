@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Check, ChevronsUpDown, Info } from 'lucide-react'
+import { AlertTriangle, Check, ChevronsUpDown, Info } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -90,6 +90,23 @@ export function TemplatePicker({
           </Command>
         </PopoverContent>
       </Popover>
+
+      {/* 模板名不在清单里 → 大概率写错了。
+          Shopify 对不存在的 templateSuffix 是**静默回退**到主题默认模板、
+          不报错，所以这是没有 read_themes 权限时最需要防的一种静默失败。 */}
+      {value && options.length > 0 && !options.includes(value) && (
+        <p
+          className='flex items-start gap-1 text-[10px] text-amber-600'
+          title={source === 'manual' ? sourceReason ?? undefined : undefined}
+        >
+          <AlertTriangle className='mt-0.5 size-3 shrink-0' />
+          <span>
+            不在清单里
+            {source === 'manual' ? '（清单来自设置）' : ''}
+            ：Shopify 会静默回退到主题默认模板，请确认模板名拼写
+          </span>
+        </p>
+      )}
 
       {source && (
         <p className='flex items-center gap-1 text-[10px] text-muted-foreground'>

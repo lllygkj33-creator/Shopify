@@ -62,9 +62,21 @@ for (const target of PAGES) {
       .catch(() => {})
   }
 
-  // React 的 key 警告等属于 error 级 console，需要排除噪音后上报
+  // React 的 key 警告等属于 error 级 console，需要排除噪音后上报。
+  // 另外本机网络的 CDN（Google Fonts）偶发超时也会以 error 级出现，
+  // 那是环境抖动而不是应用错误 —— 冒烟检查在演示模式下不访问后端，
+  // 所以这里可以安全地只忽略外部资源加载失败。
+  const EXTERNAL_RESOURCE_NOISE = [
+    'favicon',
+    'Download the React DevTools',
+    'fonts.googleapis.com',
+    'fonts.gstatic.com',
+    'ERR_TIMED_OUT',
+    'ERR_NETWORK_CHANGED',
+    'ERR_INTERNET_DISCONNECTED',
+  ]
   const noisy = consoleErrors.filter(
-    (text) => !text.includes('favicon') && !text.includes('Download the React DevTools')
+    (text) => !EXTERNAL_RESOURCE_NOISE.some((noise) => text.includes(noise))
   )
   if (noisy.length > 0) {
     problems.push(`${target.path} console errors: ${noisy.join(' | ')}`)
@@ -348,6 +360,19 @@ try {
   }
   if (filtered !== 1) {
     problems.push(`搜索 "makerworld" 应只剩 1 项，实际 ${filtered}`)
+  }
+
+  // fixture 的模板名不在内置清单里 → 应出现「不在清单里」告警
+  // （Shopify 对不存在的 templateSuffix 会静默回退，这是最需要防的静默失败）
+  await custom.keyboard.press('Escape')
+  const warnVisible = await custom
+    .locator('text=不在清单里')
+    .first()
+    .isVisible()
+    .catch(() => false)
+  console.log(`模板不在清单的告警  : ${warnVisible ? '已显示' : '未显示'}`)
+  if (!warnVisible) {
+    problems.push('模板名不在清单里时应显示告警（否则会静默回退到默认模板）')
   }
 } catch (error) {
   problems.push(`Custom 模板选择器: ${error.message}`)
