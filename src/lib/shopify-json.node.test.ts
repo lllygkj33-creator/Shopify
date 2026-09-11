@@ -5,7 +5,7 @@
  * 因为最容易出错的地方正是这些：
  *  - 字段名带空格：`blog title` / `meta title` / `html代码`
  *  - tech-ai-hub 的正文是**裸 `<article>`，没有 class**
- *  - buying-guide 的 class 是 `zima-buying-guide-article`
+ *  - 博客栏目的正文 class 来自栏目配置（`htmlClass`）
  *  - Product Comparisons 的 class 用复数，文件夹却是单数
  */
 import { CHANNELS } from '@/config/channels'
@@ -21,8 +21,14 @@ import {
 } from '@/lib/shopify-json'
 
 /** 4 个 H2，满足 related_products 占位符注入条件 */
+// 正文 class 属于**部署配置**（栏目的 htmlClass），测试从配置取
+const BUYING_GUIDE = CHANNELS.find((c) => c.contentType === 'blog_article' && c.htmlClass)
+const BLOG_CLASS = BUYING_GUIDE?.htmlClass ?? 'example-blog-a-article'
+// 这个栏目的 class 名与 id 不同形（comparisons / comparison），专门用来钉住映射
+const PC = CHANNELS.find((c) => c.id === 'product-comparison')!
+
 const HTML_WITH_4_H2 = `
-<article class="zima-buying-guide-article">
+<article class="${BLOG_CLASS}">
   <h2>A</h2><p>1</p><h2>B</h2><p>2</p><h2>C</h2><p>3</p><h2>D</h2><p>4</p>
 </article>`
 
@@ -51,7 +57,7 @@ describe('parseJsonContent —— 博客文章（数组 schema）', () => {
     expect(candidate.metaTitle).toBe('Meta 标题')
     expect(candidate.metaDescription).toBe('Meta 描述')
     expect(candidate.summary).toBe('摘要')
-    expect(candidate.bodyHtml).toContain('zima-buying-guide-article')
+    expect(candidate.bodyHtml).toContain(BLOG_CLASS)
     expect(candidate.contentType).toBe('blog_article')
     expect(candidate.publishable).toBe(true)
   })
@@ -62,19 +68,20 @@ describe('parseJsonContent —— 博客文章（数组 schema）', () => {
         'blog title': 'X',
         url: 'x',
         html代码:
-          '<article class="zima-product-comparisons-article"><h2>a</h2></article>',
+          `<article class="${PC.htmlClass}"><h2>a</h2></article>`,
       },
     ])
 
     const [candidate] = parseJsonContent(text, 'f.json').candidates
 
-    // class 用复数 comparisons，正确映射到 product-comparison 栏目
-    expect(candidate.channelId).toBe('product-comparison')
-    expect(candidate.blogName).toBe('Product Comparisons')
+    // 用配置里的 class 与博客名断言（class 名与栏目 id 不一定同形，
+    // 例如 comparisons / comparison 这种差异就是这条用例要钉住的）
+    expect(candidate.channelId).toBe(PC.id)
+    expect(candidate.blogName).toBe(PC.blogName)
   })
 
   it('正文没有 class 时落回当前栏目默认博客（真实样本就是这样）', () => {
-    // tech-ai-hub 的真实 JSON 正文就是裸 <article>
+    // 真实样本里有的 JSON 正文就是裸 <article>
     const text = JSON.stringify([
       {
         'blog title': 'Home AI Trust Boundary',
@@ -86,15 +93,12 @@ describe('parseJsonContent —— 博客文章（数组 schema）', () => {
       },
     ])
 
-    const [candidate] = parseJsonContent(
-      text,
-      'a.json',
-      'tech-ai-hub'
-    ).candidates
+    const [candidate] = parseJsonContent(text, 'a.json', BUYING_GUIDE!.id)
+      .candidates
 
-    expect(candidate.channelId).toBe('tech-ai-hub')
-    // 注意：店铺里的标题就是大写 HUB（已与真实店铺核对）
-    expect(candidate.blogName).toBe('Tech & AI HUB')
+    expect(candidate.channelId).toBe(BUYING_GUIDE!.id)
+    // 落回的是**该栏目配置的博客名**
+    expect(candidate.blogName).toBe(BUYING_GUIDE!.blogName)
     // 应给出提示而不是报错：发布仍可继续
     expect(candidate.publishable).toBe(true)
     expect(
@@ -334,9 +338,9 @@ describe('handle 规范化', () => {
 describe('resolveBlogName', () => {
   it('有 class 时来源标记为 class', () => {
     const result = resolveBlogName(
-      '<article class="zima-support-tips-article"></article>'
+      `<article class="${BUYING_GUIDE!.htmlClass}"></article>`
     )
-    expect(result).toEqual({ blogName: 'Support & Tips', source: 'class' })
+    expect(result).toEqual({ blogName: BUYING_GUIDE!.blogName, source: 'class' })
   })
 
   it('无 class 且无栏目兜底时来源为 none', () => {
@@ -369,6 +373,12 @@ const PROFILE_PREFIX =
   'https://community.example.com/u/'
 const STOREFRONT = site.storefrontDomain
 const FIRST_PARTY = site.firstPartySuffixes[0] ?? 'example.com'
+
+
+/** 用户故事的固定文案与博客名都来自配置，测试不写死 */
+const US_SPEC = CHANNELS.find((c) => c.id === 'user-story')?.pageSpec
+const US_OPENING = US_SPEC?.bodyMustContain?.[0] ?? 'Example fixed sentence 1'
+const US_CLOSING = US_SPEC?.bodyMustContain?.[1] ?? 'Example fixed sentence 2'
 
 const COMMUNITY_SOURCE = {
   title: 'Prowlarr + Radarr on CasaOS',
@@ -479,13 +489,10 @@ describe('上传阶段校验 —— 博客文章', () => {
         html代码: HTML_WITH_4_H2,
       },
     ])
-    // HTML_WITH_4_H2 带的是 zima-buying-guide-article，要在对应栏目里上传，
+    // HTML_WITH_4_H2 带的是配置里那个博客栏目的 class，要在对应栏目里上传，
     // 否则会命中「这份 JSON 属于别的栏目」的新规则（那是另一条用例的事）
-    const [candidate] = parseJsonContent(
-      raw,
-      'f.json',
-      'buying-guide'
-    ).candidates
+    const [candidate] = parseJsonContent(raw, 'f.json', BUYING_GUIDE!.id)
+      .candidates
 
     expect(errorsOf(candidate)).toEqual([])
   })
@@ -828,10 +835,10 @@ const USER_INFO = {
 
 const USER_HTML = [
   '<div>',
-  '<h2>A Note from Zima</h2><p>We asked how it came together.</p>',
+  `<h2>${US_OPENING}</h2><p>We asked how it came together.</p>`,
   '<h2>Starting small</h2><p>One bay at first.</p>',
   '<h2>Scaling up</h2><p>Then it grew.</p>',
-  '<h2>The Story Is Still Being Written</h2><p>More to come.</p>',
+  `<h2>${US_CLOSING}</h2><p>More to come.</p>`,
   '</div>',
 ].join('')
 
@@ -857,27 +864,27 @@ describe('上传阶段校验 —— 用户故事', () => {
     expect(candidate.issues).toEqual([])
   })
 
-  it('正文缺少「A Note from Zima」报错', () => {
+  it('正文缺少开场固定文案报错', () => {
     const [candidate] = parseJsonContent(
-      userStory({ html: USER_HTML.replace('A Note from Zima', 'A note') }),
+      userStory({ html: USER_HTML.replace(US_OPENING, 'A note') }),
       'User/a.json'
     ).candidates
 
     expect(errorsOf(candidate)).toContainEqual(
-      expect.stringContaining('A Note from Zima')
+      expect.stringContaining(US_OPENING)
     )
   })
 
-  it('正文缺少收尾文案报错', () => {
+  it('正文缺少收尾固定文案报错', () => {
     const [candidate] = parseJsonContent(
       userStory({
-        html: USER_HTML.replace('The Story Is Still Being Written', 'Soon'),
+        html: USER_HTML.replace(US_CLOSING, 'Soon'),
       }),
       'User/a.json'
     ).candidates
 
     expect(errorsOf(candidate)).toContainEqual(
-      expect.stringContaining('The Story Is Still Being Written')
+      expect.stringContaining(US_CLOSING)
     )
   })
 
@@ -910,7 +917,7 @@ describe('上传阶段校验 —— 用户故事', () => {
 
   it('H2 少于 4 个报错', () => {
     const [candidate] = parseJsonContent(
-      userStory({ html: '<div><h2>A Note from Zima</h2></div>' }),
+      userStory({ html: `<div><h2>${US_OPENING}</h2></div>` }),
       'User/a.json'
     ).candidates
 
@@ -1353,7 +1360,11 @@ describe('上传栏目与 JSON 归属不一致 → 直接报错', () => {
     expect(errorsOf(candidate)).toEqual([])
   })
 
-  it('文章：Buying Guide 的 class 在 Tech & AI Hub 页上传', () => {
+  it('文章：别的栏目的 class 在当前栏目页上传', () => {
+    // 目标栏目取「第一个不是 BUYING_GUIDE 的博客栏目」，名字从配置里读
+    const other = CHANNELS.find(
+      (c) => c.contentType === 'blog_article' && c.id !== BUYING_GUIDE!.id
+    )!
     const raw = JSON.stringify([
       {
         'blog title': 'T',
@@ -1361,17 +1372,16 @@ describe('上传栏目与 JSON 归属不一致 → 直接报错', () => {
         'meta title': 'MT',
         'meta description': 'MD',
         summary: 'S',
-        html代码: HTML_WITH_4_H2, // zima-buying-guide-article
+        html代码: HTML_WITH_4_H2,
       },
     ])
-    const [candidate] = parseJsonContent(
-      raw,
-      'f.json',
-      'tech-ai-hub'
-    ).candidates
+    const [candidate] = parseJsonContent(raw, 'f.json', other.id).candidates
 
-    expect(candidate.channelId).toBe('tech-ai-hub')
-    expect(errorsOf(candidate).join('；')).toContain('Buying Guides')
+    expect(candidate.channelId).toBe(other.id)
+    // 报错要点名「这份属于哪个栏目」与「现在在哪个栏目」，两个名字都来自配置
+    const message = errorsOf(candidate).join('；')
+    expect(message).toContain(BUYING_GUIDE!.nameZh ?? BUYING_GUIDE!.name)
+    expect(message).toContain(other.nameZh ?? other.name)
   })
 
   it('归属一致不报错', () => {
@@ -1385,11 +1395,8 @@ describe('上传栏目与 JSON 归属不一致 → 直接报错', () => {
         html代码: HTML_WITH_4_H2,
       },
     ])
-    const [candidate] = parseJsonContent(
-      raw,
-      'f.json',
-      'buying-guide'
-    ).candidates
+    const [candidate] = parseJsonContent(raw, 'f.json', BUYING_GUIDE!.id)
+      .candidates
 
     expect(errorsOf(candidate)).toEqual([])
   })

@@ -19,6 +19,7 @@ from app.shopify.page_publisher import (
     validate_page_payload,
 )
 from app.shopify.vs_resources import (
+    MEDIA_PREFIX,
     PENDING_COVER,
     RESOURCES_CLOSE_MARKER,
     RESOURCES_OPEN_MARKER,
@@ -116,7 +117,7 @@ def vs_html(**overrides) -> str:
             blocks.append(marker_block(name))
 
     return (
-        f'<div class="{VS_SPEC.media_card_class.split("__")[0]}" '
+        f'<div class="{MEDIA_PREFIX}" '
         f'{VS_SPEC.require_meta_attribute}="1">'
         + "".join(blocks)
         + '<p><a href="/collections/all" title="Browse all Zima hardware">'

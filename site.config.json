@@ -100,7 +100,7 @@
       "defaultFolder": "Com",
       "contentType": "page",
       "color": "#8b5cf6",
-      "template": "example-template-1",
+      "template": "community_post",
       "page": {
         "enforceLinkRules": true,
         "h2Min": 1,
@@ -116,7 +116,7 @@
           "author_avatar_url",
           "author_profile_url"
         ],
-        "sourceKey": "example_source_1",
+        "sourceKey": "community_source",
         "sourceRequiredNonEmpty": [
           "title",
           "url",
@@ -129,7 +129,7 @@
           "excerpt",
           "author_name"
         ],
-        "template": "example-template-1",
+        "template": "community_post",
         "verified": true
       }
     },
@@ -140,7 +140,7 @@
       "defaultFolder": "Discord",
       "contentType": "page",
       "color": "#5865f2",
-      "template": "example-template-2",
+      "template": "discord-page",
       "page": {
         "enforceLinkRules": true,
         "h2Min": 4,
@@ -165,7 +165,7 @@
           "starter_avatar_url",
           "invite_url"
         ],
-        "sourceKey": "example_source_2",
+        "sourceKey": "discord_source",
         "sourceRequiredNonEmpty": [
           "title",
           "url",
@@ -185,7 +185,7 @@
         "stripHashPrefix": [
           "channel_name"
         ],
-        "template": "example-template-2",
+        "template": "discord-page",
         "verified": true
       }
     },
@@ -196,7 +196,7 @@
       "defaultFolder": "User",
       "contentType": "page",
       "color": "#22c55e",
-      "template": "example-template-3",
+      "template": "user-story",
       "page": {
         "bodyMustContain": [
           "Example fixed sentence 1",
@@ -214,7 +214,7 @@
           "avatar_url",
           "profile_url"
         ],
-        "sourceKey": "example_source_3",
+        "sourceKey": "user_info",
         "sourceRequiredNonEmpty": [
           "name",
           "handle",
@@ -225,7 +225,7 @@
           "handle",
           "profile_url"
         ],
-        "template": "example-template-3",
+        "template": "user-story",
         "verified": true
       }
     },
@@ -236,7 +236,7 @@
       "defaultFolder": "VS",
       "contentType": "page",
       "color": "#ef4444",
-      "template": "example-template-4",
+      "template": "nas-a-vs-b",
       "page": {
         "anchorWordMax": 6,
         "anchorWordMin": 2,
@@ -264,7 +264,7 @@
           "Replace with"
         ],
         "h2Min": 0,
-        "mediaCardClass": "example-media-item",
+        "mediaCardClass": "example-compare__media-item",
         "metaDescriptionMax": 170,
         "metaDescriptionMin": 120,
         "metaTitleMax": 65,
@@ -284,7 +284,7 @@
           "METHODOLOGY"
         ],
         "sourceKey": "",
-        "template": "example-template-4",
+        "template": "nas-a-vs-b",
         "verified": true
       }
     },
@@ -294,7 +294,7 @@
       "defaultFolder": "Maker",
       "contentType": "page",
       "color": "#06b6d4",
-      "template": "example-template-5",
+      "template": "makerworld-page",
       "page": {
         "enforceAnchorRules": true,
         "extraMetafields": [
@@ -337,7 +337,7 @@
           "creator_avatar_url",
           "creator_profile_url"
         ],
-        "sourceKey": "example_source_4",
+        "sourceKey": "maker_source",
         "sourcePathContains": "/models/",
         "sourceRequiredNonEmpty": [
           "title",
@@ -354,7 +354,7 @@
           "platform"
         ],
         "summaryMin": 80,
-        "template": "example-template-5",
+        "template": "makerworld-page",
         "verified": true
       }
     },
@@ -364,7 +364,7 @@
       "defaultFolder": "Model",
       "contentType": "page",
       "color": "#a855f7",
-      "template": "example-template-6",
+      "template": "local-ai-model-hardware",
       "hidden": true
     },
     {
@@ -373,7 +373,7 @@
       "defaultFolder": "APP",
       "contentType": "page",
       "color": "#84cc16",
-      "template": "example-template-7",
+      "template": "app-hardware-requirements",
       "hidden": true
     }
   ],

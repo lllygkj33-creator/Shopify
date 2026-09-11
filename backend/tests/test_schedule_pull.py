@@ -30,6 +30,14 @@ from app.shopify.channel_map import (
     resolve_page_channel,
 )
 from app.site_config import site
+
+# 博客栏目与它的 handle 都从配置取（写死就依赖某一家店铺）
+ARTICLE_CHANNEL = next(
+    str(c["id"]) for c in site.channels if c.get("blogHandle")
+)
+FIRST_BLOG_HANDLE = next(
+    str(c["blogHandle"]) for c in site.channels if c.get("blogHandle")
+)
 from app.shopify.client import ShopifyError
 from app.shopify.schedule_pull import REMOTE_SOURCE_TAG, SchedulePuller
 from app.storage import ContentStore
@@ -152,7 +160,13 @@ async def test_published_items_are_never_asked_for(store):
 
 async def test_pull_maps_pages_and_articles_to_channels(store):
     client = FakeClient(
-        articles=[article("1", blog_handle="tech-ai-hub", handle="a1")],
+        articles=[
+            article(
+                "1",
+                blog_handle=FIRST_BLOG_HANDLE,
+                handle="a1",
+            )
+        ],
         pages=[
             page("2", template="community_post", handle="p1"),
             page("3", template="discord-page", handle="p2"),
@@ -172,7 +186,7 @@ async def test_pull_maps_pages_and_articles_to_channels(store):
     assert rows["community-post"]["status"] == "scheduled"
     assert rows["community-post"]["content_type"] == "page"
     assert rows["tech-ai-hub"]["content_type"] == "blog_article"
-    assert rows["tech-ai-hub"]["published_url"] == "/blogs/tech-ai-hub/a1"
+    assert rows[ARTICLE_CHANNEL]["published_url"] == f"/blogs/{FIRST_BLOG_HANDLE}/a1"
     # 拉回来的都是排期，published_at 必须留空，否则时间轴会显示成「已发布」
     assert rows["tech-ai-hub"]["published_at"] is None
 

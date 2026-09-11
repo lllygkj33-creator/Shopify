@@ -1,14 +1,17 @@
 """外链规则测试（所有栏目共用）。
 
 规则：所有链接要有非空 title；第三方外链要 target=_blank + rel 含
-noopener / noreferrer / nofollow；站内与自家域名（*.zimaspace.com）只要求 title。
+noopener / noreferrer / nofollow；站内与自家域名只要求 title（域名来自站点配置）。
 """
 
 from __future__ import annotations
 
+from app.site_config import site
+
+FIRST_PARTY = site.first_party_suffixes[0]
 from app.shopify.html_audit import audit_external_links, is_first_party, is_internal
 
-SHOP = "shop.zimaspace.com"
+SHOP = site.storefront_domain
 
 
 def audit(html: str) -> list[str]:
@@ -54,9 +57,9 @@ def test_shop_link_only_needs_title():
 
 
 def test_first_party_docs_link_only_needs_title():
-    """自家域名（www.zimaspace.com）按站内处理，不强制 _blank。"""
-    assert audit(link("https://www.zimaspace.com/docs/zimaos/features")) == []
-    assert audit(link("https://zimaspace.com/docs/x")) == []
+    """自家域名按站内处理，不强制 _blank（域名来自站点配置）。"""
+    assert audit(link(f"https://www.{FIRST_PARTY}/docs/zimaos/features")) == []
+    assert audit(link(f"https://{FIRST_PARTY}/docs/x")) == []
 
 
 def test_compliant_third_party_link_passes():
@@ -108,9 +111,9 @@ def test_third_party_missing_only_nofollow_is_flagged():
     assert "nofollow" in errors[0]
 
 
-def test_www_zimaspace_link_is_not_third_party():
+def test_www_first_party_link_is_not_third_party():
     """自家域名不该被要求 nofollow。"""
-    assert audit(link("https://www.zimaspace.com/docs/x", target="_blank", rel="noopener noreferrer")) == []
+    assert audit(link(f"https://www.{FIRST_PARTY}/docs/x", target="_blank", rel="noopener noreferrer")) == []
 
 
 def test_multiple_links_report_by_index():

@@ -28,6 +28,10 @@ from app.shopify.page_publisher import (
 )
 
 SPEC = get_page_spec("community-post")
+US_SPEC = get_page_spec("user-story")
+
+# 用户故事的固定文案属于**部署内容**（主题里的原话），从规格取
+US_OPENING, US_CLOSING = US_SPEC.body_must_contain
 assert SPEC is not None
 
 # 域名与来源前缀都是**部署信息**（site.config.json / gitignored 的 local），
@@ -907,10 +911,10 @@ USER_INFO = {
 
 USER_HTML = (
     "<div>"
-    '<h2>A Note from Zima</h2><p>We asked how the build came together.</p>'
+    f'<h2>{US_OPENING}</h2><p>We asked how the build came together.</p>'
     "<h2>Starting small</h2><p>It began with a single bay.</p>"
     "<h2>Scaling to 350 TB</h2><p>Then it grew.</p>"
-    "<h2>The Story Is Still Being Written</h2><p>More to come.</p>"
+    f"<h2>{US_CLOSING}</h2><p>More to come.</p>"
     "</div>"
 )
 
@@ -954,23 +958,23 @@ def test_user_story_valid_payload_passes():
 
 
 def test_user_story_requires_fixed_copy_in_body():
-    html = USER_HTML.replace("A Note from Zima", "A note")
+    html = USER_HTML.replace(US_OPENING, "A note")
     payload = build_user(raw_user(html=html))
     errors = validate_page_payload(payload, USER_SPEC)
 
-    assert any("A Note from Zima" in error for error in errors)
+    assert any(US_OPENING in error for error in errors)
 
 
 def test_user_story_requires_closing_line():
-    html = USER_HTML.replace("The Story Is Still Being Written", "More soon")
+    html = USER_HTML.replace(US_CLOSING, "More soon")
     payload = build_user(raw_user(html=html))
     errors = validate_page_payload(payload, USER_SPEC)
 
-    assert any("The Story Is Still Being Written" in error for error in errors)
+    assert any(US_CLOSING in error for error in errors)
 
 
 def test_user_story_requires_four_h2():
-    html = "<div><h2>A Note from Zima</h2><h2>The Story Is Still Being Written</h2></div>"
+    html = "<div><h2>{US_OPENING}</h2><h2>The Story Is Still Being Written</h2></div>"
     payload = build_user(raw_user(html=html))
     errors = validate_page_payload(payload, USER_SPEC)
 

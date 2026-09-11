@@ -8,6 +8,7 @@ from __future__ import annotations
 import pytest
 
 from app.shopify.backlink import (
+    BACKLINK_ATTR,
     BacklinkConfig,
     BacklinkError,
     BacklinkRunner,
@@ -135,7 +136,7 @@ def test_backlink_block_contains_marker_and_data_attribute():
     block = build_backlink_block(PAGE_HANDLE, PAGE_URL, CONFIG)
 
     assert backlink_marker(PAGE_HANDLE) in block
-    assert f'data-zima-user-story-backlink="{PAGE_HANDLE}"' in block
+    assert f'{BACKLINK_ATTR}="{PAGE_HANDLE}"' in block
     assert f'href="{PAGE_URL}"' in block
     assert CONFIG.anchor_text in block
 

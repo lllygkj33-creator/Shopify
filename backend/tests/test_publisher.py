@@ -225,23 +225,32 @@ def test_filename_from_shopify_url_strips_query_and_decodes():
 
 
 def test_cover_slot_exact_match_is_case_insensitive():
-    assert cover_slot_from_filename("images_1.png") == "images_1"
-    assert cover_slot_from_filename("IMAGES_7.JPG") == "images_7"
+    last = COVER_IMAGE_NAMES[-1]
+    assert cover_slot_from_filename(f"{COVER_IMAGE_NAMES[0]}.png") == COVER_IMAGE_NAMES[0]
+    assert cover_slot_from_filename(f"{last.upper()}.JPG") == last
 
 
 def test_cover_slot_matches_duplicate_upload_suffixes():
     # Shopify 重复上传会加编号或哈希后缀
-    assert cover_slot_from_filename("images_3_1.png") == "images_3"
-    assert cover_slot_from_filename("images_3_ab12cd34.webp") == "images_3"
+    assert cover_slot_from_filename(f"{COVER_IMAGE_NAMES[2]}_1.png") == COVER_IMAGE_NAMES[2]
+    assert cover_slot_from_filename(f"{COVER_IMAGE_NAMES[2]}_ab12cd34.webp") == COVER_IMAGE_NAMES[2]
 
 
-def test_cover_slot_prefers_longest_configured_name():
-    """否则 Frame_3467245 会抢先匹配更长的 Frame_3467245_1de55521-..."""
-    long_name = "Frame_3467245_1de55521-ad22-4f07-b432-3368749e47fb"
-    assert long_name in COVER_IMAGE_NAMES
+def test_cover_slot_prefers_longest_configured_name(monkeypatch):
+    """短名不能抢先匹配长名（否则 Frame_X 会命中 Frame_X_<hash>）。
 
-    assert cover_slot_from_filename(f"{long_name}.png") == long_name
-    assert cover_slot_from_filename("Frame_3467245.png") == "Frame_3467245"
+    用合成的两个名字测逻辑本身 —— 依赖部署的清单会让测试跟着部署走。
+    """
+    from app.shopify import publisher as publisher_module
+
+    short = "Example_Frame"
+    long = f"{short}_1de55521-ad22-4f07-b432-3368749e47fb"
+    monkeypatch.setattr(
+        publisher_module, "COVER_IMAGE_NAMES", [short, long]
+    )
+
+    assert cover_slot_from_filename(f"{long}.png") == long
+    assert cover_slot_from_filename(f"{short}.png") == short
 
 
 def test_cover_slot_returns_none_for_unknown_file():
@@ -470,8 +479,8 @@ async def test_load_cover_images_maps_slots_and_ignores_not_ready():
         scan_pages=[
             {
                 "nodes": [
-                    media_image("images_1"),
-                    media_image("images_2", status="PROCESSING"),
+                    media_image(COVER_IMAGE_NAMES[0]),
+                    media_image(f"{COVER_IMAGE_NAMES[1]}", status="PROCESSING"),
                     media_image("random-file"),
                 ],
                 "pageInfo": {"hasNextPage": False, "endCursor": None},
@@ -483,9 +492,9 @@ async def test_load_cover_images_maps_slots_and_ignores_not_ready():
     found = await publisher.load_cover_images()
     slots = {item["slot"] for item in found}
 
-    assert "images_1" in slots
+    assert COVER_IMAGE_NAMES[0] in slots
     # 未 READY 的图片不能用
-    assert "images_2" not in slots
+    assert f"{COVER_IMAGE_NAMES[1]}" not in slots
 
 
 async def test_load_cover_images_raises_when_nothing_matches():
@@ -508,18 +517,18 @@ async def test_load_cover_images_falls_back_to_filename_lookup():
     client = FakeClient(
         scan_pages=[
             {
-                "nodes": [media_image("images_1")],
+                "nodes": [media_image(COVER_IMAGE_NAMES[0])],
                 "pageInfo": {"hasNextPage": False},
             }
         ],
-        filename_files=[media_image("images_1")],
+        filename_files=[media_image(COVER_IMAGE_NAMES[0])],
     )
     publisher = BlogPublisher(client)
 
     found = await publisher.load_cover_images()
 
     assert "coverFilename" in client.calls
-    assert {item["slot"] for item in found} == {"images_1"}
+    assert {item["slot"] for item in found} == {COVER_IMAGE_NAMES[0]}
 
 
 async def test_create_article_builds_expected_input():
