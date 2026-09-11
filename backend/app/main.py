@@ -8,6 +8,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 from datetime import datetime, timezone
 import logging
 from typing import Any
@@ -27,6 +29,7 @@ from .shopify.backlink import (
 )
 from .shopify.client import ShopifyError, shopify_client
 from .shopify.schedule_sync import SyncResult, schedule_sync
+from .shopify_import import ImportReport, ReconcileReport, shopify_importer
 from .shopify.templates import TemplateList, template_service
 from .shopify.vs_resources import ResourceInjectionError, inject_resources
 from .shopify.page_publisher import (
@@ -54,10 +57,69 @@ from .shopify.token import (
     token_manager,
 )
 
+@contextlib.asynccontextmanager
+async def lifespan(_: FastAPI):
+    """启动后台对账任务。
+
+    注意这里**不是**用来"到点发布"的 —— 定时发布交给 Shopify 自己
+    （创建时给未来 publishDate），所以本地没有开机风险。
+    这个任务只负责**把线上真实状态对齐回本地**：到点后 Shopify 会自己把
+    isPublished 翻成 true，本地要跟上；还有人在后台改时间/删对象的情况。
+    """
+    task: asyncio.Task | None = None
+    interval = app_config.resolved_sync_interval_minutes()
+
+    if interval > 0:
+        task = asyncio.create_task(_reconcile_loop(interval))
+
+    try:
+        yield
+    finally:
+        if task:
+            task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await task
+
+
+async def _reconcile_loop(interval_minutes: int) -> None:
+    """定期对账。没有凭据 / 本地没有带 GID 的行时静默跳过。"""
+    while True:
+        await asyncio.sleep(interval_minutes * 60)
+
+        if not (app_config.resolved_shop_domain() and _has_credentials()):
+            continue
+
+        try:
+            report = await shopify_importer.reconcile()
+            if not report.error:
+                app_config.touch_sync_state("last_reconcile_at")
+                if report.updated or report.gone:
+                    logging.info(
+                        "对账完成：检查 %s 条，更新 %s 条，缺失 %s 条",
+                        report.checked,
+                        report.updated,
+                        report.gone,
+                    )
+        except Exception as error:  # pragma: no cover - 后台任务不应把服务带崩
+            logging.warning("对账失败：%s", error)
+
+
+def _has_credentials() -> bool:
+    source = app_config.resolved_token_source()
+    if source == "env":
+        return app_config.env.has_static_token
+    if source == "manual":
+        from .shopify.token import manual_token_store
+
+        return bool(manual_token_store.read())
+    return app_config.env.has_client_credentials
+
+
 app = FastAPI(
     title="Zima 发布平台 API",
     version="0.1.0",
     description="ZimaSpace 定制发布平台后端：Shopify 内容托管与定时发布。",
+    lifespan=lifespan,
 )
 
 app.add_middleware(
@@ -507,6 +569,76 @@ async def refresh_token() -> SettingsResponse:
     except TokenError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
     return await _build_settings_response()
+
+
+class SyncStatusOut(BaseModel):
+    lastImportAt: str | None = None
+    lastReconcileAt: str | None = None
+    trackedContents: int = 0
+    """本地已关联 Shopify 对象的行数（= 对账覆盖范围）"""
+    syncIntervalMinutes: int = 15
+    hasCredentials: bool = False
+
+
+class ImportReportOut(BaseModel):
+    articlesScanned: int = 0
+    pagesScanned: int = 0
+    imported: int = 0
+    byChannel: dict[str, int] = Field(default_factory=dict)
+    byStatus: dict[str, int] = Field(default_factory=dict)
+    """未导入的归属 → 数量（让用户知道什么没进来）"""
+    skipped: dict[str, int] = Field(default_factory=dict)
+    error: str | None = None
+
+
+class ReconcileReportOut(BaseModel):
+    checked: int = 0
+    matched: int = 0
+    updated: int = 0
+    gone: int = 0
+    remoteTotal: int = 0
+    error: str | None = None
+
+
+@app.get("/api/sync/status", response_model=SyncStatusOut)
+async def sync_status() -> SyncStatusOut:
+    state = app_config.resolved_sync_state()
+    return SyncStatusOut(
+        lastImportAt=state["lastImportAt"],
+        lastReconcileAt=state["lastReconcileAt"],
+        trackedContents=len(store.list_with_gid()),
+        syncIntervalMinutes=app_config.resolved_sync_interval_minutes(),
+        hasCredentials=_has_credentials(),
+    )
+
+
+@app.post("/api/sync/import", response_model=ImportReportOut)
+async def sync_import() -> ImportReportOut:
+    """从 Shopify 导入既有内容（幂等，可重复执行）。
+
+    为什么需要：本地库记录的是「平台自己做过什么」，而店铺里已经有大量历史内容。
+    不导入的话仪表盘第一天是空的，每个栏目的历史记录也没有既有内容。
+
+    不在平台 11 个栏目内的内容（例如 zima-campaign-hub、app-hardware-requirements）
+    **跳过但报数**，让用户知道什么没进来，而不是静默丢弃。
+    """
+    report = await shopify_importer.import_all()
+    if not report.error:
+        app_config.touch_sync_state("last_import_at")
+    return ImportReportOut(**report.to_dict())
+
+
+@app.post("/api/sync/reconcile", response_model=ReconcileReportOut)
+async def sync_reconcile() -> ReconcileReportOut:
+    """用 Shopify 的真实状态对账本地记录。
+
+    到点后 Shopify 会自己把 isPublished 翻成 true，本地必须跟上；
+    也会发现后台被删除/改名/改时间的对象。
+    """
+    report = await shopify_importer.reconcile()
+    if not report.error:
+        app_config.touch_sync_state("last_reconcile_at")
+    return ReconcileReportOut(**report.to_dict())
 
 
 @app.get("/api/theme/templates", response_model=TemplateList)

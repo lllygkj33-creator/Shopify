@@ -136,69 +136,84 @@ class ContentStore:
     # ---------------- 写入 ----------------
 
     def upsert(self, record: dict[str, Any]) -> dict[str, Any]:
-        """按 publish_key 幂等写入。
+        """按 publish_key 幂等写入（单条）。
 
         `publish_key` 缺失时用 `channel_id|handle` 兜底，保证仍有唯一约束保护。
         """
-        now = _now()
-
-        publish_key = str(record.get("publish_key") or "").strip()
-        if not publish_key:
-            publish_key = f"{record.get('channel_id', '')}|{record.get('handle', '')}"
-
-        payload = {
-            "channel_id": record.get("channel_id") or "",
-            "content_type": record.get("content_type") or "blog_article",
-            "title": record.get("title") or "",
-            "handle": record.get("handle") or "",
-            "blog_name": record.get("blog_name"),
-            "template": record.get("template"),
-            "body_html": record.get("body_html") or "",
-            "summary": record.get("summary"),
-            "meta_title": record.get("meta_title"),
-            "meta_description": record.get("meta_description"),
-            "author": record.get("author"),
-            "reviewer": record.get("reviewer"),
-            "related_products": _dump_list(record.get("related_products")),
-            "tags": _dump_list(record.get("tags")),
-            "status": record.get("status") or "draft",
-            "scheduled_at": record.get("scheduled_at"),
-            "published_at": record.get("published_at"),
-            "published_url": record.get("published_url"),
-            "shopify_gid": record.get("shopify_gid"),
-            "shopify_kind": record.get("shopify_kind"),
-            "error": record.get("error"),
-            "publish_key": publish_key,
-            "source_file": record.get("source_file"),
-            "source_index": record.get("source_index"),
-            "mode": record.get("mode"),
-            "created_at": now,
-            "updated_at": now,
-        }
-
-        columns = ", ".join(payload.keys())
-        placeholders = ", ".join(f":{key}" for key in payload)
-        # 冲突时更新业务字段，保留原 created_at
-        updates = ", ".join(
-            f"{key} = :{key}"
-            for key in payload
-            if key not in ("publish_key", "created_at")
-        )
+        payload = _build_payload(record)
 
         with self._cursor() as cursor:
+            cursor.execute(_UPSERT_SQL, payload)
             cursor.execute(
-                f"""
-                INSERT INTO content ({columns}) VALUES ({placeholders})
-                ON CONFLICT(publish_key) DO UPDATE SET {updates}
-                """,
-                payload,
-            )
-            cursor.execute(
-                "SELECT * FROM content WHERE publish_key = ?", (publish_key,)
+                "SELECT * FROM content WHERE publish_key = ?", (payload["publish_key"],)
             )
             row = cursor.fetchone()
 
         return _row_to_dict(row) if row else {}
+
+    def upsert_many(self, records: list[dict[str, Any]]) -> int:
+        """批量幂等写入，**单个事务**。
+
+        导入历史内容时会有几千条 —— 逐条提交会慢到不可用（每条约一次 fsync），
+        所以这里一次性 executemany + 一次提交。
+        """
+        if not records:
+            return 0
+
+        payloads = [_build_payload(record) for record in records]
+        with self._cursor() as cursor:
+            cursor.executemany(_UPSERT_SQL, payloads)
+
+        return len(payloads)
+
+    def list_with_gid(self) -> list[dict[str, Any]]:
+        """所有已关联 Shopify 对象的行（对账用）。"""
+        with self._cursor() as cursor:
+            cursor.execute("SELECT * FROM content WHERE shopify_gid IS NOT NULL")
+            rows = cursor.fetchall()
+        return [_row_to_dict(row) for row in rows]
+
+    def apply_shopify_state(
+        self,
+        gid: str,
+        *,
+        status: str,
+        published_at: str | None,
+        scheduled_at: str | None,
+        handle: str | None = None,
+        title: str | None = None,
+    ) -> int:
+        """把 Shopify 侧的真实状态写回本地（对账用）。返回受影响行数。"""
+        with self._cursor() as cursor:
+            cursor.execute(
+                """
+                UPDATE content
+                   SET status = ?,
+                       published_at = ?,
+                       scheduled_at = ?,
+                       handle = COALESCE(?, handle),
+                       title = COALESCE(?, title),
+                       updated_at = ?
+                 WHERE shopify_gid = ?
+                """,
+                (status, published_at, scheduled_at, handle, title, _now(), gid),
+            )
+            return cursor.rowcount
+
+    def mark_gone(self, gids: list[str], reason: str) -> int:
+        """Shopify 上已不存在这些对象（对账时发现）→ 本地留痕。"""
+        if not gids:
+            return 0
+        with self._cursor() as cursor:
+            cursor.executemany(
+                """
+                UPDATE content
+                   SET error = ?, updated_at = ?
+                 WHERE shopify_gid = ?
+                """,
+                [(reason, _now(), gid) for gid in gids],
+            )
+            return len(gids)
 
     def update_schedule(
         self,
@@ -331,6 +346,88 @@ class ContentStore:
             cursor.execute(query, params)
             rows = cursor.fetchall()
         return [_row_to_dict(row) for row in rows]
+
+
+_UPSERT_SQL = """
+INSERT INTO content (
+  channel_id, content_type, title, handle, blog_name, template, body_html,
+  summary, meta_title, meta_description, author, reviewer, related_products,
+  tags, status, scheduled_at, published_at, published_url, shopify_gid,
+  shopify_kind, error, publish_key, source_file, source_index, mode,
+  created_at, updated_at
+) VALUES (
+  :channel_id, :content_type, :title, :handle, :blog_name, :template, :body_html,
+  :summary, :meta_title, :meta_description, :author, :reviewer, :related_products,
+  :tags, :status, :scheduled_at, :published_at, :published_url, :shopify_gid,
+  :shopify_kind, :error, :publish_key, :source_file, :source_index, :mode,
+  :created_at, :updated_at
+)
+ON CONFLICT(publish_key) DO UPDATE SET
+  channel_id = :channel_id,
+  content_type = :content_type,
+  title = :title,
+  handle = :handle,
+  blog_name = :blog_name,
+  template = :template,
+  body_html = :body_html,
+  summary = :summary,
+  meta_title = :meta_title,
+  meta_description = :meta_description,
+  author = :author,
+  reviewer = :reviewer,
+  related_products = :related_products,
+  tags = :tags,
+  status = :status,
+  scheduled_at = :scheduled_at,
+  published_at = :published_at,
+  published_url = :published_url,
+  shopify_gid = :shopify_gid,
+  shopify_kind = :shopify_kind,
+  error = :error,
+  source_file = :source_file,
+  source_index = :source_index,
+  mode = :mode,
+  updated_at = :updated_at
+"""
+
+
+def _build_payload(record: dict[str, Any]) -> dict[str, Any]:
+    """把一条业务记录转成表字段（单条与批量共用）。"""
+    now = _now()
+
+    publish_key = str(record.get("publish_key") or "").strip()
+    if not publish_key:
+        publish_key = f"{record.get('channel_id', '')}|{record.get('handle', '')}"
+
+    return {
+        "channel_id": record.get("channel_id") or "",
+        "content_type": record.get("content_type") or "blog_article",
+        "title": record.get("title") or "",
+        "handle": record.get("handle") or "",
+        "blog_name": record.get("blog_name"),
+        "template": record.get("template"),
+        "body_html": record.get("body_html") or "",
+        "summary": record.get("summary"),
+        "meta_title": record.get("meta_title"),
+        "meta_description": record.get("meta_description"),
+        "author": record.get("author"),
+        "reviewer": record.get("reviewer"),
+        "related_products": _dump_list(record.get("related_products")),
+        "tags": _dump_list(record.get("tags")),
+        "status": record.get("status") or "draft",
+        "scheduled_at": record.get("scheduled_at"),
+        "published_at": record.get("published_at"),
+        "published_url": record.get("published_url"),
+        "shopify_gid": record.get("shopify_gid"),
+        "shopify_kind": record.get("shopify_kind"),
+        "error": record.get("error"),
+        "publish_key": publish_key,
+        "source_file": record.get("source_file"),
+        "source_index": record.get("source_index"),
+        "mode": record.get("mode"),
+        "created_at": now,
+        "updated_at": now,
+    }
 
 
 def _dump_list(value: Any) -> str | None:

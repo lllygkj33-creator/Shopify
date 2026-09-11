@@ -55,6 +55,10 @@ class EnvSettings(BaseSettings):
     default_timezone: str = "Asia/Shanghai"
     default_author: str = "ZimaSpace"
 
+    # --- 后台对账 ---
+    # 分钟；0 = 关闭。Shopify 到点会自己上线内容，本地只需定期对齐状态。
+    sync_interval_minutes: int = 15
+
     # --- 服务 ---
     api_host: str = "127.0.0.1"
     api_port: int = 8000
@@ -98,6 +102,8 @@ class RuntimeSettings:
     _FIELDS = (
         "shop_domain",
         "template_choices",
+        "last_import_at",
+        "last_reconcile_at",
         "api_version",
         "token_source",
         "default_author",
@@ -211,6 +217,31 @@ KNOWN_PAGE_TEMPLATES = (
     "nas-a-vs-b",
     "makerworld-page",
 )
+
+
+def touch_sync_state(key: str, value: str | None = None) -> None:
+    """记录同步时间（导入 / 对账）。"""
+    from datetime import datetime, timezone
+
+    runtime.update({key: value or datetime.now(timezone.utc).isoformat()})
+
+
+def resolved_sync_state() -> dict[str, str | None]:
+    return {
+        "lastImportAt": runtime.get("last_import_at"),
+        "lastReconcileAt": runtime.get("last_reconcile_at"),
+    }
+
+
+def resolved_sync_interval_minutes() -> int:
+    """后台对账间隔（分钟）。0 = 关闭。"""
+    value = runtime.get("sync_interval_minutes")
+    if value is None:
+        value = getattr(_env, "sync_interval_minutes", 15)
+    try:
+        return max(0, int(value))
+    except (TypeError, ValueError):
+        return 15
 
 
 def resolved_template_choices() -> list[str]:
