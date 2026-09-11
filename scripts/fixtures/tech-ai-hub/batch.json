@@ -13,6 +13,6 @@
     "meta title": "Container Runtime Restart Loops",
     "meta description": "Diagnose restart loops step by step.",
     "summary": "Restart loops usually come from three causes.",
-    "html代码": "<article class=\"zima-tech-ai-hub-article\"><h2>Cause</h2><p>x</p><h2>Fix</h2><p>y</p></article>"
+    "html代码": "<article class=\"${channel.tech-ai-hub.htmlClass}\"><h2>Cause</h2><p>x</p><h2>Fix</h2><p>y</p></article>"
   }
 ]

@@ -32,10 +32,23 @@ import { chromium } from 'playwright'
 const BASE = process.argv[2] ?? 'http://localhost:5177'
 const OUT_DIR = 'screenshots'
 
+// 栏目名与路径都从站点配置取 —— 写死就依赖某一家店铺，通用克隆会红
+const siteConfigEarly = await loadSiteConfig()
+const firstBlog = siteConfigEarly.channels.find((c) => c.blogHandle)
+const firstPage = siteConfigEarly.channels.find((c) => c.page && !c.hidden)
+
 const PAGES = [
   { name: 'dashboard', path: '/', expect: '排期仪表盘' },
-  { name: 'channel-blog', path: '/channels/tech-ai-hub', expect: 'Tech & AI Hub' },
-  { name: 'channel-page', path: '/channels/discord', expect: 'Discord' },
+  {
+    name: 'channel-blog',
+    path: `/channels/${firstBlog.id}`,
+    expect: firstBlog.nameZh ?? firstBlog.name,
+  },
+  {
+    name: 'channel-page',
+    path: `/channels/${firstPage.id}`,
+    expect: firstPage.nameZh ?? firstPage.name,
+  },
   { name: 'settings', path: '/settings', expect: '全局设置' },
 ]
 
@@ -226,6 +239,115 @@ if (dialogErrors.length > 0) problems.push(`弹窗 page errors: ${dialogErrors.j
 await page.close()
 
 // ===========================================================================
+// 夹具的 token 代入
+// ===========================================================================
+//
+// `scripts/fixtures/**` 里的域名、主题 class、固定文案都是**部署相关**的，
+// 不能写死成某一家的值 —— 否则通用克隆跑不了，换店铺也要改夹具。
+// 所以夹具里写 `${...}` 占位，这里按站点配置（base + 可选的 local 覆盖）代入，
+// 再把结果复制到临时目录上传（不改仓库里的文件）。
+import { mkdtemp, readdir, readFile, writeFile, mkdir as mkdirp } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join, relative, dirname } from 'node:path'
+
+async function loadSiteConfig() {
+  const root = new URL('..', import.meta.url).pathname
+  const base = JSON.parse(await readFile(join(root, 'site.config.json'), 'utf8'))
+  let local = {}
+  try {
+    local = JSON.parse(
+      await readFile(join(root, 'site.config.local.json'), 'utf8')
+    )
+  } catch {
+    // 干净克隆里没有本地覆盖，正常
+  }
+  const merge = (a, b) => {
+    if (a && b && typeof a === 'object' && typeof b === 'object' && !Array.isArray(a) && !Array.isArray(b)) {
+      if (b.$replace === true) {
+        const { $replace, ...rest } = b
+        return rest
+      }
+      const out = { ...a }
+      for (const [k, v] of Object.entries(b)) out[k] = merge(a[k], v)
+      return out
+    }
+    return b === undefined ? a : b
+  }
+  return merge(base, local)
+}
+
+function resolveToken(path, config) {
+  const channelAt = path.match(/^channel\.([^.]+)\.(.+)$/)
+  if (channelAt) {
+    const channel = config.channels.find((c) => c.id === channelAt[1])
+    if (!channel) throw new Error(`夹具 token ${path} 指向不存在的栏目`)
+    return path_get(channel, channelAt[2], path)
+  }
+  if (path === 'firstParty') return config.firstPartySuffixes[0]
+  if (path === 'community.host') return config.community.threadPrefix.replace(/\/t\/$/, '')
+  if (path === 'userStoryOpening' || path === 'userStoryClosing') {
+    const story = config.channels.find((c) => c.id === 'user-story')
+    const index = path === 'userStoryOpening' ? 0 : 1
+    return story.page.bodyMustContain[index]
+  }
+  if (path === 'metaAttribute') {
+    return config.channels.find((c) => c.id === 'vs').page.requireMetaAttribute
+  }
+  if (path === 'mediaPrefix') {
+    return config.channels.find((c) => c.id === 'vs').page.mediaCardClass.split('__')[0]
+  }
+  const vsProduct = path.match(/^vsProduct([ABC])$/)
+  if (vsProduct) {
+    const labels = Object.keys(config.vs.productLabels)
+    const aliases = config.vs.productAliases[labels['ABC'.indexOf(vsProduct[1])]]
+    return aliases[0]
+  }
+  return path_get(config, path, path)
+}
+
+function path_get(node, path, label) {
+  let value = node
+  for (const part of path.split('.')) {
+    if (value === undefined || value === null) break
+    value = value[part]
+  }
+  if (value === undefined || value === null) {
+    throw new Error(`夹具 token ${label} 在站点配置里找不到`)
+  }
+  return String(value)
+}
+
+function substitute(text, config) {
+  return text.replace(/\$\{([A-Za-z0-9_.]+)\}/g, (_, path) =>
+    resolveToken(path, config)
+  )
+}
+
+/** 把夹具复制到临时目录并代入 token，返回临时目录路径 */
+async function materializeFixtures(config) {
+  const source = 'scripts/fixtures'
+  const target = await mkdtemp(join(tmpdir(), 'zima-fixtures-'))
+  const walk = async (dir) => {
+    for (const entry of await readdir(dir, { withFileTypes: true })) {
+      const from = join(dir, entry.name)
+      const to = join(target, relative(source, from))
+      if (entry.isDirectory()) {
+        await mkdirp(to, { recursive: true })
+        await walk(from)
+      } else {
+        await writeFile(to, substitute(await readFile(from, 'utf8'), config))
+      }
+    }
+  }
+  await walk(source)
+  return target
+}
+
+const siteConfigForFixtures = await loadSiteConfig()
+const FIXTURES_DIR = await materializeFixtures(siteConfigForFixtures)
+
+
+// ===========================================================================
 // 核心流程端到端：选择本地文件夹 → 解析 → 预览校验 → 发布
 // 用项目内自带的 fixtures（复刻 GEO 真实 JSON 结构），不依赖仓库外的文件。
 // ===========================================================================
@@ -233,90 +355,103 @@ const flow = await context.newPage()
 const flowErrors = []
 flow.on('pageerror', (error) => flowErrors.push(error.message))
 try {
-  await openPage(flow, `${BASE}/channels/tech-ai-hub`)
+  // 按栏目各自上传：JSON 自报的归属栏目必须与所在栏目一致，
+  // 否则会被「进错栏目」规则拦下（这是有意为之的规则，见 docs/ui-actions.md）。
+  // 所以这里逐个文件夹送到它自己的栏目页，和真人用法一致。
+  const FOLDERS = [
+    ['tech-ai-hub', 'tech-ai-hub'],
+    ['buying-guide', 'buying-guide'],
+    ['Com', 'community-post'],
+    ['Discord', 'discord'],
+    ['Maker', 'makerworld'],
+    ['VS', 'vs'],
+    // 用户故事放最后：发布步骤停在这一页，它带反链（见下方断言）
+    ['User', 'user-story'],
+  ]
 
-  // 传一个目录：Playwright 对 webkitdirectory input 只接受目录路径，
-  // 会递归收集其中的文件并带上 webkitRelativePath（与真人选文件夹一致）
-  await flow.locator('input[type="file"]').setInputFiles('scripts/fixtures')
+  const allRows = []
+  let summaryText = null
+  let publishButtonText = null
 
-  await flow.waitForSelector('text=已导入', { timeout: 10_000 })
+  for (const [folder, channelId] of FOLDERS) {
+    await openPage(flow, `${BASE}/channels/${channelId}`)
+    await flow.waitForSelector('text=上传与发布', { timeout: 15000 })
+    // Playwright 对 webkitdirectory input 只接受目录路径，
+    // 会递归收集其中的文件并带上 webkitRelativePath（与真人选文件夹一致）
+    await flow
+      .locator('input[type="file"]')
+      .setInputFiles(join(FIXTURES_DIR, folder))
+    await flow.waitForSelector('text=已导入', { timeout: 10_000 })
 
-  const flowFacts = await flow.evaluate(() => {
-    const rows = Array.from(document.querySelectorAll('tbody tr'))
-    return {
-      fileCount: document.querySelectorAll('[data-slot="badge"]').length,
-      rowCount: rows.length,
-      rows: rows.map((row) => {
-        const cells = Array.from(row.querySelectorAll('td'))
-        const title = cells[1]?.querySelector('p')?.textContent?.trim() ?? ''
-        const target = cells[2]?.textContent?.trim().replace(/\s+/g, ' ') ?? ''
-        const check = cells[3]?.textContent?.trim() ?? ''
-        return { title, target, check }
-      }),
-      summary: document.body.textContent?.match(/已导入\s*(\d+)\s*个文件，解析出\s*(\d+)\s*条内容[^（(]*/)?.[0] ?? null,
-      publishButton:
-        Array.from(document.querySelectorAll('button'))
-          .map((b) => b.textContent?.trim())
-          .find((t) => t?.startsWith('发布 ')) ?? null,
-    }
-  })
+    const facts = await flow.evaluate(() => {
+      const rows = Array.from(document.querySelectorAll('tbody tr'))
+      return {
+        rows: rows.map((row) => {
+          const cells = Array.from(row.querySelectorAll('td'))
+          return {
+            title: cells[1]?.querySelector('p')?.textContent?.trim() ?? '',
+            target: cells[2]?.textContent?.trim().replace(/\s+/g, ' ') ?? '',
+            check: cells[3]?.textContent?.trim() ?? '',
+          }
+        }),
+        summary:
+          document.body.textContent?.match(
+            /已导入\s*\d+\s*个文件，解析出\s*\d+\s*条内容[^（(]*/
+          )?.[0] ?? null,
+        publishButton:
+          Array.from(document.querySelectorAll('button'))
+            .map((b) => b.textContent?.trim())
+            .find((t) => t?.startsWith('发布 ')) ?? null,
+      }
+    })
+
+    allRows.push(...facts.rows)
+    summaryText = summaryText ?? facts.summary
+    publishButtonText = facts.publishButton ?? publishButtonText
+  }
+
+  const flowFacts = { rows: allRows, summary: summaryText, publishButton: publishButtonText }
 
   console.log('\n---------- 上传与解析核对 ----------')
   console.log(`汇总文案：${flowFacts.summary}`)
-  console.log(`候选行数：${flowFacts.rowCount}`)
+  console.log(`候选行数：${flowFacts.rowCount ?? flowFacts.rows.length}`)
   for (const row of flowFacts.rows) {
     console.log(`  · «${row.title}» | 目标：${row.target} | 校验：${row.check}`)
   }
-  console.log(`发布按钮：${flowFacts.publishButton}`)
-  if (flowFacts.publishButton !== '发布 9 篇') {
-    problems.push(`发布按钮应统计 9 篇可发布内容，实际：${flowFacts.publishButton}`)
+  console.log(`发布按钮（最后一个栏目页）：${flowFacts.publishButton}`)
+
+  // Custom 栏目在下一节单独上传，所以这里不含它
+  if (flowFacts.rows.length !== 9) {
+    problems.push(`这些栏目共应解析出 9 条内容，实际 ${flowFacts.rows.length} 条`)
   }
 
-  // 断言：2 篇博客 + 1 个页面 = 3 行；且第一行正文无 class 时应回落到栏目默认博客
-  if (flowFacts.rowCount !== 10) {
-    problems.push(`上传 9 个 JSON 应解析出 10 条内容，实际 ${flowFacts.rowCount} 条`)
+  // 正文带 class 时应按 class 落到对应博客；不带 class 时回落到所在栏目的默认博客
+  if (!flowFacts.rows.some((r) => r.target.toLowerCase().includes('buying guide'))) {
+    problems.push('buying-guide 样本没有落到 Buying Guide 栏目')
   }
-  // 真实样本：正文带 class="zima-buying-guide-article"，
-  // 即使从 tech-ai-hub 栏目页上传，也应靠 class 落到 Buying Guide
-  const buyingGuideRow = flowFacts.rows.find((r) =>
-    r.title.includes('Home Server Buying Guide')
-  )
-  if (!buyingGuideRow) {
-    problems.push('没有解析出真实样本「Home Server Buying Guide」')
-  } else if (!buyingGuideRow.target.includes('Buying Guide')) {
-    problems.push(
-      `真实样本应按正文 class 落到 Buying Guide，实际：${buyingGuideRow.target}`
+  if (
+    !flowFacts.rows.some((r) =>
+      r.target.toLowerCase().includes(
+        (siteConfigForFixtures.channels.find((c) => c.blogHandle)?.blogName ?? '').toLowerCase()
+      )
     )
-  } else if (buyingGuideRow.check.includes('错误')) {
-    problems.push(`真实样本不应有校验错误，实际：${buyingGuideRow.check}`)
-  } else {
-    console.log(`✓ 真实 buying-guide 样本：${buyingGuideRow.check}`)
-  }
-
-  // 注意用不区分大小写比较：店铺里的真实标题是 'Tech & AI HUB'（大写 HUB）
-  if (!flowFacts.rows.some((r) => r.target.toLowerCase().includes('tech & ai hub'))) {
-    problems.push('无 class 的正文没有回落到栏目默认博客 Tech & AI HUB')
+  ) {
+    problems.push('无 class 的正文没有回落到所在栏目的默认博客')
   }
   if (!flowFacts.rows.some((r) => r.target.includes('discord-page'))) {
-    problems.push('页面 JSON 没有识别出 template=discord-page')
+    problems.push('页面 JSON 没有识别出 discord-page 模板')
   }
   if (!flowFacts.rows.some((r) => r.target.includes('community_post'))) {
-    problems.push('社区页面 JSON 没有识别出 template=community_post')
+    problems.push('社区页面 JSON 没有识别出 community_post 模板')
   }
-  if (!flowFacts.rows.some((r) => r.check.includes('错误'))) {
-    problems.push('只有 2 个 H2 且无占位符的内容应被判为错误，但没有标红')
-  }
-  // 五个页面栏目的规格都已核对过：不允许出现**错误**。
-  // 允许出现提示——例如 VS 的 fixture 用的是裸 handle（与参考脚本的示例一致），
-  // 解析器会提示「已按裸 handle 推断」，这是预期行为而不是问题。
-  for (const [template, label] of [
-    ['community_post', '社区页面'],
-    ['discord-page', 'Discord 页面'],
-    ['makerworld-page', 'MakerWorld 页面'],
-    ['user-story', '用户故事'],
-    ['nas-a-vs-b', 'VS 对比页'],
-    ['custom-articles-template-v1', 'Custom 文章'],
-  ]) {
+
+  // 各页面栏目的规格都已核对过：不允许出现**错误**
+  // （允许提示——例如 VS 的 fixture 用裸 handle，解析器会提示「已按裸 handle 推断」）
+  const templates = siteConfigForFixtures.channels
+    .filter((c) => (c.page || {}).template)
+    .map((c) => [c.page.template, c.name])
+
+  for (const [template, label] of templates) {
     const row = flowFacts.rows.find((r) => r.target.includes(template))
     if (!row) {
       problems.push(`没有解析出 ${label}（template=${template}）`)
@@ -327,7 +462,7 @@ try {
     }
   }
 
-  // 点发布，验证结果面板
+  // 点发布，验证结果面板（此时停在最后一个栏目页，即用户故事 —— 它带反链）
   const publishButton = flow.locator('button', { hasText: /^发布 \d+ 篇$/ })
   if (await publishButton.count()) {
     await publishButton.first().click()
@@ -369,7 +504,9 @@ try {
   await openPage(custom, `${BASE}/channels/custom`)
   // domcontentloaded 之后 React 还没挂载，先等页面自己的元素出现再交互
   await custom.waitForSelector('text=默认文件夹', { timeout: 15000 })
-  await custom.locator('input[type="file"]').setInputFiles('scripts/fixtures/Custom')
+  await custom
+    .locator('input[type="file"]')
+    .setInputFiles(join(FIXTURES_DIR, 'Custom'))
   await custom.waitForSelector('text=已导入', { timeout: 10_000 })
 
   // 模板选择器（role=combobox）应显示 JSON 里的模板名

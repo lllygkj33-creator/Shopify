@@ -267,7 +267,7 @@ Shopify 侧留作**事实校验**：定时对账，把线上真实状态同步�
 | 来源 metafield | `custom.community_source` | `custom.discord_source` | `custom.maker_source` | **`custom.user_info`** | **无**（只有 SEO 两个） | **可选**：JSON 里任一 `*_source` 对象 |
 | 额外 metafield | — | — | **`custom.maker_summary`**（multi_line_text_field） | — | — |
 | 来源必需字段 | `title` `url` `excerpt` `author_name` `author_avatar_url` `author_profile_url` | `title` `url` `excerpt` `starter_name` `starter_avatar_url` `channel_name` `invite_url` | `title` `url` `excerpt` `creator_name` `creator_avatar_url` `creator_profile_url` `platform` `model_id` `license` |
-| 来源 url 校验 | 前缀 `community.zimaspace.com/t/` | 正则 Discord 消息链接 | **host 必须 makerworld.com 且路径含 `/models/`** |
+| 来源 url 校验 | 前缀 `community.example-store.test/t/` | 正则 Discord 消息链接 | **host 必须 makerworld.com 且路径含 `/models/`** |
 | 其他来源校验 | `author_profile_url` 前缀 `/u/` | `channel_name` 剥掉 `#` | `platform` 必须 `MakerWorld`、`model_id` 纯数字 |
 | 图片规则 | `alt` + `title` | 同左 | 再加 **`alt` 长度 50~100**、**必须 `loading="lazy"`** |
 | 链接规则 | `title` | 同左 | 再加：禁止 anchor 文本（`docs`/`see…guide`/`click here`…）、内链不得 `target="_blank"`、外链必须 `_blank`+`noopener`+`noreferrer`、第三方必须 `nofollow` | 同左，**且内联锚文本必须 2~6 个英文单词**（媒体卡片豁免） |
@@ -336,12 +336,12 @@ Shopify 侧留作**事实校验**：定时对账，把线上真实状态同步�
 | 链接类型 | 判定 | 要求 |
 |---|---|---|
 | 相对路径 / 页内锚点 | `/...`、`#...` | 只要非空 `title` |
-| 站内 | host == `shop.zimaspace.com` | 只要非空 `title` |
-| 自家域名 | `*.zimaspace.com`（含 `www`） | 只要非空 `title`，**不要求 nofollow** |
+| 站内 | host == `shop.example-store.test` | 只要非空 `title` |
+| 自家域名 | `*.example-store.test`（含 `www`） | 只要非空 `title`，**不要求 nofollow** |
 | **第三方外链** | 其余 http(s) | 必须 `target="_blank"` + `rel` 含 `noopener`、`noreferrer`、`nofollow` |
 
 关键取舍：**站内与自家域名不强制开新标签页**。这样既拦住了真正危险的外部链接，
-又不会误伤既有文章（真实样本里 `www.zimaspace.com/docs/...` 是同一标签页打开的）。
+又不会误伤既有文章（真实样本里 `www.example-store.test/docs/...` 是同一标签页打开的）。
 
 MakerWorld / VS 保留更严的一套（含「站内链接不得开新标签页」），由各自 spec 控制。
 

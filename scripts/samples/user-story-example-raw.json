@@ -1,14 +1,14 @@
 {
-  "title": "example-user and ZimaOS: Building a Retro LAN Party Server",
-  "meta_title": "example-user’s ZimaOS Retro LAN Party Server Story",
-  "meta_description": "Meet example-user, a DIY hobbyist who used ZimaOS as a lightweight Unraid alternative for a retro LAN party server with Docker, VMs, DNS, and TeamSpeak.",
-  "url": "/pages/zima-user-story-example-user",
+  "title": "example-user and ExampleOS: Building a Retro LAN Party Server",
+  "meta_title": "example-user’s ExampleOS Retro LAN Party Server Story",
+  "meta_description": "Meet example-user, a DIY hobbyist who used ExampleOS as a lightweight Unraid alternative for a retro LAN party server with Docker, VMs, DNS, and TeamSpeak.",
+  "url": "/pages/user-story-example-user",
   "template": "user-story",
   "published": true,
   "community_source": {
-    "title": "Zima User Story Questionnaire — example-user",
+    "title": "Example User Story Questionnaire — example-user",
     "url": "",
-    "excerpt": "A February 2026 creator questionnaire describing a ZimaOS retro LAN-party server running two Docker containers and three VMs on reused desktop hardware.",
+    "excerpt": "A February 2026 creator questionnaire describing a ExampleOS retro LAN-party server running two Docker containers and three VMs on reused desktop hardware.",
     "author_name": "example-user",
     "author_avatar_url": "",
     "author_profile_url": "",
@@ -24,5 +24,5 @@
     "profile_cta": ""
   },
   "related_products": [],
-  "html": "<div class=\"user-story-letter\">\n<div class=\"user-story-letter__paper\">\n<p class=\"user-story-letter__eyebrow\">A Note from Zima</p>\n<p>Thank you, <strong>example-user</strong>, for showing that a useful home server does not have to begin with purpose-built server hardware.</p>\n<p class=\"user-story-letter__signature\"><strong>— Zima</strong></p>\n</div>\n</div>\n\n<h2>Meet example-user</h2>\n<p><strong>example-user</strong> describes himself as a non-professional technology user and DIY hobbyist.</p>\n\n<h2>A Retro LAN Party Became the Test Case</h2>\n<p>By the time he documented the build, ZimaOS was already running <strong>two Docker containers</strong>: a TeamSpeak server and a DNS server.</p>\n\n<h2>Why ZimaOS Worked as a Lightweight Unraid Alternative</h2>\n<p>example-user's comparison with Unraid was deliberately practical.</p>\n\n<h2>Once the Hardware Settled Down, the Server Stayed Stable</h2>\n<p>After reducing the network-card count, example-user reported that the system ran steadily.</p>\n\n<h2>A Non-Professional User's Definition of Success</h2>\n<p>What makes this project useful is that example-user did not judge the system by how many advanced features it exposed.</p>\n\n<h2>The Story Is Still Being Written</h2>\n<p>For current platform context, see the <a href=\"https://www.zimaspace.com/docs/zimaos/features\" title=\"Review current ZimaOS features, App Store, storage, and virtualization documentation\">ZimaOS feature overview</a> and the <a href=\"https://www.zimaspace.com/docs/zimaos/raid-options\" title=\"Review current ZimaOS RAID and storage options\">current RAID configuration reference</a>.</p>"
+  "html": "<div class=\"user-story-letter\">\n<div class=\"user-story-letter__paper\">\n<p class=\"user-story-letter__eyebrow\">${userStoryOpening}</p>\n<p>Thank you, <strong>example-user</strong>, for showing that a useful home server does not have to begin with purpose-built server hardware.</p>\n<p class=\"user-story-letter__signature\"><strong>— Example</strong></p>\n</div>\n</div>\n\n<h2>Meet example-user</h2>\n<p><strong>example-user</strong> describes himself as a non-professional technology user and DIY hobbyist.</p>\n\n<h2>A Retro LAN Party Became the Test Case</h2>\n<p>By the time he documented the build, ExampleOS was already running <strong>two Docker containers</strong>: a TeamSpeak server and a DNS server.</p>\n\n<h2>Why ExampleOS Worked as a Lightweight Unraid Alternative</h2>\n<p>example-user's comparison with Unraid was deliberately practical.</p>\n\n<h2>Once the Hardware Settled Down, the Server Stayed Stable</h2>\n<p>After reducing the network-card count, example-user reported that the system ran steadily.</p>\n\n<h2>A Non-Professional User's Definition of Success</h2>\n<p>What makes this project useful is that example-user did not judge the system by how many advanced features it exposed.</p>\n\n<h2>${userStoryClosing}</h2>\n<p>For current platform context, see the <a href=\"https://www.${firstParty}/docs/example-os/features\" title=\"Review current ExampleOS features, App Store, storage, and virtualization documentation\">ExampleOS feature overview</a> and the <a href=\"https://www.${firstParty}/docs/example-os/raid-options\" title=\"Review current ExampleOS RAID and storage options\">current RAID configuration reference</a>.</p>"
 }

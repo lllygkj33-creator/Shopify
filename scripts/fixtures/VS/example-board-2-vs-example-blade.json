@@ -1,0 +1,10 @@
+{
+  "title": "${vsProductB} vs ${vsProductC} for a Compact Home Server",
+  "meta_title": "${vsProductB} vs ${vsProductC}: Compact Server Pick",
+  "td": "Compare ${vsProductB} and ${vsProductC} for a small home server: expansion, storage options, noise, and which board fits a beginner build.",
+  "url": "example-board-2-vs-example-blade",
+  "template": "nas-a-vs-b",
+  "published": true,
+  "related_products": [],
+  "html": "<div class=\"${mediaPrefix}\" ${metaAttribute}=\"1\"><!-- COMPARE:OVERVIEW -->\n<p>Comparison content for OVERVIEW.</p>\n<!-- /COMPARE:OVERVIEW -->\n<!-- COMPARE:SPECS -->\n<p>Comparison content for SPECS.</p>\n<!-- /COMPARE:SPECS -->\n<!-- COMPARE:CATEGORIES -->\n<p>Comparison content for CATEGORIES.</p>\n<!-- /COMPARE:CATEGORIES -->\n<!-- COMPARE:RECOMMENDATION -->\n<p>Comparison content for RECOMMENDATION.</p>\n<!-- /COMPARE:RECOMMENDATION -->\n<!-- COMPARE:SKU-FAMILY -->\n<p>Comparison content for SKU-FAMILY.</p>\n<!-- /COMPARE:SKU-FAMILY -->\n<!-- COMPARE:RESOURCES -->\n<!-- /COMPARE:RESOURCES -->\n<!-- COMPARE:FAQ -->\n<p>Comparison content for FAQ.</p>\n<!-- /COMPARE:FAQ -->\n<!-- COMPARE:METHODOLOGY -->\n<p>Comparison content for METHODOLOGY.</p>\n<!-- /COMPARE:METHODOLOGY --><p><a href=\"/collections/all\" title=\"Browse all our hardware\">browse all our hardware</a></p><p><a href=\"https://example.com/review\" title=\"Third party review page\" target=\"_blank\" rel=\"nofollow noopener noreferrer\">independent hardware review notes</a></p></div>"
+}

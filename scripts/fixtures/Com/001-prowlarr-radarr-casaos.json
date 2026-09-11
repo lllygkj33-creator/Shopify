@@ -4,13 +4,13 @@
   "td": "A community guide to running Prowlarr and Radarr on CasaOS.",
   "url": "/pages/001-prowlarr-radarr-casaos",
   "template": "community_post",
-  "html": "<div><h2>Setup</h2><p>Steps to reproduce.</p><a href=\"https://community.zimaspace.com/t/prowlarr-radarr-casaos/1234\" title=\"Community topic\">Original topic</a></div>",
+  "html": "<div><h2>Setup</h2><p>Steps to reproduce.</p><a href=\"${community.threadPrefix}prowlarr-radarr-casaos/1234\" title=\"Community topic\">Original topic</a></div>",
   "community_source": {
     "title": "Prowlarr + Radarr on CasaOS",
-    "url": "https://community.zimaspace.com/t/prowlarr-radarr-casaos/1234",
+    "url": "${community.threadPrefix}prowlarr-radarr-casaos/1234",
     "excerpt": "How I run Prowlarr and Radarr on CasaOS.",
     "author_name": "someuser",
-    "author_avatar_url": "https://community.zimaspace.com/user_avatar/community.zimaspace.com/someuser/45/96.png",
-    "author_profile_url": "https://community.zimaspace.com/u/someuser"
+    "author_avatar_url": "${community.host}/user_avatar/community/someuser/45/96.png",
+    "author_profile_url": "${community.userPrefix}someuser"
   }
 }
