@@ -78,8 +78,8 @@ def test_repository_config_ships_generic_placeholders():
 
     raw = json.loads(BASE_FILE.read_text(encoding="utf-8"))
 
-    assert raw["storefront"]["domain"].endswith("example.com")
-    assert raw["firstPartySuffixes"] == ["example.com"]
+    assert raw["storefront"]["domain"].endswith(".test")
+    assert raw["firstPartySuffixes"] == ["example-store.test"]
     blob = BASE_FILE.read_text(encoding="utf-8")
     for leaked in ("zimaspace", "zimaboard", "ZimaCube", "ZimaBoard"):
         assert leaked.lower() not in blob.lower(), f"仓库配置里不该出现 {leaked}"

@@ -9,14 +9,14 @@
     "subtitle": "Shopify content hosting"
   },
   "storefront": {
-    "domain": "shop.example.com"
+    "domain": "shop.example-store.test"
   },
   "firstPartySuffixes": [
-    "example.com"
+    "example-store.test"
   ],
   "community": {
-    "threadPrefix": "https://community.example.com/t/",
-    "userPrefix": "https://community.example.com/u/"
+    "threadPrefix": "https://community.example-store.test/t/",
+    "userPrefix": "https://community.example-store.test/u/"
   },
   "defaults": {
     "author": "Editor",

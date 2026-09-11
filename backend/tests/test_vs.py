@@ -35,6 +35,54 @@ from app.shopify.vs_resources import (
 VS_SPEC = get_page_spec("vs")
 assert VS_SPEC is not None
 
+# ---------------------------------------------------------------------------
+# VS 的资源库与主题类名都是**部署内容**（自家视频/博客清单、自家主题的 class）
+# ---------------------------------------------------------------------------
+#
+# 测试不该依赖部署内容：一份干净的克隆、或者换一家店铺，都不该让测试变红。
+# 所以这里装一份确定性的夹具库，主题类名/属性则从栏目规格里取。
+from app.site_config import site  # noqa: E402
+from app.shopify import vs_resources as _vs  # noqa: E402
+
+_TEST_PRODUCTS = ("zimacube-2", "zimaboard-2", "zimablade")
+
+TEST_LIBRARY = {
+    key: {
+        "youtube": [
+            {
+                "title": f"{key} review {index}",
+                "url": f"https://www.youtube.com/watch?v=test{key}{index}",
+                "video_id": f"test{key}{index}",
+                "creator": "Test Channel",
+            }
+            for index in (1, 2, 3)
+        ],
+        "blog": [
+            {
+                "title": f"{key} hands-on {index}",
+                # 站内链接：用配置里的前台域名，才不会因部署不同被判成外链
+                "url": f"https://{site.storefront_domain}/blogs/example-blog/{key}-{index}",
+                "creator": "Test Author",
+            }
+            for index in (1, 2, 3)
+        ],
+    }
+    for key in _TEST_PRODUCTS
+}
+
+TEST_LABELS = {key: key.replace("-", " ").title() for key in _TEST_PRODUCTS}
+TEST_ALIASES = {key: (key.replace("-", " "), key.replace("-", "")) for key in _TEST_PRODUCTS}
+
+
+@pytest.fixture(autouse=True)
+def _install_test_library(monkeypatch):
+    """用夹具库替换部署资源库，测试结果与部署内容无关。"""
+    monkeypatch.setattr(_vs, "PRODUCT_RESOURCE_LIBRARY", TEST_LIBRARY)
+    monkeypatch.setattr(_vs, "PRODUCT_LABELS", TEST_LABELS)
+    monkeypatch.setattr(_vs, "PRODUCT_ALIASES", TEST_ALIASES)
+
+
+
 MARKERS = (
     "OVERVIEW",
     "SPECS",
@@ -68,7 +116,8 @@ def vs_html(**overrides) -> str:
             blocks.append(marker_block(name))
 
     return (
-        '<div class="zima-compare" data-zima-compare-meta="1">'
+        f'<div class="{VS_SPEC.media_card_class.split("__")[0]}" '
+        f'{VS_SPEC.require_meta_attribute}="1">'
         + "".join(blocks)
         + '<p><a href="/collections/all" title="Browse all Zima hardware">'
         "browse all Zima hardware</a></p>"
@@ -84,7 +133,7 @@ def raw_vs(**overrides):
         "meta_title": "ZimaBoard 2 vs ZimaBlade: Compact Server Pick",
         "td": VS_META_DESCRIPTION,
         "url": "zimaboard-2-vs-zimablade",
-        "template": "nas-a-vs-b",
+        "template": VS_SPEC.template,
         "published": True,
         "related_products": [],
         "html": vs_html(),
@@ -109,8 +158,10 @@ def build_vs(raw=None, **kwargs):
 
 def test_vs_spec_matches_script():
     assert VS_SPEC.verified is True
-    # 脚本常量与硬校验都是 nas-a-vs-b
-    assert VS_SPEC.template == "nas-a-vs-b"
+    # 模板名来自站点配置（不写死：那是部署的主题模板）
+    from app.site_config import site as _site
+
+    assert VS_SPEC.template == _site.page_spec("vs")["template"]
     # 唯一没有来源 metafield 的栏目
     assert VS_SPEC.source_key == ""
     assert VS_SPEC.forbid_h2 is True
@@ -147,10 +198,10 @@ def test_vs_forbids_h1_and_h2():
 
 
 def test_vs_requires_compare_meta_attribute():
-    html = vs_html().replace(' data-zima-compare-meta="1"', "")
+    html = vs_html().replace(f' {VS_SPEC.require_meta_attribute}="1"', "")
     errors = validate_page_payload(build_vs(raw_vs(html=html)), VS_SPEC)
 
-    assert any("data-zima-compare-meta" in error for error in errors)
+    assert any(VS_SPEC.require_meta_attribute in error for error in errors)
 
 
 def test_vs_requires_each_marker_exactly_once():
@@ -320,7 +371,7 @@ def test_blog_card_stays_in_same_tab():
     card = blog_card(
         {
             "title": "A creator story",
-            "url": "https://shop.zimaspace.com/blogs/zima-campaign-hub/x",
+            "url": f"https://{site.storefront_domain}/blogs/example-blog/x",
             "creator": "Someone",
             "product_label": "ZimaBlade",
         },
@@ -328,7 +379,7 @@ def test_blog_card_stays_in_same_tab():
     )
 
     assert "target=" not in card
-    assert "zima-compare__media-item" in card
+    assert VS_SPEC.media_card_class in card
 
 
 async def test_inject_resources_replaces_block_and_keeps_one_marker_pair():
@@ -342,7 +393,7 @@ async def test_inject_resources_replaces_block_and_keeps_one_marker_pair():
     assert html.count(RESOURCES_OPEN_MARKER) == 1
     assert html.count(RESOURCES_CLOSE_MARKER) == 1
     # 3 个视频 + 3 篇文章
-    assert html.count("zima-compare__media-item") == 6
+    assert html.count(VS_SPEC.media_card_class) == 6
     assert PENDING_COVER in html
     assert "YouTube [" in note and "Blogs [" in note
 

@@ -9,6 +9,7 @@
  *  - Product Comparisons 的 class 用复数，文件夹却是单数
  */
 import { CHANNELS } from '@/config/channels'
+import { site } from '@/config/site'
 import { describe, expect, it } from 'vitest'
 import {
   buildPublicUrl,
@@ -355,13 +356,27 @@ const PAGE_HTML_OK =
   // 第三方外链必须带 _blank + noopener + noreferrer + nofollow（平台外链规则）
   '<a href="https://e.com" title="链接" target="_blank" rel="nofollow noopener noreferrer">l</a></div>'
 
+
+/**
+ * 域名与来源前缀是**部署信息**（site.config.json / gitignored 的 local），
+ * 测试不能写死成某一家的 —— 否则一份干净的克隆跑测试就红。
+ */
+const COMMUNITY_SPEC = CHANNELS.find((c) => c.id === 'community-post')?.pageSpec
+const TOPIC_PREFIX =
+  COMMUNITY_SPEC?.sourceFieldPrefixes?.url ?? 'https://community.example.com/t/'
+const PROFILE_PREFIX =
+  COMMUNITY_SPEC?.sourceFieldPrefixes?.author_profile_url ??
+  'https://community.example.com/u/'
+const STOREFRONT = site.storefrontDomain
+const FIRST_PARTY = site.firstPartySuffixes[0] ?? 'example.com'
+
 const COMMUNITY_SOURCE = {
   title: 'Prowlarr + Radarr on CasaOS',
-  url: 'https://community.zimaspace.com/t/prowlarr-radarr-casaos/1234',
+  url: `${TOPIC_PREFIX}prowlarr-radarr-casaos/1234`,
   excerpt: 'How I run them.',
   author_name: 'someuser',
-  author_avatar_url: 'https://community.zimaspace.com/user_avatar/x/45.png',
-  author_profile_url: 'https://community.zimaspace.com/u/someuser',
+  author_avatar_url: `${PROFILE_PREFIX.replace(/\/u\/$/, '')}/../user_avatar/x/45.png`,
+  author_profile_url: `${PROFILE_PREFIX}someuser`,
 }
 
 function communityPage(overrides: Record<string, unknown> = {}) {
@@ -632,7 +647,7 @@ describe('上传阶段校验 —— 来源对象', () => {
     ).candidates
 
     expect(errorsOf(candidate)).toContainEqual(
-      expect.stringContaining('必须以 https://community.zimaspace.com/t/ 开头')
+      expect.stringContaining(`必须以 ${TOPIC_PREFIX} 开头`)
     )
   })
 
@@ -648,7 +663,7 @@ describe('上传阶段校验 —— 来源对象', () => {
     ).candidates
 
     expect(errorsOf(candidate)).toContainEqual(
-      expect.stringContaining('必须以 https://community.zimaspace.com/u/ 开头')
+      expect.stringContaining(`必须以 ${PROFILE_PREFIX} 开头`)
     )
   })
 
@@ -807,8 +822,8 @@ describe('上传阶段校验 —— Discord 页面（更严）', () => {
 const USER_INFO = {
   name: 'ExampleBuilder',
   handle: 'example-builder',
-  avatar_url: 'https://community.zimaspace.com/user_avatar/x/45.png',
-  profile_url: 'https://community.zimaspace.com/u/example-builder',
+  avatar_url: `${PROFILE_PREFIX.replace(/\/u\/$/, '')}/../user_avatar/x/45.png`,
+  profile_url: `${PROFILE_PREFIX}example-builder`,
 }
 
 const USER_HTML = [
@@ -910,7 +925,7 @@ describe('上传阶段校验 —— 用户故事', () => {
         backlink: {
           enabled: true,
           article_url:
-            'https://shop.zimaspace.com/blogs/tech-ai-hub/user-builds-so-far',
+            `https://${STOREFRONT}/blogs/tech-ai-hub/user-builds-so-far`,
           lead_in: 'Read the full build story:',
           anchor_text: 'a 350 TB array',
         },
@@ -1118,9 +1133,9 @@ describe('上传阶段校验 —— 外链规则', () => {
     expect(errorsOf(candidate)).toEqual([])
   })
 
-  it('自家域名（www.zimaspace.com）按站内处理，不强制 _blank', () => {
+  it('自家域名按站内处理，不强制 _blank', () => {
     const raw = blogWithLink(
-      '<a href="https://www.zimaspace.com/docs/x" title="Docs page">docs page</a>'
+      `<a href="https://www.${FIRST_PARTY}/docs/x" title="Docs page">docs page</a>`
     )
     const [candidate] = parseJsonContent(
       raw,
