@@ -1,0 +1,362 @@
+{
+  "_comment": [
+    "站点配置 —— 所有「谁在部署」的值都在这里，代码里不再出现真实域名/品牌/产品名。",
+    "真实部署把自己的值写进 site.config.local.json（已 gitignore），会深度覆盖本文件。",
+    "本文件带的是通用占位值，克隆下来即可跑演示模式；接真实店铺前请改这里（或建 local）。"
+  ],
+  "brand": {
+    "name": "Content Publisher",
+    "subtitle": "Shopify content hosting"
+  },
+  "storefront": {
+    "domain": "shop.example.com"
+  },
+  "firstPartySuffixes": [
+    "example.com"
+  ],
+  "community": {
+    "threadPrefix": "https://community.example.com/t/",
+    "userPrefix": "https://community.example.com/u/"
+  },
+  "defaults": {
+    "author": "Editor",
+    "reviewers": [],
+    "relatedProducts": []
+  },
+  "backlinkMarkerPrefix": "USER_STORY_BACKLINK",
+  "channels": [
+    {
+      "id": "custom",
+      "name": "Custom Articles",
+      "nameZh": "Custom 文章",
+      "defaultFolder": "Custom",
+      "contentType": "page",
+      "color": "#64748b",
+      "template": "",
+      "page": {
+        "allowAnyTemplate": true,
+        "enforceLinkRules": true,
+        "h2Min": 0,
+        "sourceKey": "",
+        "sourceKeySuffix": "_source",
+        "template": "",
+        "verified": true
+      }
+    },
+    {
+      "id": "tech-ai-hub",
+      "name": "Tech & AI Hub",
+      "defaultFolder": "tech-ai-hub",
+      "contentType": "blog_article",
+      "color": "#6366f1",
+      "blogName": "Tech & AI HUB",
+      "blogHandle": "tech-ai-hub",
+      "htmlClass": "zima-tech-ai-hub-article"
+    },
+    {
+      "id": "support-tips",
+      "name": "Support & Tips",
+      "defaultFolder": "support-tips",
+      "contentType": "blog_article",
+      "color": "#0ea5e9",
+      "blogName": "Support & Tips",
+      "blogHandle": "support-tips",
+      "htmlClass": "zima-support-tips-article"
+    },
+    {
+      "id": "nas-server-setup",
+      "name": "NAS Server Setup",
+      "defaultFolder": "nas-server-setup",
+      "contentType": "blog_article",
+      "color": "#14b8a6",
+      "blogName": "NAS & Server Setup",
+      "blogHandle": "nas-server-setup",
+      "htmlClass": "zima-nas-server-setup-article"
+    },
+    {
+      "id": "buying-guide",
+      "name": "Buying Guides",
+      "defaultFolder": "buying-guide",
+      "contentType": "blog_article",
+      "color": "#f59e0b",
+      "blogName": "Buying Guide",
+      "blogHandle": "buying-guide",
+      "htmlClass": "zima-buying-guide-article"
+    },
+    {
+      "id": "product-comparison",
+      "name": "Product Comparisons",
+      "defaultFolder": "product-comparison",
+      "contentType": "blog_article",
+      "color": "#ec4899",
+      "blogName": "Product Comparisons",
+      "blogHandle": "product-comparisons",
+      "htmlClass": "zima-product-comparisons-article"
+    },
+    {
+      "id": "community-post",
+      "name": "Community Posts",
+      "nameZh": "社区文章",
+      "defaultFolder": "Com",
+      "contentType": "page",
+      "color": "#8b5cf6",
+      "template": "community_post",
+      "page": {
+        "enforceLinkRules": true,
+        "h2Min": 1,
+        "sourceFieldPrefixes": {
+          "url": "${community.threadPrefix}",
+          "author_profile_url": "${community.userPrefix}"
+        },
+        "sourceFields": [
+          "title",
+          "url",
+          "excerpt",
+          "author_name",
+          "author_avatar_url",
+          "author_profile_url"
+        ],
+        "sourceKey": "community_source",
+        "sourceRequiredNonEmpty": [
+          "title",
+          "url",
+          "excerpt",
+          "author_name"
+        ],
+        "sourceRequiredNonempty": [
+          "title",
+          "url",
+          "excerpt",
+          "author_name"
+        ],
+        "template": "community_post",
+        "verified": true
+      }
+    },
+    {
+      "id": "discord",
+      "name": "Discord",
+      "nameZh": "Discord 文章",
+      "defaultFolder": "Discord",
+      "contentType": "page",
+      "color": "#5865f2",
+      "template": "discord-page",
+      "page": {
+        "enforceLinkRules": true,
+        "h2Min": 4,
+        "keepSourceExtras": true,
+        "metaDescriptionMax": 170,
+        "metaDescriptionMin": 120,
+        "metaTitleMax": 65,
+        "sourceFieldRegexes": {
+          "url": "^https://(?:www\\.)?discord\\.com/channels/\\d+/\\d+/\\d+/?$"
+        },
+        "sourceFields": [
+          "title",
+          "url",
+          "excerpt",
+          "starter_name",
+          "starter_avatar_url",
+          "channel_name",
+          "invite_url"
+        ],
+        "sourceHttpUrlFields": [
+          "url",
+          "starter_avatar_url",
+          "invite_url"
+        ],
+        "sourceKey": "discord_source",
+        "sourceRequiredNonEmpty": [
+          "title",
+          "url",
+          "excerpt",
+          "starter_name",
+          "starter_avatar_url",
+          "channel_name"
+        ],
+        "sourceRequiredNonempty": [
+          "title",
+          "url",
+          "excerpt",
+          "starter_name",
+          "starter_avatar_url",
+          "channel_name"
+        ],
+        "stripHashPrefix": [
+          "channel_name"
+        ],
+        "template": "discord-page",
+        "verified": true
+      }
+    },
+    {
+      "id": "user-story",
+      "name": "User Stories",
+      "nameZh": "用户故事",
+      "defaultFolder": "User",
+      "contentType": "page",
+      "color": "#22c55e",
+      "template": "user-story",
+      "page": {
+        "bodyMustContain": [
+          "A Note from Zima",
+          "The Story Is Still Being Written"
+        ],
+        "enforceLinkRules": true,
+        "h2Min": 4,
+        "sourceFields": [
+          "name",
+          "handle",
+          "avatar_url",
+          "profile_url"
+        ],
+        "sourceHttpUrlFields": [
+          "avatar_url",
+          "profile_url"
+        ],
+        "sourceKey": "user_info",
+        "sourceRequiredNonEmpty": [
+          "name",
+          "handle",
+          "profile_url"
+        ],
+        "sourceRequiredNonempty": [
+          "name",
+          "handle",
+          "profile_url"
+        ],
+        "template": "user-story",
+        "verified": true
+      }
+    },
+    {
+      "id": "vs",
+      "name": "A vs B",
+      "nameZh": "VS 类文章",
+      "defaultFolder": "VS",
+      "contentType": "page",
+      "color": "#ef4444",
+      "template": "nas-a-vs-b",
+      "page": {
+        "anchorWordMax": 6,
+        "anchorWordMin": 2,
+        "enforceAnchorRules": true,
+        "forbidH2": true,
+        "forbiddenAnchorPhrases": [
+          "documentation",
+          "document",
+          "docs",
+          "see the guide",
+          "see this guide",
+          "read the guide",
+          "read this guide",
+          "click here",
+          "learn more here",
+          "more information"
+        ],
+        "forbiddenPlaceholders": [
+          "YOUTUBE_URL_",
+          "YOUTUBE_VIDEO_ID_",
+          "BLOG_URL_",
+          "BLOG_COVER_IMAGE_URL_",
+          "PLACEHOLDER",
+          "TODO",
+          "Replace with"
+        ],
+        "h2Min": 0,
+        "mediaCardClass": "zima-compare__media-item",
+        "metaDescriptionMax": 170,
+        "metaDescriptionMin": 120,
+        "metaTitleMax": 65,
+        "requireDecodingAsync": true,
+        "requireEmptyRelatedProducts": true,
+        "requireLazyLoading": true,
+        "requireMetaAttribute": "data-zima-compare-meta",
+        "requirePublishedTrue": true,
+        "requiredMarkerPairs": [
+          "OVERVIEW",
+          "SPECS",
+          "CATEGORIES",
+          "RECOMMENDATION",
+          "SKU-FAMILY",
+          "RESOURCES",
+          "FAQ",
+          "METHODOLOGY"
+        ],
+        "sourceKey": "",
+        "template": "nas-a-vs-b",
+        "verified": true
+      }
+    },
+    {
+      "id": "makerworld",
+      "name": "MakerWorld",
+      "defaultFolder": "Maker",
+      "contentType": "page",
+      "color": "#06b6d4",
+      "template": "makerworld-page",
+      "page": {
+        "enforceAnchorRules": true,
+        "extraMetafields": [
+          [
+            "maker_summary",
+            "multi_line_text_field",
+            "summary"
+          ]
+        ],
+        "h2Min": 4,
+        "imgAltMax": 100,
+        "imgAltMin": 50,
+        "metaDescriptionMax": 170,
+        "metaDescriptionMin": 120,
+        "metaTitleMax": 65,
+        "requireLazyLoading": true,
+        "requireSourceUrlInBody": true,
+        "sourceDigitFields": [
+          "model_id"
+        ],
+        "sourceExactValues": {
+          "platform": "makerworld"
+        },
+        "sourceFields": [
+          "title",
+          "url",
+          "excerpt",
+          "creator_name",
+          "creator_avatar_url",
+          "creator_profile_url",
+          "platform",
+          "model_id",
+          "license"
+        ],
+        "sourceHostAllowlist": [
+          "makerworld.com"
+        ],
+        "sourceHttpUrlFields": [
+          "url",
+          "creator_avatar_url",
+          "creator_profile_url"
+        ],
+        "sourceKey": "maker_source",
+        "sourcePathContains": "/models/",
+        "sourceRequiredNonEmpty": [
+          "title",
+          "url",
+          "excerpt",
+          "creator_name",
+          "platform"
+        ],
+        "sourceRequiredNonempty": [
+          "title",
+          "url",
+          "excerpt",
+          "creator_name",
+          "platform"
+        ],
+        "summaryMin": 80,
+        "template": "makerworld-page",
+        "verified": true
+      }
+    }
+  ]
+}

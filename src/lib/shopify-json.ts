@@ -18,6 +18,7 @@
  *     `backlink diversity` 等审计字段，需原样透传给后端，不丢弃。
  */
 import { CHANNELS, type Channel, type PageSpec } from '@/config/channels'
+import { site } from '@/config/site'
 import type {
   ParsedCandidate,
   ParsedFile,
@@ -370,8 +371,9 @@ function countOccurrences(haystack: string, needle: string): number {
  *
  * 站内与自家域名不强制新标签页，所以不会误伤既有文章。
  */
-const FIRST_PARTY_SUFFIXES = ['zimaspace.com']
-const SHOP_HOST = 'shop.zimaspace.com'
+// 站内域名与前台域名来自站点配置 —— 写死会把部署信息带进仓库
+const FIRST_PARTY_SUFFIXES = site.firstPartySuffixes
+const SHOP_HOST = site.storefrontDomain
 
 function isFirstPartyHost(host: string): boolean {
   const value = host.toLowerCase().replace(/^\.+|\.+$/g, '')

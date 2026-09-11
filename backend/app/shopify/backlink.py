@@ -30,8 +30,10 @@ from typing import Any
 from urllib.parse import urlparse
 
 from .client import ShopifyGraphQLClient, shopify_client
+from ..site_config import site
 
-BACKLINK_MARKER_PREFIX = "ZIMA_USER_STORY_BACKLINK"
+# 标记前缀来自站点配置（写进正文 HTML 的注释，用于幂等识别）
+BACKLINK_MARKER_PREFIX = site.backlink_marker_prefix
 
 FIND_ARTICLE_QUERY = """
 query FindBacklinkArticle($query: String!) {

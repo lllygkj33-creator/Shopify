@@ -35,9 +35,10 @@ from typing import Any
 from ..storage import ContentStore, store as default_store
 from .channel_map import resolve_article_channel, resolve_page_channel
 from .client import ShopifyError, ShopifyGraphQLClient, shopify_client
+from ..site_config import site
 
 # 复用发布器里的前台域名（页面 URL 展示用）
-STORE_DOMAIN = "shop.zimaspace.com"
+STORE_DOMAIN = site.storefront_domain
 
 # 一次请求同时拿未发布的文章和页面。实测店铺 12 文章 / 184 页面，各一页。
 # 上限用于异常情况兜底（正常永远翻不到第二页）。

@@ -53,7 +53,8 @@ class EnvSettings(BaseSettings):
     # --- 默认值 ---
     # 统一为上海时区（店铺的 ianaTimezone 实测就是 Asia/Shanghai）
     default_timezone: str = "Asia/Shanghai"
-    default_author: str = "ZimaSpace"
+    # 默认作者：留空时由站点配置（site.config*.json）提供
+    default_author: str = ""
     # 默认评审人（逗号分隔）。**故意留空**：真实的人是个人信息，
     # 不该写进代码/仓库 —— 在全局设置界面里配，或放 .env（已 gitignore）
     default_reviewers: str = ""
@@ -198,7 +199,15 @@ def resolved_timezone() -> str:
 
 
 def resolved_default_author() -> str:
-    return str(get_effective("default_author", _env.default_author)).strip()
+    """默认作者：界面设置 → 环境变量 → 站点配置。
+
+    最后那层是站点配置（site.config*.json）—— 作者名属于部署信息，
+    不再写死在代码里。
+    """
+    from .site_config import site
+
+    configured = str(get_effective("default_author", _env.default_author)).strip()
+    return configured or site.default_author
 
 
 def resolved_default_reviewers() -> list[str]:

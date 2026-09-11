@@ -25,7 +25,10 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
-    "noUncheckedSideEffectImports": true
+    "noUncheckedSideEffectImports": true,
+
+    /* 站点配置是根目录的 JSON，前后端共用一份 */
+    "resolveJsonModule": true
   },
-  "include": ["src"]
+  "include": ["src", "site.config.json", "site.config.local.json"]
 }

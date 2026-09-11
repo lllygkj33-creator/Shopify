@@ -40,6 +40,7 @@ from .client import (
     ShopifyGraphQLClient,
     shopify_client,
 )
+from ..site_config import site
 
 # ---------------------------------------------------------------------------
 # 常量（来自可用的发布脚本）
@@ -49,21 +50,14 @@ METAOBJECT_DEFINITION_NAME = "Blog Author Information"
 
 RELATED_PRODUCTS_PLACEHOLDER = "<p><span>[[related_products_1]]</span></p>"
 
-DEFAULT_REVIEWERS_FALLBACK = [
-    name.strip()
-    for name in app_config.env.default_reviewers.split(",")
-    if name.strip()
-]
+DEFAULT_REVIEWERS_FALLBACK = site.default_reviewers
 """默认评审人兜底（全局设置里没配时用）。
 
 **故意为空**：评审人是真实的人，属于个人信息，不写进仓库。
 要固定默认值就在 `.env` 里配 `DEFAULT_REVIEWERS=姓名一,姓名二`（.env 已 gitignore），
 或者直接在全局设置界面里填（存到 data/settings.json，同样不提交）。"""
 
-RELATED_PRODUCT_TITLES_FALLBACK = [
-    "ZimaCube 2 Personal Cloud Home NAS",
-    "ZimaBoard 2 - Mini Home Server for Your Big Idea",
-]
+RELATED_PRODUCT_TITLES_FALLBACK = site.related_products
 
 # Shopify 后台 Content > Files 中允许作为文章封面的图片名称（不含扩展名，匹配不区分大小写）。
 COVER_IMAGE_NAMES: list[str] = [
@@ -122,7 +116,7 @@ HANDLE_PATTERN = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*")
 PUBLISH_HISTORY_FILE = app_config.DATA_DIR / "publish_history.jsonl"
 
 # 前台域名（用于判断站内/外链；脚本里是 STORE_DOMAIN）
-STORE_DOMAIN = "shop.zimaspace.com"
+STORE_DOMAIN = site.storefront_domain
 
 
 class PublishError(RuntimeError):

@@ -35,9 +35,10 @@ from typing import Any
 
 from .client import ShopifyError, ShopifyGraphQLClient, shopify_client
 from .html_audit import audit_external_links
+from ..site_config import site
 
 # 页面 URL 用的前台域名（与 Admin API 域名不同）
-STORE_DOMAIN = "shop.zimaspace.com"
+STORE_DOMAIN = site.storefront_domain
 
 PAGE_FIELDS = """
   id
@@ -474,7 +475,7 @@ FORBIDDEN_ANCHOR_PATTERNS = (
 )
 
 # 第三方链接必须 nofollow；自家域名豁免
-NOFOLLOW_EXEMPT_HOST_SUFFIXES = ("zimaspace.com",)
+NOFOLLOW_EXEMPT_HOST_SUFFIXES = site.first_party_suffixes
 
 
 def english_word_count(text: str) -> int:

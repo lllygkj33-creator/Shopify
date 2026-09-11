@@ -49,3 +49,6 @@ __pycache__/
 # 绝不提交：里面可能有凭据
 /data/
 
+
+# 本地部署覆盖（真实域名/品牌/产品名），绝不提交
+site.config.local.json
