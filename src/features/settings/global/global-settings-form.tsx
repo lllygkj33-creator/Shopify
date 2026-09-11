@@ -375,6 +375,10 @@ export function GlobalSettingsForm() {
                 {check.ok
                   ? `店铺 ${check.shopName ?? ''}${check.shopDomain ? ` (${check.shopDomain})` : ''} · 权限 ${
                       check.scopes?.join(', ') || '未知'
+                    }${
+                      check.blogMissingScopes?.length
+                        ? `（发博客还缺：${check.blogMissingScopes.join('、')}）`
+                        : ''
                     }`
                   : `失败：${check.error}`}
               </span>
@@ -389,6 +393,12 @@ export function GlobalSettingsForm() {
                 {check.missingScopes && check.missingScopes.length > 0 && (
                   <span className='mt-1 block'>
                     缺少权限：{check.missingScopes.join(', ')}
+                  </span>
+                )}
+                {check.blogMissingScopes && check.blogMissingScopes.length > 0 && (
+                  <span className='mt-1 block text-xs'>
+                    发页面不受影响；但发博客文章还需要：
+                    {check.blogMissingScopes.join('、')}
                   </span>
                 )}
               </AlertDescription>

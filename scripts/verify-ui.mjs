@@ -234,12 +234,17 @@ try {
   if (!flowFacts.rows.some((r) => r.check.includes('错误'))) {
     problems.push('只有 2 个 H2 且无占位符的内容应被判为错误，但没有标红')
   }
-  // 社区页面（source 规格已核对）应当完全通过校验
-  const communityRow = flowFacts.rows.find((r) => r.target.includes('community_post'))
-  if (communityRow && !communityRow.check.includes('校验通过')) {
-    problems.push(
-      `社区页面应校验通过，实际：${communityRow.check}`
-    )
+  // 两个页面栏目的规格都已核对过，应当完全通过校验
+  for (const [template, label] of [
+    ['community_post', '社区页面'],
+    ['discord-page', 'Discord 页面'],
+  ]) {
+    const row = flowFacts.rows.find((r) => r.target.includes(template))
+    if (!row) {
+      problems.push(`没有解析出 ${label}（template=${template}）`)
+    } else if (!row.check.includes('校验通过')) {
+      problems.push(`${label} 应校验通过，实际：${row.check}`)
+    }
   }
 
   // 点发布，验证结果面板

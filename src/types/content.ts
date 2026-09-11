@@ -294,7 +294,10 @@ export type ConnectionCheck = {
   shopDomain?: string
   apiVersion?: string
   scopes?: string[]
+  /** 内容发布必需权限（缺失会阻断发布） */
   missingScopes?: string[]
+  /** 仅博客发布才需要的权限（缺失不影响发页面） */
+  blogMissingScopes?: string[]
   checkedAt: string
   error?: string
 }

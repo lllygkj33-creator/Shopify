@@ -236,10 +236,11 @@ async def test_verify_flags_missing_write_scope():
     result = await client.verify()
 
     assert result.ok is False
-    assert "write_content" in result.missing_scopes
-    # 只给了 read_content，metaobject / products / files 权限也都缺
-    assert "read_metaobjects" in result.missing_scopes
-    assert "read_files（或 read_images/read_themes）" in result.missing_scopes
+    # 内容写权限属于「阻断发布」的那一档
+    assert any("write_content" in scope for scope in result.missing_scopes)
+    # metaobject / products / files 只影响博客发布，归到第二档
+    assert "read_metaobjects" in result.blog_missing_scopes
+    assert "read_files（或 read_images/read_themes）" in result.blog_missing_scopes
     assert "write_content" in (result.error or "")
 
 

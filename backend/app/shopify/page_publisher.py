@@ -102,7 +102,11 @@ class PagePublishError(RuntimeError):
 
 @dataclass(frozen=True)
 class PageChannelSpec:
-    """一个页面栏目的发布规格。"""
+    """一个页面栏目的发布规格。
+
+    这些规则**逐条对应各自的发布脚本**，所以栏目之间会不一样（例如社区只要求
+    至少 1 个 H2，Discord 要求至少 4 个）。不要把规则写死在通用代码里。
+    """
 
     template: str
     """要求的 templateSuffix（与 JSON 不一致时报错）。"""
@@ -111,13 +115,46 @@ class PageChannelSpec:
     """来源 metafield 的 key（namespace = custom）。"""
 
     source_fields: tuple[str, ...] = ()
-    """来源对象里必须存在的字段。为空表示不做强校验（规格待补充）。"""
+    """来源对象里**必须存在**的字段。"""
 
-    source_url_prefix: str = ""
-    author_profile_url_prefix: str = ""
+    source_required_nonempty: tuple[str, ...] = ()
+    """其中必须非空的字段（其余允许为空，如 Discord 的 invite_url）。"""
+
+    source_field_prefixes: tuple[tuple[str, str], ...] = ()
+    """字段 → 必需前缀，例如 url 必须 /t/ 开头。"""
+
+    source_field_regexes: tuple[tuple[str, str], ...] = ()
+    """字段 → 必须 fullmatch 的正则（Discord 的消息链接就是这种）。"""
+
+    source_http_url_fields: tuple[str, ...] = ()
+    """非空时必须是完整 http(s) URL 的字段。"""
+
+    strip_hash_prefix: tuple[str, ...] = ()
+    """需要去掉前导 `#` 的字段（Discord 的 channel_name）。"""
+
+    h2_min: int = 1
+    """正文至少需要多少个 <h2>。"""
+
+    meta_title_max: int = 0
+    """meta title 上限；0 表示不限制。"""
+
+    meta_description_min: int = 0
+    """meta description 下限；0 表示不限制（只有 Discord 脚本有区间要求）。"""
+
+    meta_description_max: int = 0
+    """meta description 上限；0 表示不限制。"""
+
+    keep_source_extras: bool = False
+    """是否保留来源对象里除必需字段外的其他键（Discord 脚本会保留）。"""
 
     verified: bool = False
-    """规格是否已对照真实脚本核对过。未核对时只做宽松校验。"""
+    """规格是否已对照真实发布脚本核对过。未核对时只做宽松校验。"""
+
+
+# Discord 消息链接：https://discord.com/channels/<guild>/<channel>/<message>
+DISCORD_MESSAGE_URL_REGEX = (
+    r"https://(?:www\.)?discord\.com/channels/\d+/\d+/\d+/?$"
+)
 
 
 PAGE_CHANNEL_SPECS: dict[str, PageChannelSpec] = {
@@ -133,23 +170,64 @@ PAGE_CHANNEL_SPECS: dict[str, PageChannelSpec] = {
             "author_avatar_url",
             "author_profile_url",
         ),
-        source_url_prefix="https://community.zimaspace.com/t/",
-        author_profile_url_prefix="https://community.zimaspace.com/u/",
+        source_required_nonempty=("title", "url", "excerpt", "author_name"),
+        source_field_prefixes=(
+            ("url", "https://community.zimaspace.com/t/"),
+            ("author_profile_url", "https://community.zimaspace.com/u/"),
+        ),
+        # 社区脚本只要求「至少一个 <h2>」，没有 meta 长度规则
+        h2_min=1,
         verified=True,
     ),
-    # ⚠️ 以下 4 个规格来自 PRD §3.2，**尚未**用真实脚本核对：
-    #    template 与来源键名按命名规律推断，来源字段不做强校验。
-    #    你给出各自的脚本后我会收紧（并把 verified 改成 True）。
+    # ✅ 已对照 publish_discord_pages.py 核对
+    #
+    # 注意 Discord 比社区严得多：
+    #   - H2 至少 **4** 个（社区只要 1 个）
+    #   - meta_title ≤ 65
+    #   - meta description 必须在 120~170 之间
+    #   - url 必须是 Discord 消息链接（正则匹配，不是前缀）
+    #   - 来源字段名不同：starter_name / starter_avatar_url / channel_name / invite_url
+    #   - channel_name 要剥掉前导 '#'
     "discord": PageChannelSpec(
         template="discord-page",
         source_key="discord_source",
+        source_fields=(
+            "title",
+            "url",
+            "excerpt",
+            "starter_name",
+            "starter_avatar_url",
+            "channel_name",
+            "invite_url",
+        ),
+        source_required_nonempty=(
+            "title",
+            "url",
+            "excerpt",
+            "starter_name",
+            "starter_avatar_url",
+            "channel_name",
+        ),
+        source_field_regexes=(("url", DISCORD_MESSAGE_URL_REGEX),),
+        source_http_url_fields=("url", "starter_avatar_url", "invite_url"),
+        strip_hash_prefix=("channel_name",),
+        # Discord 脚本保留来源对象里的额外键
+        keep_source_extras=True,
+        h2_min=4,
+        meta_title_max=65,
+        meta_description_min=120,
+        meta_description_max=170,
+        verified=True,
     ),
+    # ⚠️ 以下 3 个规格来自 PRD §3.2，**尚未**用真实脚本核对：
+    #    template 与来源键名按命名规律推断，来源字段不做强校验。
+    #    拿到各自脚本后按上面两个栏目那样收紧。
     "user-story": PageChannelSpec(
         template="user-story",
         source_key="user_source",
     ),
     "vs": PageChannelSpec(
-        template="vs_source",
+        template="nas-a-vs-b",
         source_key="vs_source",
     ),
     "makerworld": PageChannelSpec(
@@ -157,12 +235,6 @@ PAGE_CHANNEL_SPECS: dict[str, PageChannelSpec] = {
         source_key="makerworld_source",
     ),
 }
-
-# ns 简写：VS 栏目的模板后缀按 PRD 是 nas-a-vs-b
-PAGE_CHANNEL_SPECS["vs"] = PageChannelSpec(
-    template="nas-a-vs-b",
-    source_key="vs_source",
-)
 
 
 def get_page_spec(channel_id: str) -> PageChannelSpec | None:
@@ -288,13 +360,12 @@ def load_body_html(data: dict[str, Any], source_file: str) -> str:
     )
 
 
-def load_source(
-    data: dict[str, Any], spec: PageChannelSpec
-) -> dict[str, str]:
-    """读取并归一化 `custom.<source_key>` 那个 JSON 对象。"""
-    source = first_value(
-        data, [spec.source_key, f"custom.{spec.source_key}"]
-    )
+def load_source(data: dict[str, Any], spec: PageChannelSpec) -> dict[str, str]:
+    """读取并归一化 `custom.<source_key>` 那个 JSON 对象。
+
+    规则全部来自 spec（各栏目脚本的要求不同）。
+    """
+    source = first_value(data, [spec.source_key, f"custom.{spec.source_key}"])
 
     if isinstance(source, str):
         try:
@@ -308,66 +379,108 @@ def load_source(
     if not isinstance(source, dict):
         raise PagePublishError(f"{spec.source_key} 必须是 JSON 对象")
 
-    normalized: dict[str, str] = {}
-
+    # 规格未核对的栏目：原样透传字符串字段，不做强校验
     if not spec.source_fields:
-        # 规格未核对的栏目：原样透传字符串字段
-        for key, value in source.items():
-            normalized[str(key)] = str(value).strip()
-        return normalized
+        return {str(key): str(value).strip() for key, value in source.items()}
 
     for field_name in spec.source_fields:
         if field_name not in source:
-            raise PagePublishError(
-                f"{spec.source_key} 缺少必需字段：{field_name}"
-            )
-        value = source[field_name]
-        if not isinstance(value, str):
-            raise PagePublishError(
-                f"{spec.source_key}.{field_name} 必须是字符串"
-            )
-        normalized[field_name] = value.strip()
+            raise PagePublishError(f"{spec.source_key} 缺少必需字段：{field_name}")
+        if not isinstance(source[field_name], str):
+            raise PagePublishError(f"{spec.source_key}.{field_name} 必须是字符串")
 
-    for field_name in ("title", "url", "excerpt", "author_name"):
-        if field_name in spec.source_fields and not normalized.get(field_name):
+    normalized: dict[str, str] = (
+        {str(key): str(value).strip() for key, value in source.items()}
+        if spec.keep_source_extras
+        else {}
+    )
+
+    for field_name in spec.source_fields:
+        normalized[field_name] = source[field_name].strip()
+
+    # 需要剥掉前导 '#' 的字段（Discord 的 channel_name）
+    for field_name in spec.strip_hash_prefix:
+        normalized[field_name] = normalized[field_name].lstrip("#").strip()
+
+    # 必须非空的字段
+    for field_name in spec.source_required_nonempty:
+        if not normalized.get(field_name):
+            raise PagePublishError(f"{spec.source_key}.{field_name} 不能为空")
+
+    # 字段 → 必需前缀
+    for field_name, prefix in spec.source_field_prefixes:
+        value = normalized.get(field_name, "")
+        if value and not value.startswith(prefix):
             raise PagePublishError(
-                f"{spec.source_key}.{field_name} 不能为空"
+                f"{spec.source_key}.{field_name} 必须以 {prefix} 开头"
             )
 
-    if spec.source_url_prefix:
-        url = normalized.get("url", "")
-        if url and not url.startswith(spec.source_url_prefix):
+    # 字段 → 必须 fullmatch 的正则
+    for field_name, pattern in spec.source_field_regexes:
+        value = normalized.get(field_name, "")
+        if value and not re.fullmatch(pattern, value, flags=re.IGNORECASE):
             raise PagePublishError(
-                f"{spec.source_key}.url 必须是完整的社区主题链接"
-                f"（{spec.source_url_prefix}...）"
+                f"{spec.source_key}.{field_name} 格式不正确：{value!r}"
             )
 
-    if spec.author_profile_url_prefix:
-        profile_url = normalized.get("author_profile_url", "")
-        if profile_url and not profile_url.startswith(spec.author_profile_url_prefix):
+    # 非空时必须是完整 http(s) URL
+    for field_name in spec.source_http_url_fields:
+        value = normalized.get(field_name, "")
+        if value and not _is_complete_http_url(value):
             raise PagePublishError(
-                f"{spec.source_key}.author_profile_url 必须使用社区用户链接"
-                f"（{spec.author_profile_url_prefix}...）"
+                f"{spec.source_key}.{field_name} 必须是完整的 http(s) 链接"
             )
 
     return normalized
 
 
+def _is_complete_http_url(value: str) -> bool:
+    from urllib.parse import urlparse
+
+    parsed = urlparse(value)
+    return parsed.scheme in {"http", "https"} and bool(parsed.netloc)
+
+
 def validate_page_payload(payload: PagePayload, spec: PageChannelSpec) -> list[str]:
-    """与脚本 `validate_payload()` 一致的硬校验。"""
+    """与各栏目脚本 `validate_payload()` 对应的硬校验。
+
+    注意规则**按栏目不同**：社区只要求 ≥1 个 H2，Discord 要求 ≥4 个，
+    且 Discord 还有 meta 长度区间。
+    """
     errors: list[str] = []
     html_lower = payload.body_html.lower()
 
     if "<h1" in html_lower:
         errors.append("正文包含 <h1>；H1 应由 page.title / Liquid 输出")
 
-    if "<h2" not in html_lower:
-        errors.append("正文必须至少包含一个 <h2> 章节")
+    h2_count = len(re.findall(r"<h2\b", payload.body_html, re.IGNORECASE))
+    if h2_count < spec.h2_min:
+        errors.append(
+            f"正文必须至少包含 {spec.h2_min} 个 <h2> 章节；当前 {h2_count} 个"
+        )
 
     if payload.template_suffix != spec.template:
         errors.append(
             f"template 必须是 {spec.template!r}；当前为 {payload.template_suffix!r}"
         )
+
+    if spec.meta_title_max and len(payload.meta_title) > spec.meta_title_max:
+        errors.append(
+            f"meta_title 应在 {spec.meta_title_max} 个字符以内；当前 {len(payload.meta_title)}"
+        )
+
+    description_length = len(payload.meta_description)
+    if spec.meta_description_min or spec.meta_description_max:
+        if spec.meta_description_min and description_length < spec.meta_description_min:
+            errors.append(
+                f"meta description 应在 {spec.meta_description_min}"
+                f"~{spec.meta_description_max} 字符之间；当前 {description_length}"
+            )
+        elif spec.meta_description_max and description_length > spec.meta_description_max:
+            errors.append(
+                f"meta description 应在 {spec.meta_description_min}"
+                f"~{spec.meta_description_max} 字符之间；当前 {description_length}"
+            )
 
     for index, image_tag in enumerate(
         re.findall(r"<img\b[^>]*>", payload.body_html, re.IGNORECASE), start=1

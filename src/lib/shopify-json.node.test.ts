@@ -145,10 +145,11 @@ describe('parseJsonContent —— 博客文章（数组 schema）', () => {
 
 describe('parseJsonContent —— 页面（单对象 schema）', () => {
   it('识别单对象页面并读取 template', () => {
+    // 用尚未核对规格的栏目（user-story），专注验证「模板识别」本身
     const text = JSON.stringify({
-      title: 'Discord 社区',
-      url: '/pages/discord-community',
-      template: 'discord-page',
+      title: 'User Story',
+      url: '/pages/my-user-story',
+      template: 'user-story',
       published: true,
       html: '<div><h2>hi</h2></div>',
       'meta title': 'MT',
@@ -156,16 +157,16 @@ describe('parseJsonContent —— 页面（单对象 schema）', () => {
       images: ['a.png'],
     })
 
-    const result = parseJsonContent(text, 'Discord/f.json')
+    const result = parseJsonContent(text, 'User/f.json')
 
     expect(result.detected).toBe('page')
     expect(result.candidates).toHaveLength(1)
 
     const [candidate] = result.candidates
     expect(candidate.contentType).toBe('page')
-    expect(candidate.handle).toBe('/pages/discord-community')
-    expect(candidate.template).toBe('discord-page')
-    expect(candidate.channelId).toBe('discord')
+    expect(candidate.handle).toBe('/pages/my-user-story')
+    expect(candidate.template).toBe('user-story')
+    expect(candidate.channelId).toBe('user-story')
     expect(candidate.publishable).toBe(true)
   })
 
@@ -457,7 +458,7 @@ describe('上传阶段校验 —— 页面正文规则', () => {
     ).candidates
 
     expect(errorsOf(candidate)).toContainEqual(
-      expect.stringContaining('至少包含一个 <h2>')
+      expect.stringContaining('至少包含 1 个 <h2>')
     )
   })
 
@@ -551,7 +552,7 @@ describe('上传阶段校验 —— 来源对象', () => {
     ).candidates
 
     expect(errorsOf(candidate)).toContainEqual(
-      expect.stringContaining('完整来源链接')
+      expect.stringContaining('必须以 https://community.zimaspace.com/t/ 开头')
     )
   })
 
@@ -567,25 +568,151 @@ describe('上传阶段校验 —— 来源对象', () => {
     ).candidates
 
     expect(errorsOf(candidate)).toContainEqual(
-      expect.stringContaining('用户主页链接')
+      expect.stringContaining('必须以 https://community.zimaspace.com/u/ 开头')
     )
   })
 
-  it('规格未核对的栏目（discord）只给提示，不阻断', () => {
+  it('规格未核对的栏目只给提示，不阻断', () => {
     const raw = JSON.stringify({
       title: 'D',
       'meta title': 'D',
       'meta description': 'MD',
       url: '/pages/d',
-      template: 'discord-page',
+      template: 'user-story',
       html: PAGE_HTML_OK,
     })
-    const [candidate] = parseJsonContent(raw, 'Discord/a.json').candidates
+    const [candidate] = parseJsonContent(raw, 'User/a.json').candidates
 
-    expect(candidate.channelId).toBe('discord')
+    expect(candidate.channelId).toBe('user-story')
     expect(candidate.publishable).toBe(true)
     expect(warningsOf(candidate)).toContainEqual(
       expect.stringContaining('规格尚未核对')
+    )
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Discord 页面：规则比社区严得多（已对照 publish_discord_pages.py）
+// ---------------------------------------------------------------------------
+
+const DISCORD_HTML_4H2 =
+  '<div><h2>A</h2><p>1</p><h2>B</h2><p>2</p><h2>C</h2><p>3</p><h2>D</h2><p>4</p></div>'
+
+/** Discord 的 meta description 必须落在 120~170 字符 */
+const DISCORD_META_DESCRIPTION =
+  'ZimaCube 1 runs its drives hot when airflow is restricted. This thread covers bay spacing, fan curves, and front-panel obstructions that keep temperatures safe.'
+
+const DISCORD_SOURCE = {
+  title: 'ZimaCube 1 HDD Temperature and Cooling',
+  url: 'https://discord.com/channels/123456789/987654321/555555555',
+  excerpt: 'A thread about drive temperatures and airflow.',
+  starter_name: 'Eric Brown',
+  starter_avatar_url: 'https://cdn.discordapp.com/avatars/1/abc.png',
+  channel_name: '#zimacube-general',
+  invite_url: '',
+}
+
+function discordPage(overrides: Record<string, unknown> = {}) {
+  return JSON.stringify({
+    title: 'ZimaCube 1 HDD Running Hot',
+    meta_title: 'ZimaCube 1 HDD Temperature: Improve Cooling',
+    td: DISCORD_META_DESCRIPTION,
+    url: '/pages/zimacube-1-hdd-temperature-cooling-airflow',
+    template: 'discord-page',
+    published: true,
+    discord_source: DISCORD_SOURCE,
+    html: DISCORD_HTML_4H2,
+    ...overrides,
+  })
+}
+
+describe('上传阶段校验 —— Discord 页面（更严）', () => {
+  it('合法 Discord 页面通过，且 channel_name 的 # 被剥掉', () => {
+    const [candidate] = parseJsonContent(discordPage(), 'Discord/a.json').candidates
+
+    expect(candidate.channelId).toBe('discord')
+    expect(candidate.publishable).toBe(true)
+    expect(candidate.issues).toEqual([])
+    // 脚本会把 channel_name 的前导 # 去掉再写入 metafield
+    expect((candidate.source as Record<string, unknown>)['channel_name']).toBe(
+      'zimacube-general'
+    )
+  })
+
+  it('H2 少于 4 个报错（社区只要 1 个，Discord 要 4 个）', () => {
+    const [candidate] = parseJsonContent(
+      discordPage({ html: '<div><h2>A</h2><p>1</p><h2>B</h2><p>2</p></div>' }),
+      'Discord/a.json'
+    ).candidates
+
+    expect(candidate.publishable).toBe(false)
+    expect(errorsOf(candidate)).toContainEqual(
+      expect.stringContaining('至少包含 4 个 <h2>')
+    )
+  })
+
+  it('meta_title 超过 65 字符报错', () => {
+    const [candidate] = parseJsonContent(
+      discordPage({ meta_title: 'x'.repeat(66) }),
+      'Discord/a.json'
+    ).candidates
+
+    expect(errorsOf(candidate)).toContainEqual(
+      expect.stringContaining('meta title 应在 65')
+    )
+  })
+
+  it('meta description 不足 120 字符报错', () => {
+    const [candidate] = parseJsonContent(
+      discordPage({ td: 'too short' }),
+      'Discord/a.json'
+    ).candidates
+
+    expect(errorsOf(candidate)).toContainEqual(
+      expect.stringContaining('120~170')
+    )
+  })
+
+  it('url 必须是 Discord 消息链接', () => {
+    const [candidate] = parseJsonContent(
+      discordPage({
+        discord_source: { ...DISCORD_SOURCE, url: 'https://discord.com/channels/1/2' },
+      }),
+      'Discord/a.json'
+    ).candidates
+
+    expect(errorsOf(candidate)).toContainEqual(
+      expect.stringContaining('格式不正确')
+    )
+  })
+
+  it('invite_url 允许为空，但非空时必须完整链接', () => {
+    const empty = parseJsonContent(discordPage(), 'Discord/a.json').candidates[0]
+    expect(empty.publishable).toBe(true)
+
+    const [broken] = parseJsonContent(
+      discordPage({
+        discord_source: { ...DISCORD_SOURCE, invite_url: 'not-a-url' },
+      }),
+      'Discord/a.json'
+    ).candidates
+
+    expect(errorsOf(broken)).toContainEqual(
+      expect.stringContaining('必须是完整的 http(s) 链接')
+    )
+  })
+
+  it('来源缺 starter_name 报错（Discord 用 starter_* 而不是 author_*）', () => {
+    const broken = { ...DISCORD_SOURCE } as Record<string, unknown>
+    delete broken['starter_name']
+
+    const [candidate] = parseJsonContent(
+      discordPage({ discord_source: broken }),
+      'Discord/a.json'
+    ).candidates
+
+    expect(errorsOf(candidate)).toContainEqual(
+      expect.stringContaining('starter_name')
     )
   })
 })

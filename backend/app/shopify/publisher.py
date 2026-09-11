@@ -35,8 +35,6 @@ from urllib.parse import unquote, urlparse
 
 from .. import config as app_config
 from .client import (
-    FILE_READ_SCOPES,
-    REQUIRED_SCOPES,
     ShopifyError,
     ShopifyGraphQLClient,
     shopify_client,

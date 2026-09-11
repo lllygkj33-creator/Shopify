@@ -80,8 +80,26 @@ export type PageSpec = {
   sourceKey: string
   /** 来源对象里必须存在的字段；为空表示规格尚未核对，不做强校验 */
   sourceFields?: string[]
-  sourceUrlPrefix?: string
-  authorProfileUrlPrefix?: string
+  /** 其中必须非空的字段（其余允许为空，如 Discord 的 invite_url） */
+  sourceRequiredNonEmpty?: string[]
+  /** 字段 → 必需前缀 */
+  sourceFieldPrefixes?: Record<string, string>
+  /** 字段 → 必须匹配的正则（字符串形式，便于放在配置里） */
+  sourceFieldRegexes?: Record<string, string>
+  /** 非空时必须是完整 http(s) 链接的字段 */
+  sourceHttpUrlFields?: string[]
+  /** 需要剥掉前导 `#` 的字段（Discord 的 channel_name） */
+  stripHashPrefix?: string[]
+
+  /** 正文至少需要多少个 <h2>（社区 1 个，Discord 4 个） */
+  h2Min?: number
+  /** meta title 上限；不填表示不限制 */
+  metaTitleMax?: number
+  /** meta description 下限；不填表示不限制 */
+  metaDescriptionMin?: number
+  /** meta description 上限；不填表示不限制 */
+  metaDescriptionMax?: number
+
   /** 规格是否已对照真实发布脚本核对过 */
   verified: boolean
 }
@@ -161,8 +179,13 @@ export const CHANNELS: Channel[] = [
         'author_avatar_url',
         'author_profile_url',
       ],
-      sourceUrlPrefix: 'https://community.zimaspace.com/t/',
-      authorProfileUrlPrefix: 'https://community.zimaspace.com/u/',
+      sourceRequiredNonEmpty: ['title', 'url', 'excerpt', 'author_name'],
+      sourceFieldPrefixes: {
+        url: 'https://community.zimaspace.com/t/',
+        author_profile_url: 'https://community.zimaspace.com/u/',
+      },
+      // 社区脚本只要求「至少一个 <h2>」，没有 meta 长度规则
+      h2Min: 1,
       verified: true,
     },
   },
@@ -175,11 +198,41 @@ export const CHANNELS: Channel[] = [
     color: '#5865f2',
     template: 'discord-page',
     sourceKey: 'discord_source',
-    // ⚠️ 规格来自 PRD，尚未用真实脚本核对 → 不做来源字段强校验
+    // ✅ 已对照 publish_discord_pages.py 核对
+    //
+    // 注意 Discord 比社区严得多：H2 至少 4 个、meta_title ≤ 65、
+    // meta description 必须在 120~170、url 必须是 Discord 消息链接，
+    // 来源字段名也不同（starter_* / channel_name / invite_url）。
     pageSpec: {
       template: 'discord-page',
       sourceKey: 'discord_source',
-      verified: false,
+      sourceFields: [
+        'title',
+        'url',
+        'excerpt',
+        'starter_name',
+        'starter_avatar_url',
+        'channel_name',
+        'invite_url',
+      ],
+      sourceRequiredNonEmpty: [
+        'title',
+        'url',
+        'excerpt',
+        'starter_name',
+        'starter_avatar_url',
+        'channel_name',
+      ],
+      sourceFieldRegexes: {
+        url: '^https://(?:www\\.)?discord\\.com/channels/\\d+/\\d+/\\d+/?$',
+      },
+      sourceHttpUrlFields: ['url', 'starter_avatar_url', 'invite_url'],
+      stripHashPrefix: ['channel_name'],
+      h2Min: 4,
+      metaTitleMax: 65,
+      metaDescriptionMin: 120,
+      metaDescriptionMax: 170,
+      verified: true,
     },
   },
   {

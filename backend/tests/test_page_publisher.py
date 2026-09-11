@@ -134,22 +134,22 @@ def test_load_source_rejects_empty_required_value():
 
 def test_load_source_enforces_community_topic_url():
     broken = dict(SOURCE, url="https://example.com/t/x")
-    with pytest.raises(PagePublishError, match="完整的社区主题链接"):
+    with pytest.raises(PagePublishError, match="必须以 https://community.zimaspace.com/t/ 开头"):
         load_source({"community_source": broken}, SPEC)
 
 
 def test_load_source_enforces_author_profile_url():
     broken = dict(SOURCE, author_profile_url="https://example.com/u/x")
-    with pytest.raises(PagePublishError, match="社区用户链接"):
+    with pytest.raises(PagePublishError, match="必须以 https://community.zimaspace.com/u/ 开头"):
         load_source({"community_source": broken}, SPEC)
 
 
 def test_load_source_passes_through_for_unverified_channels():
     """未核对规格的栏目只做宽松处理。"""
-    discord = get_page_spec("discord")
-    assert discord is not None and discord.verified is False
+    user_story = get_page_spec("user-story")
+    assert user_story is not None and user_story.verified is False
 
-    result = load_source({"discord_source": {"anything": "goes"}}, discord)
+    result = load_source({"user_source": {"anything": "goes"}}, user_story)
     assert result == {"anything": "goes"}
 
 
@@ -519,12 +519,204 @@ def test_community_spec_is_marked_verified():
 
 def test_other_page_channels_are_registered_but_unverified():
     """
-    其余 4 个页面栏目的规格来自 PRD，尚未用真实脚本核对 —— 这里把状态钉住，
+    剩余 3 个页面栏目的规格来自 PRD，尚未用真实脚本核对 —— 这里把状态钉住，
     等拿到各自脚本后收紧校验并把 verified 改成 True。
+    （Discord 已对照 publish_discord_pages.py 核对）
     """
-    for channel_id in ("discord", "user-story", "vs", "makerworld"):
+    for channel_id in ("user-story", "vs", "makerworld"):
         spec = PAGE_CHANNEL_SPECS[channel_id]
         assert spec.verified is False
         assert spec.source_key.endswith("_source")
 
     assert PAGE_CHANNEL_SPECS["vs"].template == "nas-a-vs-b"
+
+
+# ---------------------------------------------------------------------------
+# Discord 栏目：规则与社区**不同**（已对照 publish_discord_pages.py）
+# ---------------------------------------------------------------------------
+
+DISCORD_SPEC = get_page_spec("discord")
+assert DISCORD_SPEC is not None
+
+DISCORD_HTML_4H2 = (
+    "<div><h2>A</h2><h3>a</h3><h2>B</h2><h3>b</h3>"
+    "<h2>C</h2><h3>c</h3><h2>D</h2><h3>d</h3></div>"
+)
+DISCORD_META_DESCRIPTION = (
+    "ZimaCube 1 runs its drives hot when airflow is restricted. This thread covers "
+    "bay spacing, fan curves, and front-panel obstructions that keep temperatures safe."
+)
+DISCORD_SOURCE = {
+    "title": "ZimaCube 1 HDD Temperature and Cooling",
+    "url": "https://discord.com/channels/123456789/987654321/555555555",
+    "excerpt": "A thread about drive temperatures and airflow.",
+    "starter_name": "Eric Brown",
+    "starter_avatar_url": "https://cdn.discordapp.com/avatars/1/abc.png",
+    "channel_name": "#zimacube-general",
+    "invite_url": "",
+}
+
+
+def raw_discord(**overrides):
+    base = {
+        "title": "ZimaCube 1 HDD Running Hot",
+        "meta_title": "ZimaCube 1 HDD Temperature: Improve Cooling",
+        "td": DISCORD_META_DESCRIPTION,
+        "url": "/pages/zimacube-1-hdd-temperature-cooling-airflow",
+        "template": "discord-page",
+        "html": DISCORD_HTML_4H2,
+        "discord_source": dict(DISCORD_SOURCE),
+    }
+    base.update(overrides)
+    return base
+
+
+def build_discord(raw=None, **kwargs):
+    return build_page_payload(
+        raw if raw is not None else raw_discord(),
+        channel_id="discord",
+        spec=DISCORD_SPEC,
+        **kwargs,
+    )
+
+
+def test_discord_spec_is_verified_and_stricter_than_community():
+    assert DISCORD_SPEC.verified is True
+    assert DISCORD_SPEC.template == "discord-page"
+    assert DISCORD_SPEC.source_key == "discord_source"
+
+    # 与社区的关键差异
+    assert DISCORD_SPEC.h2_min == 4
+    assert SPEC.h2_min == 1
+    assert DISCORD_SPEC.meta_title_max == 65
+    assert (DISCORD_SPEC.meta_description_min, DISCORD_SPEC.meta_description_max) == (120, 170)
+    assert SPEC.meta_title_max == 0
+    assert SPEC.meta_description_min == 0
+
+
+def test_discord_source_strips_hash_from_channel_name():
+    payload = build_discord()
+    assert payload.source["channel_name"] == "zimacube-general"
+
+
+def test_discord_source_keeps_extra_keys():
+    """Discord 脚本保留来源对象里的额外键（社区脚本只保留必需字段）。"""
+    source = dict(DISCORD_SOURCE)
+    payload = build_discord(raw_discord(discord_source=source))
+
+    # 7 个必需字段都在
+    for field_name in DISCORD_SPEC.source_fields:
+        assert field_name in payload.source
+
+
+def test_discord_invite_url_may_be_empty():
+    payload = build_discord(raw_discord(discord_source={**DISCORD_SOURCE, "invite_url": ""}))
+    assert payload.source["invite_url"] == ""
+    assert validate_page_payload(payload, DISCORD_SPEC) == []
+
+
+def test_discord_invite_url_must_be_url_when_present():
+    with pytest.raises(PagePublishError, match="invite_url"):
+        build_discord(
+            raw_discord(discord_source={**DISCORD_SOURCE, "invite_url": "not-a-url"})
+        )
+
+
+def test_discord_url_must_be_a_message_link():
+    """Discord 用正则校验消息链接，不是简单前缀。"""
+    with pytest.raises(PagePublishError, match="格式不正确"):
+        build_discord(
+            raw_discord(
+                discord_source={**DISCORD_SOURCE, "url": "https://discord.com/channels/1/2"}
+            )
+        )
+
+
+def test_discord_source_requires_starter_fields():
+    """Discord 用 starter_* / channel_name，而不是社区的 author_*。"""
+    broken = {k: v for k, v in DISCORD_SOURCE.items() if k != "starter_name"}
+    with pytest.raises(PagePublishError, match="starter_name"):
+        build_discord(raw_discord(discord_source=broken))
+
+
+def test_discord_requires_at_least_four_h2():
+    payload = build_discord(raw_discord(html="<div><h2>A</h2><h2>B</h2></div>"))
+    errors = validate_page_payload(payload, DISCORD_SPEC)
+
+    assert any("至少包含 4 个 <h2>" in error for error in errors)
+
+
+def test_discord_meta_title_length_is_capped():
+    payload = build_discord(raw_discord(meta_title="x" * 66))
+    errors = validate_page_payload(payload, DISCORD_SPEC)
+
+    assert any("meta_title 应在 65" in error for error in errors)
+
+
+def test_discord_meta_description_must_be_in_range():
+    too_short = build_discord(raw_discord(td="too short"))
+    errors = validate_page_payload(too_short, DISCORD_SPEC)
+    assert any("120~170" in error for error in errors)
+
+    too_long = build_discord(raw_discord(td="x" * 171))
+    errors = validate_page_payload(too_long, DISCORD_SPEC)
+    assert any("120~170" in error for error in errors)
+
+
+def test_community_has_no_meta_length_rule():
+    """社区脚本没有 meta 长度规则，短 description 不应报错。"""
+    payload = build(raw_page())
+    assert validate_page_payload(payload, SPEC) == []
+
+
+def test_discord_template_must_be_discord_page():
+    payload = build_discord(raw_discord(template="community_post"))
+    errors = validate_page_payload(payload, DISCORD_SPEC)
+
+    assert any("discord-page" in error for error in errors)
+
+
+# ---------------------------------------------------------------------------
+# 权限分档：两个脚本要求不同
+# ---------------------------------------------------------------------------
+
+
+def test_missing_scopes_splits_blocking_and_blog_only():
+    from app.shopify.client import missing_scopes
+
+    # 真实 token 的权限应有尽有
+    real = [
+        "read_files",
+        "read_metaobject_definitions",
+        "read_metaobjects",
+        "read_products",
+        "read_content",
+        "write_content",
+    ]
+    assert missing_scopes(real) == ([], [])
+
+
+def test_pages_only_token_is_not_blocked_by_blog_scopes():
+    """只发页面的 token 不该被 metaobject / files 权限卡住。"""
+    from app.shopify.client import missing_scopes
+
+    blocking, blog_only = missing_scopes(["read_content", "write_content"])
+    assert blocking == []
+    assert "read_products" in blog_only
+
+
+def test_online_store_pages_scope_family_is_accepted():
+    """Discord 脚本接受 read/write_online_store_pages 这一族权限。"""
+    from app.shopify.client import missing_scopes
+
+    blocking, _ = missing_scopes(
+        ["read_online_store_pages", "write_online_store_pages"]
+    )
+    assert blocking == []
+
+
+def test_without_content_scopes_publishing_is_blocked():
+    from app.shopify.client import missing_scopes
+
+    blocking, _ = missing_scopes(["read_files", "read_products"])
+    assert len(blocking) == 2

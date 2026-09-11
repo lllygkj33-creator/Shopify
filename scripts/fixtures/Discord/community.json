@@ -1,11 +1,19 @@
 {
-  "title": "Discord Community Roundup",
-  "meta title": "Discord Community Roundup",
-  "meta description": "Monthly highlights from the ZimaSpace Discord community.",
-  "url": "/pages/discord-community-roundup",
+  "title": "ZimaCube 1 HDD Running Hot: How to Improve Cooling and Airflow",
+  "meta_title": "ZimaCube 1 HDD Temperature: Improve Cooling",
+  "td": "ZimaCube 1 runs its drives hot when airflow is restricted. This thread covers bay spacing, fan curves, and front-panel obstructions that keep temperatures safe.",
+  "url": "/pages/zimacube-1-hdd-temperature-cooling-airflow",
   "template": "discord-page",
   "published": true,
-  "html": "<div><h2>Highlights</h2><p>Monthly roundup.</p></div>",
-  "images": ["cover.png"],
-  "discord_source": { "channel": "#general" }
+  "discord_source": {
+    "title": "ZimaCube 1 HDD Temperature and Cooling",
+    "url": "https://discord.com/channels/123456789/987654321/555555555",
+    "excerpt": "A thread about drive temperatures and airflow.",
+    "starter_name": "Eric Brown",
+    "starter_avatar_url": "https://cdn.discordapp.com/avatars/1/abc.png",
+    "channel_name": "#zimacube-general",
+    "invite_url": ""
+  },
+  "related_products": [],
+  "html": "<div><h2>Why the drives run hot</h2><p>Restricted intake airflow is the usual cause.</p><h2>Check bay spacing</h2><p>Leave a slot between populated bays where possible.</p><h2>Adjust fan curves</h2><p>See the <a href=\"https://community.zimaspace.com/t/zimacube-cooling/1\" title=\"Community cooling thread\">cooling thread</a> for starting values.</p><h2>Clear the front panel</h2><img src=\"https://cdn.shopify.com/x/airflow.png\" alt=\"Front panel airflow gap\" title=\"Front panel airflow gap\"></div>"
 }

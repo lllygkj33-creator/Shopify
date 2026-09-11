@@ -115,7 +115,10 @@ class ConnectionCheckResponse(BaseModel):
     shopDomain: str | None = None
     apiVersion: str | None = None
     scopes: list[str] = Field(default_factory=list)
+    # 内容发布必需（read/write content 或 online_store_pages）
     missingScopes: list[str] = Field(default_factory=list)
+    # 仅博客发布才需要的（metaobject / products / files）
+    blogMissingScopes: list[str] = Field(default_factory=list)
     checkedAt: str
     error: str | None = None
 
@@ -329,6 +332,7 @@ async def verify_connection() -> ConnectionCheckResponse:
         apiVersion=result.api_version,
         scopes=result.scopes,
         missingScopes=result.missing_scopes,
+        blogMissingScopes=result.blog_missing_scopes,
         checkedAt=checked_at,
         error=result.error,
     )

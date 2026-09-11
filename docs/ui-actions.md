@@ -114,20 +114,43 @@ F1「返回上一页」、F2「回到首页」—— 纯前端。
 | 正文未带 `zima-*-article` class → 回落栏目默认博客 | 提示 |
 | 未指定 `author` → 用全局默认作者 | 提示 |
 
-### 页面（`publish_community_pages.py`）
+### 页面 —— **规则按栏目不同**，不要写死在通用代码里
+
+共同部分：
 
 | 规则 | 级别 |
 |---|---|
 | `title` / `url` / `meta title` / `meta description` / `html` 必填 | 错误 |
-| `meta description` ≤ **160** 字符 | 错误 |
 | 正文**禁用 `<h1>`**（H1 由 `page.title` / Liquid 输出） | 错误 |
-| 正文**必须至少一个 `<h2>`** | 错误 |
 | 每个 `<img>` 必须有非空 **`alt` 和 `title`** | 错误 |
 | 每个 `<a>` 必须有非空 **`title`** | 错误 |
-| `template` 必须等于栏目规格（如 `community_post`） | 错误 |
+| `template` 必须等于栏目规格 | 错误 |
 | `handle` 只能小写字母 / 数字 / 连字符（`/pages/` 前缀会自动剥掉） | 错误 |
-| 社区来源 `community_source` 6 个字段必填、`url` 必须是 `community.zimaspace.com/t/`、`author_profile_url` 必须是 `/u/` | 错误 |
-| 规格未核对的栏目（Discord/用户故事/VS/MakerWorld）来源缺失 | 提示 |
+
+按栏目差异的部分（对照各自脚本）：
+
+| 规则 | 社区 `community_post` | Discord `discord-page` |
+|---|---|---|
+| 最少 `<h2>` 数 | **1** | **4** |
+| `meta_title` 上限 | 无限制 | **≤ 65** |
+| `meta description` 长度 | 无限制 | **120 ~ 170** |
+| 来源 metafield | `custom.community_source` | `custom.discord_source` |
+| 来源必需字段 | `title` `url` `excerpt` `author_name` `author_avatar_url` `author_profile_url` | `title` `url` `excerpt` `starter_name` `starter_avatar_url` `channel_name` `invite_url` |
+| 必须非空的来源字段 | 除 `author_avatar_url` / `author_profile_url` 外的前 4 个 | 除 `invite_url` 外的 6 个 |
+| 来源 url 校验 | 前缀 `https://community.zimaspace.com/t/` | 正则 `https://discord.com/channels/<guild>/<channel>/<msg>` |
+| 其他来源校验 | `author_profile_url` 前缀 `/u/` | `starter_avatar_url` / `invite_url` 必须完整链接；`channel_name` 自动剥掉前导 `#` |
+| 额外键 | 丢弃 | **保留** |
+
+未核对规格的栏目（用户故事 / VS / MakerWorld）只做宽松校验，来源缺失仅提示。
+
+### 权限要求（分两档）
+
+| 档 | 权限 | 影响 |
+|---|---|---|
+| 阻断项 | `read_content`（或 `read_online_store_pages`）+ `write_content`（或 `write_online_store_pages`） | 缺失则发不了任何内容 |
+| 仅博客需要 | `read_metaobject_definitions` / `read_metaobjects` / `read_products` + `read_files`（或 `read_images`/`read_themes`） | 缺失只影响发博客，**不影响发页面** |
+
+设置页的「连接自检」会分两档显示，不会让只发页面的场景被博客权限卡住。
 
 ### 发布方式（三种）
 

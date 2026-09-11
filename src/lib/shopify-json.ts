@@ -18,7 +18,7 @@
  *     `backlink diversity` 等审计字段，需原样透传给后端，不丢弃。
  */
 
-import { CHANNELS, type Channel } from '@/config/channels'
+import { CHANNELS, type Channel, type PageSpec } from '@/config/channels'
 import type {
   ParsedCandidate,
   ParsedFile,
@@ -186,7 +186,7 @@ const META_TEXT_MAX_LENGTH = 160
  *  - 每个 `<img>` 必须同时有非空 `alt` 和 `title`
  *  - 每个 `<a>` 必须有非空 `title`
  */
-function checkPageHtmlRules(html: string): ValidationIssue[] {
+function checkPageHtmlRules(html: string, h2Min = 1): ValidationIssue[] {
   const issues: ValidationIssue[] = []
   if (!html) return issues
 
@@ -200,11 +200,12 @@ function checkPageHtmlRules(html: string): ValidationIssue[] {
     })
   }
 
-  if (!lower.includes('<h2')) {
+  const h2Count = (html.match(/<h2\b/gi) ?? []).length
+  if (h2Count < h2Min) {
     issues.push({
       level: 'error',
       field: 'html',
-      message: '正文必须至少包含一个 <h2> 章节',
+      message: `正文必须至少包含 ${h2Min} 个 <h2> 章节；当前 ${h2Count} 个`,
     })
   }
 
@@ -236,6 +237,108 @@ function checkPageHtmlRules(html: string): ValidationIssue[] {
       })
     }
   })
+
+  return issues
+}
+
+/** 按 spec 归一化来源对象（主要是 Discord 的 channel_name 要剥掉 '#'） */
+function normalizePageSource(
+  raw: unknown,
+  spec?: PageSpec
+): Record<string, unknown> | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined
+
+  const source = { ...(raw as Record<string, unknown>) }
+
+  for (const field of spec?.stripHashPrefix ?? []) {
+    const value = source[field]
+    if (typeof value === 'string') {
+      source[field] = value.replace(/^#+/, '').trim()
+    }
+  }
+
+  return source
+}
+
+function isCompleteHttpUrl(value: string): boolean {
+  try {
+    const url = new URL(value)
+    return url.protocol === 'http:' || url.protocol === 'https:'
+  } catch {
+    return false
+  }
+}
+
+/**
+ * 来源对象校验。规则全部来自 spec（各栏目脚本要求不同）：
+ *  - Discord 的 url 必须是 Discord 消息链接（正则）
+ *  - 社区 / 作者主页链接是前缀匹配
+ *  - invite_url 允许为空，但非空就必须是完整链接
+ */
+function checkPageSource(
+  source: Record<string, unknown> | undefined,
+  spec: PageSpec
+): ValidationIssue[] {
+  const issues: ValidationIssue[] = []
+  const field = (name: string) => `${spec.sourceKey}.${name}`
+
+  if (!source) {
+    issues.push({
+      level: 'error',
+      field: spec.sourceKey,
+      message: `缺少 ${spec.sourceKey} 来源对象（发布必填）`,
+    })
+    return issues
+  }
+
+  for (const name of spec.sourceFields ?? []) {
+    const value = source[name]
+    if (typeof value !== 'string') {
+      issues.push({
+        level: 'error',
+        field: field(name),
+        message: `${field(name)} 必须是字符串`,
+      })
+      continue
+    }
+
+    const trimmed = value.trim()
+    if ((spec.sourceRequiredNonEmpty ?? []).includes(name) && !trimmed) {
+      issues.push({
+        level: 'error',
+        field: field(name),
+        message: `${field(name)} 不能为空`,
+      })
+      continue
+    }
+    if (!trimmed) continue
+
+    const prefix = spec.sourceFieldPrefixes?.[name]
+    if (prefix && !trimmed.startsWith(prefix)) {
+      issues.push({
+        level: 'error',
+        field: field(name),
+        message: `必须以 ${prefix} 开头`,
+      })
+    }
+
+    const pattern = spec.sourceFieldRegexes?.[name]
+    if (pattern && !new RegExp(pattern, 'i').test(trimmed)) {
+      issues.push({
+        level: 'error',
+        field: field(name),
+        message: `格式不正确（应匹配 ${pattern}）`,
+      })
+    }
+
+    if ((spec.sourceHttpUrlFields ?? []).includes(name) && !isCompleteHttpUrl(trimmed)) {
+      issues.push({
+        level: 'error',
+        field: field(name),
+        message: `必须是完整的 http(s) 链接`,
+      })
+    }
+  }
 
   return issues
 }
@@ -543,13 +646,6 @@ function normalizePageCandidate(
       message: '缺少 meta description（发布必填）',
     })
   }
-  if (metaDescription && metaDescription.length > META_TEXT_MAX_LENGTH) {
-    issues.push({
-      level: 'error',
-      field: 'meta description',
-      message: `meta description 超过 ${META_TEXT_MAX_LENGTH} 个字符，当前 ${metaDescription.length}`,
-    })
-  }
 
   // 只填了裸 handle 时给出提示（路径会被推断成 /pages/<handle>）
   if (rawUrl && !rawUrl.startsWith('/') && !/^https?:\/\//i.test(rawUrl)) {
@@ -577,63 +673,41 @@ function normalizePageCandidate(
     })
   }
 
-  // ---- 正文硬规则：禁 h1 / 必须有 h2 / img alt+title / a title ----
-  issues.push(...checkPageHtmlRules(html))
+  // ---- meta 长度规则按栏目不同 ----
+  // Discord 脚本要求 meta_title ≤ 65、meta description 在 120~170；
+  // 社区脚本没有这两条规则，所以只在 spec 声明时才检查。
+  if (spec?.metaTitleMax && metaTitle.length > spec.metaTitleMax) {
+    issues.push({
+      level: 'error',
+      field: 'meta title',
+      message: `meta title 应在 ${spec.metaTitleMax} 个字符以内；当前 ${metaTitle.length}`,
+    })
+  }
+  if (spec?.metaDescriptionMin || spec?.metaDescriptionMax) {
+    const length = metaDescription.length
+    const tooShort =
+      Boolean(spec.metaDescriptionMin) && length < (spec.metaDescriptionMin ?? 0)
+    const tooLong =
+      Boolean(spec.metaDescriptionMax) && length > (spec.metaDescriptionMax ?? 0)
+    if (tooShort || tooLong) {
+      issues.push({
+        level: 'error',
+        field: 'td / meta description',
+        message: `meta description 应在 ${spec.metaDescriptionMin}~${spec.metaDescriptionMax} 字符之间；当前 ${length}`,
+      })
+    }
+  }
+
+  // ---- 正文硬规则：禁 h1 / 至少 h2Min 个 h2 / img alt+title / a title ----
+  issues.push(...checkPageHtmlRules(html, spec?.h2Min ?? 1))
 
   // ---- 来源对象（custom.<sourceKey> json metafield） ----
   const rawSource = channel?.sourceKey ? raw[channel.sourceKey] : undefined
-  const source =
-    rawSource && typeof rawSource === 'object' && !Array.isArray(rawSource)
-      ? (rawSource as Record<string, unknown>)
-      : undefined
+  // 归一化（剥掉 Discord channel_name 的前导 '#'）后再提交给后端
+  const source = normalizePageSource(rawSource, spec)
 
   if (spec?.verified) {
-    if (!source) {
-      issues.push({
-        level: 'error',
-        field: spec.sourceKey,
-        message: `缺少 ${spec.sourceKey} 来源对象（发布必填）`,
-      })
-    } else {
-      for (const field of spec.sourceFields ?? []) {
-        const value = source[field]
-        if (typeof value !== 'string' || !value.trim()) {
-          issues.push({
-            level: 'error',
-            field: `${spec.sourceKey}.${field}`,
-            message: `${spec.sourceKey}.${field} 必须是非空字符串`,
-          })
-        }
-      }
-
-      const sourceUrl = source['url']
-      if (
-        spec.sourceUrlPrefix &&
-        typeof sourceUrl === 'string' &&
-        sourceUrl.trim() &&
-        !sourceUrl.startsWith(spec.sourceUrlPrefix)
-      ) {
-        issues.push({
-          level: 'error',
-          field: `${spec.sourceKey}.url`,
-          message: `必须是完整来源链接（${spec.sourceUrlPrefix}…）`,
-        })
-      }
-
-      const profileUrl = source['author_profile_url']
-      if (
-        spec.authorProfileUrlPrefix &&
-        typeof profileUrl === 'string' &&
-        profileUrl.trim() &&
-        !profileUrl.startsWith(spec.authorProfileUrlPrefix)
-      ) {
-        issues.push({
-          level: 'error',
-          field: `${spec.sourceKey}.author_profile_url`,
-          message: `必须使用用户主页链接（${spec.authorProfileUrlPrefix}…）`,
-        })
-      }
-    }
+    issues.push(...checkPageSource(source, spec))
   } else if (channel?.sourceKey && !source) {
     issues.push({
       level: 'warning',

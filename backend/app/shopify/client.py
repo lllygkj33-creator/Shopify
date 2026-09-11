@@ -12,7 +12,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Callable
+from typing import Any, Callable, Iterable
 
 import httpx
 
@@ -55,23 +55,46 @@ class VerifyResult:
     shop_domain: str | None = None
     scopes: list[str] = field(default_factory=list)
     missing_scopes: list[str] = field(default_factory=list)
+    blog_missing_scopes: list[str] = field(default_factory=list)
     api_version: str | None = None
     error: str | None = None
 
 
-# 与 GEO 可用脚本 check_access_scopes() 一致：
-# 发布一篇文章需要内容读写 + metaobject（作者/审核人）+ 产品（关联产品）权限，
-# 以及 files 读取权限之一（封面图）。
-REQUIRED_SCOPES = (
-    "read_content",
-    "write_content",
+# 权限要求分两档，因为两个脚本的要求不同：
+#   - publish_community_pages.py：read_content 必需 + (write_content | write_online_store_pages)
+#   - publish_discord_pages.py：  (read_content | read_online_store_pages) + (write_content | write_online_store_pages)
+# 取两者的并集（即可用性最宽的那个），再单独标出"只有博客发布才需要"的权限。
+CONTENT_READ_SCOPES = ("read_content", "read_online_store_pages")
+CONTENT_WRITE_SCOPES = ("write_content", "write_online_store_pages")
+
+# 只有发博客文章才需要：metaobject（作者/审核人）+ 产品（关联产品）+ files（封面图）
+BLOG_ONLY_SCOPES = (
     "read_metaobject_definitions",
     "read_metaobjects",
     "read_products",
 )
-
 # Shopify 的 files 查询接受以下任一读取权限
 FILE_READ_SCOPES = ("read_files", "read_images", "read_themes")
+
+
+def missing_scopes(scopes: Iterable[str]) -> tuple[list[str], list[str]]:
+    """返回 (内容发布必需缺失, 仅博客发布才需要的缺失)。
+
+    分成两档是为了不让"只发页面"的场景被博客所需的权限卡住。
+    """
+    owned = {scope for scope in scopes if scope}
+
+    blocking: list[str] = []
+    if not owned.intersection(CONTENT_READ_SCOPES):
+        blocking.append("read_content（或 read_online_store_pages）")
+    if not owned.intersection(CONTENT_WRITE_SCOPES):
+        blocking.append("write_content（或 write_online_store_pages）")
+
+    blog_only = [scope for scope in BLOG_ONLY_SCOPES if scope not in owned]
+    if not owned.intersection(FILE_READ_SCOPES):
+        blog_only.append("read_files（或 read_images/read_themes）")
+
+    return blocking, blog_only
 
 VERIFY_QUERY = """
 query VerifyConnection {
@@ -176,22 +199,19 @@ class ShopifyGraphQLClient:
             for item in (installation.get("accessScopes") or [])
             if isinstance(item, dict) and item.get("handle")
         ]
-        missing = [scope for scope in REQUIRED_SCOPES if scope not in scopes]
-        if not set(scopes).intersection(FILE_READ_SCOPES):
-            missing.append("read_files（或 read_images/read_themes）")
+        blocking, blog_only = missing_scopes(scopes)
 
         return VerifyResult(
-            ok=not missing,
+            ok=not blocking,
             shop_name=shop.get("name"),
             shop_domain=shop.get("myshopifyDomain"),
             scopes=scopes,
-            missing_scopes=missing,
+            missing_scopes=blocking,
+            blog_missing_scopes=blog_only,
             api_version=self._endpoint_provider()[1],
             error=(
-                f"缺少权限：{', '.join(missing)}。"
-                "发布文章需要内容读写、metaobject 读写、产品读取，"
-                "以及 files 读取权限之一（封面图）。"
-                if missing
+                f"缺少内容发布必需权限：{', '.join(blocking)}。"
+                if blocking
                 else None
             ),
         )
