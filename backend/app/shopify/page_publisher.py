@@ -26,6 +26,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import re
 from dataclasses import dataclass, field
@@ -243,221 +244,71 @@ DISCORD_MESSAGE_URL_REGEX = (
 )
 
 
-PAGE_CHANNEL_SPECS: dict[str, PageChannelSpec] = {
-    # ✅ 已对照 publish_community_pages.py 核对
-    "community-post": PageChannelSpec(
-        template="community_post",
-        source_key="community_source",
-        source_fields=(
-            "title",
-            "url",
-            "excerpt",
-            "author_name",
-            "author_avatar_url",
-            "author_profile_url",
-        ),
-        source_required_nonempty=("title", "url", "excerpt", "author_name"),
-        source_field_prefixes=(
-            ("url", "https://community.zimaspace.com/t/"),
-            ("author_profile_url", "https://community.zimaspace.com/u/"),
-        ),
-        # 社区脚本只要求「至少一个 <h2>」，没有 meta 长度规则
-        h2_min=1,
-        # 链接：脚本只要求非空 title；平台额外要求第三方外链安全标记
-        enforce_link_rules=True,
-        verified=True,
-    ),
-    # ✅ 已对照 publish_discord_pages.py 核对
-    #
-    # 注意 Discord 比社区严得多：
-    #   - H2 至少 **4** 个（社区只要 1 个）
-    #   - meta_title ≤ 65
-    #   - meta description 必须在 120~170 之间
-    #   - url 必须是 Discord 消息链接（正则匹配，不是前缀）
-    #   - 来源字段名不同：starter_name / starter_avatar_url / channel_name / invite_url
-    #   - channel_name 要剥掉前导 '#'
-    "discord": PageChannelSpec(
-        template="discord-page",
-        source_key="discord_source",
-        source_fields=(
-            "title",
-            "url",
-            "excerpt",
-            "starter_name",
-            "starter_avatar_url",
-            "channel_name",
-            "invite_url",
-        ),
-        source_required_nonempty=(
-            "title",
-            "url",
-            "excerpt",
-            "starter_name",
-            "starter_avatar_url",
-            "channel_name",
-        ),
-        source_field_regexes=(("url", DISCORD_MESSAGE_URL_REGEX),),
-        source_http_url_fields=("url", "starter_avatar_url", "invite_url"),
-        strip_hash_prefix=("channel_name",),
-        enforce_link_rules=True,
-        # Discord 脚本保留来源对象里的额外键
-        keep_source_extras=True,
-        h2_min=4,
-        meta_title_max=65,
-        meta_description_min=120,
-        meta_description_max=170,
-        verified=True,
-    ),
-    # ✅ 通用页面栏目（Custom 文章）
-    #
-    # 这个栏目**没有对应的参考脚本**，是平台新增的通用出口：
-    # 用户上传任意页面 JSON，模板名由 JSON 自己指定（`template` 字段），
-    # 不受固定栏目的白名单限制。
-    #
-    # 因为模板是任意的，所以**不能**套用任何栏目专属规则
-    # （H2 数量、必需文案、强制标记对、固定来源字段都与具体模板强相关）。
-    # 这里只保留与模板无关的通用规则：
-    #   - 必填字段、handle 格式
-    #   - 禁 <h1>（H1 应由模板输出 —— 六个页面脚本一致的做法）
-    #   - <img> 必须有 alt/title
-    #   - 外链规则
-    "custom": PageChannelSpec(
-        template="",
-        allow_any_template=True,
-        # 来源键不固定：JSON 里任一 *_source 顶层对象都会被写成 custom.<key>
-        source_key="",
-        source_key_suffix="_source",
-        h2_min=0,
-        enforce_link_rules=True,
-        verified=True,
-    ),
-    # ⚠️ 以下 1 个规格来自 PRD §3.2，**尚未**用真实脚本核对：
-    #    template 与来源键名按命名规律推断，来源字段不做强校验。
-    # ✅ 已对照 publish_user_stories.py 核对
-    #
-    # 与前三个的不同：
-    #   - 来源 metafield 是 custom.user_info（字段名 name/handle/avatar_url/profile_url）
-    #   - 正文必须逐字包含两句固定文案
-    #   - 参考脚本是「直接发布」（只用 isPublished，没有 publishDate），
-    #     但平台统一提供 立即/定时/草稿三种方式，所以这里不限制发布方式
-    #   - 支持可选的反链（见 backlink.py）
-    "user-story": PageChannelSpec(
-        template="user-story",
-        source_key="user_info",
-        source_fields=("name", "handle", "avatar_url", "profile_url"),
-        source_required_nonempty=("name", "handle", "profile_url"),
-        source_http_url_fields=("avatar_url", "profile_url"),
-        body_must_contain=(
-            "A Note from Zima",
-            "The Story Is Still Being Written",
-        ),
-        h2_min=4,
-        enforce_link_rules=True,
-        # 用户故事脚本没有 meta 长度规则
-        verified=True,
-    ),
-    # ✅ 已对照 publish_vs_pages.py 核对
-    #
-    # 六个栏目里最特殊的一个：
-    #   - **没有来源 metafield**（只有 SEO 两个），所以 source_key 为空
-    #   - **禁止 <h1> 也禁止 <h2>**：标题层级由 Liquid 模板输出
-    #   - 必须包含 8 对 COMPARE 标记（各恰好一次）与 data-zima-compare-meta
-    #   - published 必须为 true，related_products 必须为空数组
-    #   - 内联锚文本必须 2~6 个英文单词（媒体卡片豁免）
-    #   - 图片还要求 decoding="async"
-    #   - 发布前会把资源库里的 3 个视频 + 3 篇文章注入 RESOURCES 区块
-    "vs": PageChannelSpec(
-        template="nas-a-vs-b",
-        source_key="",
-        h2_min=0,
-        forbid_h2=True,
-        meta_title_max=65,
-        meta_description_min=120,
-        meta_description_max=170,
-        require_meta_attribute="data-zima-compare-meta",
-        required_marker_pairs=(
-            "OVERVIEW",
-            "SPECS",
-            "CATEGORIES",
-            "RECOMMENDATION",
-            "SKU-FAMILY",
-            "RESOURCES",
-            "FAQ",
-            "METHODOLOGY",
-        ),
-        forbidden_placeholders=(
-            "YOUTUBE_URL_",
-            "YOUTUBE_VIDEO_ID_",
-            "BLOG_URL_",
-            "BLOG_COVER_IMAGE_URL_",
-            "PLACEHOLDER",
-            "TODO",
-            "Replace with",
-        ),
-        require_published_true=True,
-        require_empty_related_products=True,
-        forbidden_anchor_phrases=(
-            "documentation",
-            "document",
-            "docs",
-            "see the guide",
-            "see this guide",
-            "read the guide",
-            "read this guide",
-            "click here",
-            "learn more here",
-            "more information",
-        ),
-        anchor_word_min=2,
-        anchor_word_max=6,
-        media_card_class="zima-compare__media-item",
-        require_lazy_loading=True,
-        require_decoding_async=True,
-        enforce_anchor_rules=True,
-        verified=True,
-    ),
-    # ✅ 已对照 publish_maker_pages.py 核对
-    #
-    # 这是三个脚本里校验最严的：除了 h2≥4 / meta_title≤65 / description 120~170，
-    # 还要求 summary≥80、图片 alt 长度 50~100 且必须 loading="lazy"、
-    # 链接的 anchor 文本 / target / rel / nofollow 全部有规则，
-    # 并且正文必须引用原始 MakerWorld 模型页。
-    "makerworld": PageChannelSpec(
-        template="makerworld-page",
-        # 注意：不是 makerworld_source
-        source_key="maker_source",
-        source_fields=(
-            "title",
-            "url",
-            "excerpt",
-            "creator_name",
-            "creator_avatar_url",
-            "creator_profile_url",
-            "platform",
-            "model_id",
-            "license",
-        ),
-        source_required_nonempty=("title", "url", "excerpt", "creator_name", "platform"),
-        source_http_url_fields=("url", "creator_avatar_url", "creator_profile_url"),
-        source_host_allowlist=("makerworld.com",),
-        source_path_contains="/models/",
-        source_exact_values=(("platform", "makerworld"),),
-        source_digit_fields=("model_id",),
-        # 额外的 metafield：maker_summary（正文摘要，与 SEO description 不同）
-        extra_metafields=(("maker_summary", "multi_line_text_field", "summary"),),
-        h2_min=4,
-        meta_title_max=65,
-        meta_description_min=120,
-        meta_description_max=170,
-        summary_min=80,
-        img_alt_min=50,
-        img_alt_max=100,
-        require_lazy_loading=True,
-        enforce_anchor_rules=True,
-        require_source_url_in_body=True,
-        verified=True,
-    ),
-}
+def _camel(name: str) -> str:
+    """snake_case → camelCase（与配置文件里的键一致）。"""
+    head, *rest = name.split("_")
+    return head + "".join(word.capitalize() for word in rest)
+
+
+def _coerce(spec_field: str, value: Any) -> Any:
+    """把 JSON 里的值转成 dataclass 字段要的类型。
+
+    JSON 没有 tuple，而这里的字段分三类：
+      - dict            → tuple(items)            （字段 → 前缀/正则/固定值）
+      - [[a, b], ...]   → tuple(tuple(x) for x)   （成对 / 三元组）
+      - [a, b, ...]     → tuple(value)
+    按**值的形状**判断，不按字段名 —— 加字段时不用改这里。
+    """
+    if isinstance(value, dict):
+        return tuple(value.items())
+    if isinstance(value, list):
+        if value and all(isinstance(item, list) for item in value):
+            return tuple(tuple(item) for item in value)
+        return tuple(value)
+    return value
+
+
+def _spec_from_config(channel_id: str, cfg: dict[str, Any]) -> PageChannelSpec:
+    """从站点配置构建一个栏目的发布规格。
+
+    配置里的键是 camelCase（前后端共用），dataclass 字段是 snake_case。
+    """
+    # 驼峰名从 dataclass 反推，而不是把驼峰拆回下划线 ——
+    # `sourceRequiredNonempty` 拆出来是 source_required_non_empt_y，
+    # 而字段其实叫 source_required_nonempty，只能反向生成才准。
+    # 大小写不敏感：前端类型里手写的是 `sourceRequiredNonEmpty`，
+    # 而机械驼峰是 `sourceRequiredNonempty` —— 两种写法都接受，
+    # 免得改一个字段名要在配置文件里对齐拼写。
+    by_camel = {
+        _camel(f.name).lower(): f.name for f in dataclasses.fields(PageChannelSpec)
+    }
+    kwargs: dict[str, Any] = {}
+
+    for key, value in cfg.items():
+        snake = by_camel.get(key.lower())
+        if snake is None:
+            raise ValueError(
+                f"site.config.json 里栏目 {channel_id!r} 的 page.{key} 不是已知字段；"
+                f"已知字段：{', '.join(sorted(by_camel.values()))}"
+            )
+        kwargs[snake] = _coerce(snake, value)
+
+    return PageChannelSpec(**kwargs)
+
+
+def _build_specs() -> dict[str, PageChannelSpec]:
+    """栏目规格来自站点配置 —— 模板名、metafield 键、来源前缀都是部署信息。"""
+    specs: dict[str, PageChannelSpec] = {}
+    for channel in site.channels:
+        page = channel.get("page")
+        if page:
+            specs[str(channel["id"])] = _spec_from_config(str(channel["id"]), page)
+    return specs
+
+
+# 11 个栏目的发布规格（值在 site.config.json / site.config.local.json）
+PAGE_CHANNEL_SPECS: dict[str, PageChannelSpec] = _build_specs()
+
 
 
 def get_page_spec(channel_id: str) -> PageChannelSpec | None:

@@ -23,17 +23,20 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from ..site_config import site
 from .page_publisher import PAGE_CHANNEL_SPECS
 
 # Shopify 博客 handle → 平台栏目 id
 #
 # 与 src/config/channels.ts 的 blogHandle / id 对应（测试钉住）
+# Shopify 博客 handle → 平台栏目 id
+#
+# **从站点配置推导**，不手写第二份 —— 博客归属是部署信息（换店铺就要换），
+# 写在代码里必然和配置漂移。
 BLOG_HANDLE_TO_CHANNEL: dict[str, str] = {
-    "tech-ai-hub": "tech-ai-hub",
-    "support-tips": "support-tips",
-    "nas-server-setup": "nas-server-setup",
-    "buying-guide": "buying-guide",
-    "product-comparisons": "product-comparison",
+    str(channel["blogHandle"]): str(channel["id"])
+    for channel in site.channels
+    if channel.get("blogHandle")
 }
 
 # 页面 templateSuffix → 平台栏目 id（从发布规格推导，避免重复定义）
@@ -44,9 +47,10 @@ TEMPLATE_TO_CHANNEL: dict[str, str] = {
 }
 
 # 已确认不纳入菜单的模板（PRD §3.2）—— 跳过并单独报数
-EXCLUDED_TEMPLATES = {
-    "local-ai-model-hardware": "Model（未纳入菜单）",
-    "app-hardware-requirements": "APP（未纳入菜单）",
+EXCLUDED_TEMPLATES: dict[str, str] = {
+    str(channel["template"]): f"{channel['name']}（未纳入菜单）"
+    for channel in site.channels
+    if channel.get("hidden") and channel.get("template")
 }
 
 

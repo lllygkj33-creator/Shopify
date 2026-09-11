@@ -1,4 +1,5 @@
 import baseConfig from '../../site.config.json'
+import type { Channel, PageSpec } from './channels'
 
 /**
  * 站点配置（前端侧）—— 与后端 `backend/app/site_config.py` 读同一份文件。
@@ -49,7 +50,39 @@ const localModules = import.meta.glob<{ default: Json }>(
 const localConfig: Json =
   Object.values(localModules)[0]?.default ?? ({} as Json)
 
-const merged = deepMerge(baseConfig as Json, localConfig) as Json
+/**
+ * 展开字符串里的 `${a.b}`，值取自配置自身。
+ *
+ * 与后端 `site_config.py` 同一套语义：用来避免同一个域名在配置里写两遍
+ * （社区域名既用于 threadPrefix，也用于 userPrefix）。
+ */
+function expandTokens(node: unknown, root: Json): unknown {
+  if (typeof node === 'string') {
+    return node.replace(/\$\{([A-Za-z0-9_.]+)\}/g, (_, path: string) => {
+      let value: unknown = root
+      for (const part of path.split('.')) {
+        if (!value || typeof value !== 'object') {
+          throw new Error(`site.config.json 里的 \${${path}} 指不到任何值`)
+        }
+        value = (value as Json)[part]
+      }
+      return String(value)
+    })
+  }
+  if (Array.isArray(node)) return node.map((item) => expandTokens(item, root))
+  if (node && typeof node === 'object') {
+    return Object.fromEntries(
+      Object.entries(node as Json).map(([key, value]) => [
+        key,
+        expandTokens(value, root),
+      ])
+    )
+  }
+  return node
+}
+
+const mergedRaw = deepMerge(baseConfig as Json, localConfig) as Json
+const merged = expandTokens(mergedRaw, mergedRaw) as Json
 
 function get(path: string, fallback = ''): string {
   let node: unknown = merged
@@ -82,6 +115,38 @@ export const site = {
   channels: (merged.channels ?? []) as ChannelConfig[],
 }
 
+function toChannel(cfg: ChannelConfig): Channel {
+  return {
+    id: cfg.id,
+    name: cfg.name,
+    nameZh: cfg.nameZh,
+    defaultFolder: cfg.defaultFolder,
+    contentType: cfg.contentType,
+    color: cfg.color,
+    blogName: cfg.blogName,
+    blogHandle: cfg.blogHandle,
+    htmlClass: cfg.htmlClass,
+    template: cfg.template,
+    pageSpec: cfg.page as PageSpec | undefined,
+  }
+}
+
+/** 显示在菜单里的栏目（配置里的顺序即菜单顺序） */
+export const CHANNELS: Channel[] = site.channels
+  .filter((cfg) => !cfg.hidden)
+  .map(toChannel)
+
+/**
+ * 不进菜单、但解析器要认识的栏目。
+ *
+ * 只用于 getChannel()，不对外导出 —— 需要时从 ALL_CHANNELS 里筛。
+ */
+const HIDDEN_CHANNELS: Channel[] = site.channels
+  .filter((cfg) => cfg.hidden)
+  .map(toChannel)
+
+export const ALL_CHANNELS: Channel[] = [...CHANNELS, ...HIDDEN_CHANNELS]
+
 /** 站点配置里的栏目条目形状（Stage B 接栏目表时使用） */
 type ChannelConfig = {
   id: string
@@ -94,5 +159,7 @@ type ChannelConfig = {
   blogName?: string
   blogHandle?: string
   htmlClass?: string
+  /** 不进菜单，但解析器仍认得（例如已知但未上线的栏目） */
+  hidden?: boolean
   page?: Record<string, unknown>
 }

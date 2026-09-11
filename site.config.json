@@ -357,6 +357,24 @@
         "template": "makerworld-page",
         "verified": true
       }
+    },
+    {
+      "id": "local-ai-model-hardware",
+      "name": "Model Hardware",
+      "defaultFolder": "Model",
+      "contentType": "page",
+      "color": "#a855f7",
+      "template": "local-ai-model-hardware",
+      "hidden": true
+    },
+    {
+      "id": "app-hardware-requirements",
+      "name": "App Hardware",
+      "defaultFolder": "APP",
+      "contentType": "page",
+      "color": "#84cc16",
+      "template": "app-hardware-requirements",
+      "hidden": true
     }
   ]
 }

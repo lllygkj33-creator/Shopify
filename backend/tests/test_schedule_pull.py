@@ -189,7 +189,15 @@ async def test_items_outside_platform_channels_are_reported(store):
     assert report.upserted == 0
     assert report.scheduled_found == 3
     assert report.skipped["博客 zima-campaign-hub 不在平台栏目内"] == 2
-    assert any("APP" in reason for reason in report.skipped)
+    # 排除原因里的栏目名取自站点配置的 hidden 栏目（不再写死 "APP"）
+    from app.site_config import site
+
+    hidden_names = [
+        str(channel["name"]) for channel in site.channels if channel.get("hidden")
+    ]
+    assert any(
+        any(name in reason for name in hidden_names) for reason in report.skipped
+    )
     assert store.list_contents() == []
 
 
@@ -327,33 +335,19 @@ def test_blog_mapping_covers_the_five_platform_blogs():
     }
 
 
-@pytest.mark.skipif(
-    not (
-        __import__("pathlib").Path(__file__).resolve().parents[2]
-        / "src"
-        / "config"
-        / "channels.ts"
-    ).exists(),
-    reason="前端配置不在预期位置",
-)
-def test_blog_mapping_matches_frontend_channel_config():
-    """后端映射必须和前端栏目配置一致（防止两份副本漂移）。"""
-    import re
-    from pathlib import Path
+def test_blog_mapping_is_derived_from_site_config():
+    """博客映射必须**从站点配置推导**，不能手写第二份。
 
-    source = (
-        Path(__file__).resolve().parents[2] / "src" / "config" / "channels.ts"
-    ).read_text(encoding="utf-8")
+    原来这条用例读前端 `channels.ts` 做交叉校验。那份文件现在也不再写字面量了 ——
+    两边都从 site.config.json 构建 —— 所以漂移在结构上已经不可能发生。
+    这条用例钉住「确实是推导出来的」，免得某天又被手写回去。
+    """
+    from app.site_config import site
 
-    # 按「下一个 id: 之前」切块，而不是一条跨行宽松正则（后者会串到相邻条目）
-    marks = list(re.finditer(r"^\s{2,}id:\s*'([^']+)'", source, re.M))
-    frontend: dict[str, str] = {}
+    expected = {
+        str(channel["blogHandle"]): str(channel["id"])
+        for channel in site.channels
+        if channel.get("blogHandle")
+    }
 
-    for index, mark in enumerate(marks):
-        end = marks[index + 1].start() if index + 1 < len(marks) else len(source)
-        block = source[mark.end() : end]
-        handle = re.search(r"blogHandle:\s*'([^']*)'", block)
-        if handle and handle.group(1):
-            frontend[handle.group(1)] = mark.group(1)
-
-    assert frontend == BLOG_HANDLE_TO_CHANNEL
+    assert expected == BLOG_HANDLE_TO_CHANNEL
