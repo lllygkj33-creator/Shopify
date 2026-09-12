@@ -7,6 +7,7 @@
 > | 1. 推送到 GitHub | ✅ **已完成并验证**（远端 SHA 与本地一致，凭据审计 0 命中） |
 > | 2. 打包 Docker | ✅ **已在真机完成**：多阶段镜像在 ZimaOS 上冷构建成功（无缓存命中，≈30 秒，183 MB），后端同源托管前端实测可用 |
 > | 3. 推到 ZimaOS | ✅ **已完成并验证**：容器 `Up`，`/api/*` 全 200，容器内换到 Shopify token（HTTP 200），首次同步拉到 **116 条排期**并正确归类到栏目 |
+> | 3c. 镜像通用化 | ✅ **已生效**：站点配置改为后端运行期注入，镜像产物里 0 命中真实域名/品牌；同一份通用镜像挂不同配置即可服务不同店铺（§3.3） |
 > | 3b. 面板集成 | ✅ **已生效**：dashboard 里出现「内容发布平台」+ Shopify 图标；过程中发现面板安装**必定拉取镜像**、忽略 `pull_policy`，解法是设备上跑本地镜像仓库（§3.8） |
 > | 4. 正式运行 | 🟡 首次配置与验收已实测；长期运行（重启自愈、备份）待时间检验 |
 >
@@ -182,14 +183,12 @@ SYNC_INTERVAL_MINUTES=15
 
 `.env`（凭据）始终**不 `COPY` 进镜像**，只用环境变量/挂载给容器，所以镜像里没有秘密。
 
-`site.config.local.json` 的处置要分两半说清楚（**这一点最初我写错了，第 3 节做了更正**）：
+`site.config.local.json` 也**不进镜像**：后端从挂载读取它，前端则由后端在响应
+`index.html` 时把生效配置注入进去（`inject_site_config`）。
 
-- **后端**运行时只从挂载读取它 → 不依赖镜像内容；
-- **前端**的配置是在 `pnpm build` 时被 `import.meta.glob` 读进去、编译进产物的 →
-  构建的那一刻它必须在场。
-
-所以它是「构建期依赖、运行期也可挂载」，而不是「与镜像无关」。
-结论：**用真实配置构建出的镜像不要公开分发**（详见 §3.3）。
+> 这里我改了两次：最初前端是**构建期**读它（`import.meta.glob` 编译进产物），
+> 于是"想用真实配置"就得把文件放进构建上下文，镜像里就带上了真实域名/品牌。
+> 改成运行期注入后，**镜像永远是通用版**，同一份镜像挂不同配置就能服务不同店铺。
 
 ### 2.5 compose（已落地为仓库里的 `docker-compose.yml`）
 
@@ -388,38 +387,51 @@ Settings → Deploy keys（只勾读权限），之后 `git clone git@github.com
 **C. 打包拷过去** —— 就是本节所用的办法，一次性最省事，但升级要重拷。
 </details>
 
-### 3.3 镜像从哪来 —— 只能在设备上构建（重要更正）
+### 3.3 镜像从哪来 —— 镜像永远是通用版，真实配置运行期注入
 
-**结论：本平台必须在设备上 `docker compose up -d --build`，不能直接拉公开镜像跑真实店铺。**
+**结论：镜像里不含任何"谁在部署"的信息；真实配置由后端在响应页面时注入。**
 
-原因是一条容易被忽略的架构事实：
+这条是踩过一次弯路才定下来的。原来的做法是把 `site.config.local.json` 放进构建上下文，
+让前端在 `pnpm build` 时把它编译进产物 —— 后果是**构建出的镜像里带着真实域名/品牌**，
+于是"想用真实配置"和"镜像可以公开"互相排斥，设备上还得自己构建镜像。
 
-> 前端的站点配置是**构建期编译进产物**的（`src/config/site.ts` 里用 `import.meta.glob`
-> 读 `site.config.local.json`）。也就是说，`site.config.local.json` **必须在 `pnpm build`
-> 的那一刻就存在**，否则前端只有通用占位值。
+现在改成运行期注入（`backend/app/main.py` 的 `inject_site_config`）：
 
-于是两条路的差别是：
+```
+请求 /            → 后端读 dist/index.html
+                  → 把生效配置（site.config.json + 挂载的 site.config.local.json）注入
+                  → 顺便把 <title> 换成配置里的品牌名
+                  → 返回（带 Cache-Control: no-store，因为它带着配置）
+```
 
-| 路 | 前端配置 | 后端配置 | 能不能跑你的真实店铺 |
+于是三种部署方式都不再有"配置被烘焙"的问题：
+
+| 方式 | 前端配置 | 后端配置 | 镜像里有什么 |
 |---|---|---|---|
-| CI 构建的公开镜像 | ❌ 通用（`Content Publisher` / `example-store.test`） | ✅ 挂载的 local 文件 | **不能**：栏目校验按通用栏目名走，你的真实博客名/模板名会被判为不匹配 |
-| 设备上构建（本节做法） | ✅ 真实（构建时文件在仓库根目录） | ✅ 挂载的 local 文件 | ✅ |
+| 设备/本机构建 | 运行期注入 | 挂载的 local 文件 | 只有通用占位值 |
+| CI 构建的公开镜像 | 运行期注入 | 挂载的 local 文件 | 只有通用占位值 |
+| 没挂 local 文件的部署 | 运行期注入 | 通用占位值 | 只有通用占位值 |
 
-配套的一处改动：`.dockerignore` **不再排除 `site.config.local.json`**（原先排除，
-本机构建时会读不到）。它仍然被 `.gitignore` 忽略 → 仓库里和 CI 上都不存在 →
-CI 出的镜像仍然是干净的通用版。
+配套：`.dockerignore` **排除** `site.config.local.json`，`.env` 同样排除；
+凭据只走环境变量，真实配置只走挂载。
 
-> ⚠️ 反过来说：**你在设备上用真实配置构建出的镜像里含你的真实域名/品牌，绝不能推到公开仓库**
-> （`site.config.local.json` 本身没有凭据，凭据在 `.env`，而 `.env` 始终不进镜像）。
-
-所以公开镜像的定位是**演示版**：克隆仓库 → `pnpm dev`，或拉镜像看一眼界面长什么样。
-正式部署走构建。升级同理：
+**实测**（在 ZimaOS 那个容器里）：
 
 ```bash
-cd /DATA/AppData/content-publisher
-# 重新拷贝新的源码包并解开，然后：
-docker compose up -d --build
+docker exec content-publisher sh -c "grep -rl 'zimaspace\|Zima 发布平台\|zimaboard' /app/dist | wc -l"
+# → 0          镜像产物里没有你的真实信息
+docker exec content-publisher sh -c "grep -rl 'Content Publisher' /app/dist | wc -l"
+# → 2          通用占位值在（说明这确实是通用版构建）
+curl -s http://localhost:8848/ | grep -o '<title>[^<]*</title>'
+# → <title>Zima 发布平台 · Shopify 内容托管</title>    ← 真实品牌由后端注入
 ```
+
+> ⚠️ 已知残留（还没做）：**栏目模板后缀名**（`community_post` / `discord-page` /
+> `user-story` / `nas-a-vs-b` / `makerworld-page`）仍是通用配置里的占位值，
+> 所以会出现在镜像产物里（实测各 2~3 个文件命中）。没顺手清掉的原因是它们与
+> **测试和样例夹具**绑定：样例 JSON 要能直接拿去真配置上跑（`pnpm verify:real`），
+> 一旦把占位值换成假名，样例就会被真实配置的校验拒掉。要清就得把测试断言
+> 和 `scripts/` 下的样例一起改成"从配置读模板名"，那是另一件独立的事。
 
 ### 3.4 填进 ZimaOS 时要注意的
 
@@ -446,12 +458,12 @@ $ curl -s http://127.0.0.1:8848/api/health
 
 | 检查 | 本次实测结果 |
 |---|---|
-| 页面标题 | `Zima 发布平台 · Shopify 内容托管` ✅ 真实品牌 |
+| 页面标题 | 显示配置里的品牌（`品牌 · 副标题`），本次实测为你的真实品牌 ✅ |
 | 「演示数据模式」角标 | 无 ✅ |
 | 通用占位值（`Content Publisher` / `example-store.test`） | 页面上不出现 ✅ |
 | 控制台报错 | 0 ✅ |
 | `/api/*` 请求 | `settings` / `contents/timeline` / `contents/stats` 全部 200 ✅ |
-| 设置页 | 店铺 `zimaboard.myshopify.com`、API `2026-04`、品牌 token `Demo Store` ✅ |
+| 设置页 | 店铺域名是你配置的 myshopify 域、API `2026-04`、品牌 token 正确 ✅ |
 
 最容易忽略、但最该做的一项 —— **验证容器真的能连上 Shopify**：
 
@@ -671,6 +683,15 @@ sudo docker compose -p "$APP" up -d
 ```
 
 `data/` 是挂载卷，升级不动它。镜像重建只需 ≈30 秒（实测冷构建也是这个量级）。
+
+> **数据库文件名改过一次**：`zima_shopify.db` → `content_publisher.db`（通用化）。
+> 老的部署升级时要么改文件名，要么显式指定环境变量：
+>
+> ```bash
+> docker compose down                       # 先停，SQLite 是 WAL 模式
+> cd data && mv zima_shopify.db content_publisher.db   # 有 -wal/-shm 一并改
+> # 或：在 .env 里设 DATABASE_PATH=/app/data/zima_shopify.db
+> ```
 
 > 若某天把设备也做成了 git 克隆，就能简化成 `git pull` + 上面②③④；
 > 但**别把 `.env` / `site.config.local.json` 提交进去**。
