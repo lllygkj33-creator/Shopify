@@ -7,7 +7,7 @@
 > | 1. 推送到 GitHub | ✅ **已完成并验证**（远端 SHA 与本地一致，凭据审计 0 命中） |
 > | 2. 打包 Docker | 🟡 **代码与配置已完成**：Dockerfile / .dockerignore / docker-compose.yml 都在，
 >    并**以非容器方式实测过同源托管可用**（见 §2.6）。**镜像构建本身未在本机验证 —— 本机没装 Docker**。 |
-> | 3. 推到 ZimaOS | ⬜ 待执行（需要 Docker 环境；ZimaOS 上天然有） |
+> | 3. 推到 ZimaOS | 🟡 文档与 compose 已就绪（§3.0 有速查清单）；执行需要你在设备上操作，我没有那台设备的访问权 |
 > | 4. 正式运行 | 🟡 首次配置与验收命令已实测（在本机以非容器方式），其余待执行 |
 >
 > 凡标了实测的地方都有真实输出；没跑过的地方我写"未验证"，不写成已完成。
@@ -283,6 +283,38 @@ docker compose up -d --build
 
 ## 3. 推到 ZimaOS ⬜
 
+### 3.0 速查清单（照着做）
+
+整件事只有五步，**新东西只有两个文件**：
+
+```
+① 设备上拿到代码
+   （仓库是私有的 → 见 §3.1 三种办法；最简单是给设备配一个只读 Deploy Key）
+
+② 在仓库根目录放两个「不在仓库里」的文件
+   .env                     ← 凭据（gitignore）
+   site.config.local.json   ← 你的域名/品牌/博客名/主题模板名（gitignore）
+
+③ 把 docker-compose.yml 粘进 ZimaOS 的「自定义安装」
+
+④ 起容器：docker compose up -d --build
+   （或从 ZimaOS 的界面点部署）
+
+⑤ 打开 http://<设备 IP>:8848 → 设置页核对 → 点一次「立即同步」
+```
+
+两个文件的填写内容：
+
+| 文件 | 填什么 | 从哪来 |
+|---|---|---|
+| `.env` | `SHOPIFY_SHOP_DOMAIN` / `SHOPIFY_CLIENT_ID` / `SHOPIFY_CLIENT_SECRET` | Shopify 后台的 App 凭据；`client_secret` 只在生成时显示一次 |
+| `.env` | `TZ` / `SYNC_INTERVAL_MINUTES` | 可保持默认 |
+| `site.config.local.json` | 复制 `site.config.json` 改自己的值 | 域名、品牌、**博客标题（要与 Shopify 里精确一致，大小写敏感）**、主题模板名 |
+
+> `site.config.local.json` 也可以只写想覆盖的那几项 —— 它是**深度覆盖**，
+> 没写的项继承 `site.config.json` 的占位值。但栏目表是**数组**，
+> 一旦要覆盖就得整份给（数组是整体替换）。
+
 ### 3.1 机制
 
 ZimaOS 的 App Store 支持添加**自定义容器**：在 Web UI 里粘贴 Docker Compose YAML
@@ -294,23 +326,71 @@ docker-compose/cli 容器"说的就是这条路径 —— 参考
 > ⚠️ 界面上的**具体按钮文案**请以你机器上的实际版本为准 —— 我没有在 ZimaOS 界面里
 > 操作过，这里只写机制与需要填的内容。
 
-### 3.2 镜像从哪来
+### 3.2 设备上怎么拿到代码（仓库是私有的，这步要处理）
+
+Mac 上那两个文件（`.env`、`site.config.local.json`）不在仓库里，也得单独带过去。
+
+**A. Deploy Key（推荐，一次性配好，之后 `git pull` 就能升级）**
+
+在 ZimaOS 的终端里：
+
+```bash
+ssh-keygen -t ed25519 -f ~/.ssh/deploy -N ""
+cat ~/.ssh/deploy.pub
+```
+
+把公钥贴到仓库的 **Settings → Deploy keys → Add deploy key**（**不要**勾
+"Allow write access"，只读就够）。然后：
+
+```bash
+git clone git@github.com:<用户>/<仓库>.git
+```
+
+**B. HTTPS + 令牌**
+
+```bash
+git clone https://<用户名>:<PAT>@github.com/<用户>/<仓库>.git
+```
+注意：令牌会留在 `.git/config` 里，设备被人碰到就等于泄露。
+
+**C. 打包拷过去（一次性，最简单，但升级要重拷）**
+
+在 Mac 上：
+
+```bash
+git archive --format=tar.gz -o /tmp/zima-shopify.tar.gz HEAD
+```
+把这个 tar.gz 连同 `.env`、`site.config.local.json` 一起拷到设备（共享文件夹 / scp），
+在设备上解开即可。
+
+> ⚠️ `.env` 里有 `client_secret`，传输走可信通道（局域网共享 / scp），别用微信之类中转。
+
+### 3.3 镜像从哪来
 
 两种形态，选一种：
 
-**A. 在 ZimaOS 上构建（最省事，适合单机）**
-把仓库 clone 到 ZimaOS（或挂载 NAS 上的目录），在 ZimaOS 的终端里
-`docker compose up -d --build`。不需要镜像仓库。
+**A. 在设备上构建（最省事，适合单机）**
 
-**B. 构建后推到镜像仓库（适合多机/复用）**
+Dockerfile 就在仓库里，直接在设备上构建：
+
+```bash
+cd <仓库目录>
+docker compose up -d --build
+```
+不需要镜像仓库，也不需要先推送镜像。升级就是 `git pull && docker compose up -d --build`。
+
+**B. 本机构建后推镜像（适合多机 / 不想在设备上装构建工具链）**
 
 ```bash
 docker build -t <registry>/zima-shopify:1.0 .
 docker push <registry>/zima-shopify:1.0
 ```
-ZimaOS 侧 compose 里把 `build: .` 换成 `image: <registry>/zima-shopify:1.0`。
+设备侧 compose 里把 `build: .` 换成 `image: <registry>/zima-shopify:1.0`。
 
-### 3.3 填进 ZimaOS 时要注意的
+> 本机（Mac）没有 Docker 时只能走 B 的前提也不成立 —— 那就走 A 或 C，
+> 让**有 Docker 的那台机器**去构建。
+
+### 3.4 填进 ZimaOS 时要注意的
 
 | 项 | 值 / 说明 |
 |---|---|
@@ -320,7 +400,7 @@ ZimaOS 侧 compose 里把 `build: .` 换成 `image: <registry>/zima-shopify:1.0`
 | 重启策略 | `unless-stopped`，设备重启后自动起来 |
 | 时区 | 设 `TZ=Asia/Shanghai` 让**日志时间戳**好读。**它不影响排期正确性** —— 见下方纠正 |
 
-### 3.4 安全边界（重要）
+### 3.5 安全边界（重要）
 
 **这个平台没有登录鉴权。** 端口暴露到公网 = 把你的 Shopify 发布权公开。
 建议：
