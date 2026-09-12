@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { Channel } from '@/config/channels'
+import { channelLabel } from '@/i18n/channel-label'
 import type {
   ParsedCandidate,
   ParsedFile,
@@ -32,6 +33,7 @@ import {
   wallTimeToIso,
 } from '@/lib/datetime'
 import { parseJsonContent } from '@/lib/shopify-json'
+import { useI18n } from '@/context/i18n-provider'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -46,6 +48,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ConfigDrawer } from '@/components/config-drawer'
+import { LangSwitch } from '@/components/lang-switch'
 import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
 import { Search } from '@/components/search'
@@ -59,6 +62,7 @@ type ChannelPageProps = {
 }
 
 export function ChannelPage({ channel }: ChannelPageProps) {
+  const { t, lang } = useI18n()
   const queryClient = useQueryClient()
   const [parsedFiles, setParsedFiles] = useState<ParsedFile[]>([])
   const [plans, setPlans] = useState<Record<string, PublishPlan>>({})
@@ -242,10 +246,15 @@ export function ChannelPage({ channel }: ChannelPageProps) {
       setResult(data)
       const failed = data.items.filter((item) => item.status === 'failed')
       if (failed.length === 0) {
-        toast.success(`已提交 ${data.items.length} 篇`)
+        toast.success(
+          t('channels.toast.submitted', { count: data.items.length })
+        )
       } else {
         toast.warning(
-          `已提交 ${data.items.length} 篇，其中 ${failed.length} 篇失败`
+          t('channels.toast.partial', {
+            total: data.items.length,
+            failed: failed.length,
+          })
         )
       }
       queryClient.invalidateQueries({ queryKey: ['timeline'] })
@@ -340,6 +349,7 @@ export function ChannelPage({ channel }: ChannelPageProps) {
     <>
       <Header>
         <Search className='me-auto' />
+        <LangSwitch />
         <ThemeSwitch />
         <ConfigDrawer />
       </Header>
@@ -353,47 +363,60 @@ export function ChannelPage({ channel }: ChannelPageProps) {
                 className='size-3 rounded-full'
                 style={{ backgroundColor: channel.color }}
               />
-              {channel.nameZh ?? channel.name}
+              {channelLabel(channel, lang)}
             </h1>
             <p className='flex flex-wrap items-center gap-2 text-sm text-muted-foreground'>
               <span>
-                默认文件夹{' '}
+                {t('channels.folder')}{' '}
                 <code className='rounded bg-muted px-1'>
                   {channel.defaultFolder}/
                 </code>
               </span>
               <Badge variant='secondary' className='font-normal'>
-                {channel.contentType === 'blog_article' ? '博客文章' : '页面'}
+                {channel.contentType === 'blog_article'
+                  ? t('channels.contentType.blog')
+                  : t('channels.contentType.page')}
               </Badge>
-              {channel.blogName && <span>博客：{channel.blogName}</span>}
-              {channel.template && <span>模板：{channel.template}</span>}
+              {channel.blogName && (
+                <span>{t('channels.blog', { name: channel.blogName })}</span>
+              )}
+              {channel.template && (
+                <span>
+                  {t('channels.template', { name: channel.template })}
+                </span>
+              )}
             </p>
           </div>
         </div>
 
         {USE_MOCK && (
           <Alert className='mb-4'>
-            <AlertTitle>演示数据模式</AlertTitle>
+            <AlertTitle>{t('channels.mock.title')}</AlertTitle>
             <AlertDescription>
-              解析与校验是真实逻辑（与后端同规则），但发布结果由本地模拟返回。
+              {t('channels.mock.description')}
             </AlertDescription>
           </Alert>
         )}
 
         <Tabs defaultValue='publish' className='space-y-4'>
           <TabsList>
-            <TabsTrigger value='publish'>上传与发布</TabsTrigger>
-            <TabsTrigger value='history'>历史记录</TabsTrigger>
+            <TabsTrigger value='publish'>
+              {t('channels.tab.publish')}
+            </TabsTrigger>
+            <TabsTrigger value='history'>
+              {t('channels.tab.history')}
+            </TabsTrigger>
           </TabsList>
 
           {/* ================= 上传与发布 ================= */}
           <TabsContent value='publish' className='space-y-4'>
             <Card>
               <CardHeader>
-                <CardTitle className='text-base'>1. 选择本地文件夹</CardTitle>
+                <CardTitle className='text-base'>
+                  {t('channels.step.folder.title')}
+                </CardTitle>
                 <CardDescription>
-                  JSON 结构会自动识别：数组 → 博客文章，单对象 → 页面。
-                  单个文件出错不会影响其他文件。
+                  {t('channels.step.folder.description')}
                 </CardDescription>
               </CardHeader>
               <CardContent className='space-y-4'>
@@ -407,17 +430,20 @@ export function ChannelPage({ channel }: ChannelPageProps) {
                     <div className='flex items-center justify-between'>
                       <p className='flex items-center gap-2 text-sm'>
                         <FileJson className='size-4 text-muted-foreground' />
-                        已导入 <strong>{parsedFiles.length}</strong>{' '}
-                        个文件，解析出 <strong>{candidates.length}</strong>{' '}
-                        条内容
+                        {t('channels.file.imported', {
+                          files: bold(parsedFiles.length),
+                          items: bold(candidates.length),
+                        })}
                         {validating && (
                           <span className='text-muted-foreground'>
-                            （正在做后端权威校验…）
+                            {t('channels.file.validating')}
                           </span>
                         )}
                         {blockedCount > 0 && (
                           <span className='text-destructive'>
-                            （{blockedCount} 条有错误无法发布）
+                            {t('channels.file.blocked', {
+                              count: blockedCount,
+                            })}
                           </span>
                         )}
                       </p>
@@ -428,7 +454,7 @@ export function ChannelPage({ channel }: ChannelPageProps) {
                         disabled={publish.isPending}
                       >
                         <Trash2 className='size-4' />
-                        清空
+                        {t('channels.file.clear')}
                       </Button>
                     </div>
 
@@ -441,13 +467,18 @@ export function ChannelPage({ channel }: ChannelPageProps) {
                         >
                           <span className='truncate'>{file.fileName}</span>
                           {file.error ? (
-                            <span className='text-destructive'>解析失败</span>
+                            <span className='text-destructive'>
+                              {t('channels.file.parseFailed')}
+                            </span>
                           ) : (
                             <span className='text-muted-foreground'>
-                              {file.candidates.length} 条 ·{' '}
+                              {t('channels.file.count', {
+                                count: file.candidates.length,
+                              })}{' '}
+                              ·{' '}
                               {file.detected === 'blog_article'
-                                ? '文章'
-                                : '页面'}
+                                ? t('channels.file.kind.article')
+                                : t('channels.file.kind.page')}
                             </span>
                           )}
                         </Badge>
@@ -457,17 +488,18 @@ export function ChannelPage({ channel }: ChannelPageProps) {
                     {fileErrors.length > 0 && (
                       <Alert variant='destructive'>
                         <AlertTitle>
-                          {fileErrors.length}{' '}
-                          个文件解析失败（其余文件可正常发布）
+                          {t('channels.file.error.title', {
+                            count: fileErrors.length,
+                          })}
                         </AlertTitle>
                         <AlertDescription>
                           <ul className='mt-1 list-disc space-y-0.5 ps-4 text-xs'>
                             {fileErrors.map((file) => (
                               <li key={file.filePath}>
-                                <span className='font-mono'>
-                                  {file.fileName}
-                                </span>
-                                ：{file.error}
+                                {t('channels.file.error.item', {
+                                  file: mono(file.fileName),
+                                  message: file.error ?? '',
+                                })}
                               </li>
                             ))}
                           </ul>
@@ -484,17 +516,21 @@ export function ChannelPage({ channel }: ChannelPageProps) {
                 {/* ---------- 批量设置 ---------- */}
                 <Card>
                   <CardHeader>
-                    <CardTitle className='text-base'>2. 设置发布方式</CardTitle>
+                    <CardTitle className='text-base'>
+                      {t('channels.step.plan.title')}
+                    </CardTitle>
                     <CardDescription>
-                      可逐篇调整；下面的批量设置作用于已勾选的{' '}
-                      {publishableSelected.length} 篇。时间按 {timezone}（
-                      {formatTimezoneOffset(timezone)}）解释。
+                      {t('channels.step.plan.description', {
+                        count: publishableSelected.length,
+                        timezone,
+                        offset: formatTimezoneOffset(timezone),
+                      })}
                     </CardDescription>
                   </CardHeader>
                   <CardContent className='flex flex-wrap items-end gap-3'>
                     <div className='space-y-1.5'>
                       <Label className='text-xs text-muted-foreground'>
-                        统一发布时间
+                        {t('channels.batch.time')}
                       </Label>
                       <Input
                         type='datetime-local'
@@ -510,7 +546,7 @@ export function ChannelPage({ channel }: ChannelPageProps) {
                       disabled={publishableSelected.length === 0}
                     >
                       <CalendarClock className='size-4' />
-                      全部定时发布
+                      {t('channels.batch.scheduleAll')}
                     </Button>
                     <Button
                       variant='outline'
@@ -518,7 +554,7 @@ export function ChannelPage({ channel }: ChannelPageProps) {
                       disabled={publishableSelected.length === 0}
                     >
                       <Rocket className='size-4' />
-                      全部立即发布
+                      {t('channels.batch.publishAllNow')}
                     </Button>
                     <Button
                       variant='outline'
@@ -526,7 +562,7 @@ export function ChannelPage({ channel }: ChannelPageProps) {
                       disabled={publishableSelected.length === 0}
                     >
                       <Clock className='size-4' />
-                      全部存为草稿
+                      {t('channels.batch.draftAll')}
                     </Button>
                   </CardContent>
                 </Card>
@@ -535,10 +571,11 @@ export function ChannelPage({ channel }: ChannelPageProps) {
                 <Card>
                   <CardHeader className='flex flex-row flex-wrap items-center justify-between gap-3 space-y-0'>
                     <div>
-                      <CardTitle className='text-base'>3. 核对并发布</CardTitle>
+                      <CardTitle className='text-base'>
+                        {t('channels.step.review.title')}
+                      </CardTitle>
                       <CardDescription>
-                        状态由 JSON 内的 <code>url</code> /{' '}
-                        <code>template</code> 决定，栏目只作为默认兜底。
+                        {t('channels.step.review.description')}
                       </CardDescription>
                     </div>
                     <Button
@@ -555,15 +592,19 @@ export function ChannelPage({ channel }: ChannelPageProps) {
                       ) : (
                         <Rocket className='size-4' />
                       )}
-                      发布 {publishableSelected.length} 篇
+                      {t('channels.publish.submit', {
+                        count: publishableSelected.length,
+                      })}
                     </Button>
                   </CardHeader>
                   <CardContent className='space-y-3'>
                     {scheduleMissing && (
                       <Alert variant='destructive'>
-                        <AlertTitle>有定时发布的内容缺少时间</AlertTitle>
+                        <AlertTitle>
+                          {t('channels.alert.scheduleMissing.title')}
+                        </AlertTitle>
                         <AlertDescription>
-                          请为每一篇「定时发布」的内容填写发布时间，或改用「立即发布」。
+                          {t('channels.alert.scheduleMissing.description')}
                         </AlertDescription>
                       </Alert>
                     )}
@@ -571,15 +612,16 @@ export function ChannelPage({ channel }: ChannelPageProps) {
                     {scheduleInPast.length > 0 && (
                       <Alert variant='destructive'>
                         <AlertTitle>
-                          有 {scheduleInPast.length} 篇的发布时间已经过去
+                          {t('channels.alert.scheduleInPast.title', {
+                            count: scheduleInPast.length,
+                          })}
                         </AlertTitle>
                         <AlertDescription>
-                          为避免内容立即公开，Shopify
-                          侧不接受已过去的时间。请改到未来时间，或改用「立即发布」。
+                          {t('channels.alert.scheduleInPast.description')}
                           <span className='mt-1 block text-xs'>
                             {scheduleInPast
                               .map((candidate) => candidate.title)
-                              .join('、')}
+                              .join(lang === 'zh' ? '、' : ', ')}
                           </span>
                         </AlertDescription>
                       </Alert>
@@ -616,9 +658,11 @@ export function ChannelPage({ channel }: ChannelPageProps) {
           <TabsContent value='history'>
             <Card>
               <CardHeader>
-                <CardTitle className='text-base'>发布历史</CardTitle>
+                <CardTitle className='text-base'>
+                  {t('channels.history.title')}
+                </CardTitle>
                 <CardDescription>
-                  该栏目每一次发布的提交时间、状态与结果。
+                  {t('channels.history.description')}
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -641,7 +685,23 @@ function wallTimeToIsoSafe(
   return wallTimeToIso(wallTime, timezone)
 }
 
+/**
+ * 把 `<strong>` 这类行内元素当普通值塞进文案。
+ *
+ * `t()` 的签名只收 `string | number`，但占位符替换是纯字符串替换：JSX 元素被
+ * `String()` 转成 `[object Object]` 后仍留在结果字符串里，而 React 渲染字符串时
+ * 读的是 `$$typeof`，所以加粗的数字照常显示。类型上必须 `as never`。
+ */
+function bold(value: string | number): never {
+  return (<strong>{value}</strong>) as never
+}
+
+function mono(value: string): never {
+  return (<span className='font-mono'>{value}</span>) as never
+}
+
 function PublishResultPanel({ result }: { result: PublishResult }) {
+  const { t } = useI18n()
   const ok = result.items.filter((item) => item.status !== 'failed')
   const failed = result.items.filter((item) => item.status === 'failed')
 
@@ -650,12 +710,12 @@ function PublishResultPanel({ result }: { result: PublishResult }) {
       <div className='flex flex-wrap items-center gap-3 text-sm'>
         <span className='flex items-center gap-1.5 text-emerald-600'>
           <CheckCircle2 className='size-4' />
-          成功 {ok.length}
+          {t('channels.result.ok', { count: ok.length })}
         </span>
         {failed.length > 0 && (
           <span className='flex items-center gap-1.5 text-destructive'>
             <XCircle className='size-4' />
-            失败 {failed.length}
+            {t('channels.result.failed', { count: failed.length })}
           </span>
         )}
       </div>
@@ -678,13 +738,19 @@ function PublishResultPanel({ result }: { result: PublishResult }) {
               <span className='truncate'>{item.title}</span>
               {item.backlinkResult && (
                 <span className='ml-2 text-muted-foreground'>
-                  反链：
-                  {item.backlinkResult === 'ADDED' ? '已追加' : '已存在，跳过'}
+                  {t('channels.result.backlink', {
+                    status:
+                      item.backlinkResult === 'ADDED'
+                        ? t('channels.result.backlink.added')
+                        : t('channels.result.backlink.skipped'),
+                  })}
                 </span>
               )}
               {item.backlinkError && (
                 <span className='block text-amber-600'>
-                  页面已发布，但反链失败：{item.backlinkError}
+                  {t('channels.result.backlinkFailed', {
+                    message: item.backlinkError,
+                  })}
                 </span>
               )}
               {item.error && (

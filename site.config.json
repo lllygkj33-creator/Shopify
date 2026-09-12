@@ -412,5 +412,8 @@
     "example-cover-2",
     "example-cover-3"
   ],
-  "backlinkAttribute": "data-user-story-backlink"
+  "backlinkAttribute": "data-user-story-backlink",
+  "ui": {
+    "defaultLang": "en"
+  }
 }

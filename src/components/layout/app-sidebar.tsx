@@ -8,18 +8,19 @@ import {
 } from '@/components/ui/sidebar'
 import { AppTitle } from './app-title'
 import { ConnectionStatus } from './connection-status'
-import { sidebarData } from './data/sidebar-data'
+import { useSidebarData } from './data/sidebar-data'
 import { NavGroup } from './nav-group'
 
 export function AppSidebar() {
   const { collapsible, variant } = useLayout()
+  const { navGroups } = useSidebarData()
   return (
     <Sidebar collapsible={collapsible} variant={variant}>
       <SidebarHeader>
         <AppTitle />
       </SidebarHeader>
       <SidebarContent>
-        {sidebarData.navGroups.map((props) => (
+        {navGroups.map((props) => (
           <NavGroup key={props.title} {...props} />
         ))}
       </SidebarContent>

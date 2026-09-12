@@ -4,6 +4,7 @@ import { render, type RenderResult } from 'vitest-browser-react'
 import { userEvent } from 'vitest/browser'
 import { getCookie, setCookie } from '@/lib/cookies'
 import { DirectionProvider } from '@/context/direction-provider'
+import { I18nProvider } from '@/context/i18n-provider'
 import { LayoutProvider } from '@/context/layout-provider'
 import { ThemeProvider } from '@/context/theme-provider'
 import { SidebarProvider } from '@/components/ui/sidebar'
@@ -15,15 +16,17 @@ async function renderConfigDrawer({
   sidebarDefaultOpen?: boolean
 } = {}) {
   return await render(
-    <DirectionProvider>
-      <ThemeProvider>
-        <LayoutProvider>
-          <SidebarProvider defaultOpen={sidebarDefaultOpen}>
-            <ConfigDrawer />
-          </SidebarProvider>
-        </LayoutProvider>
-      </ThemeProvider>
-    </DirectionProvider>
+    <I18nProvider>
+      <DirectionProvider>
+        <ThemeProvider>
+          <LayoutProvider>
+            <SidebarProvider defaultOpen={sidebarDefaultOpen}>
+              <ConfigDrawer />
+            </SidebarProvider>
+          </LayoutProvider>
+        </ThemeProvider>
+      </DirectionProvider>
+    </I18nProvider>
   )
 }
 
@@ -41,6 +44,8 @@ describe('ConfigDrawer (integration)', () => {
     vi.clearAllMocks()
 
     clearCookies()
+    // 文案跟着语言走，这里显式钉在英文：下面的断言都是英文原文
+    document.cookie = 'content-publisher-lang=en'
 
     document.documentElement.classList.remove('light', 'dark')
     document.documentElement.removeAttribute('dir')

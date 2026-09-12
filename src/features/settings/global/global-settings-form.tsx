@@ -4,6 +4,7 @@ import { useForm, useWatch } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { site } from '@/config/site'
+import { t as translateStatic } from '@/i18n'
 import {
   TOKEN_SOURCE_META,
   type ConnectionCheck,
@@ -13,6 +14,7 @@ import { Eye, EyeOff, Loader2, Plug, Save } from 'lucide-react'
 import { toast } from 'sonner'
 import { settingsApi } from '@/lib/api'
 import { TIMEZONE_OPTIONS } from '@/lib/datetime'
+import { useI18n } from '@/context/i18n-provider'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -52,23 +54,84 @@ import { TokenStatusPanel } from './token-status-panel'
  *  - **不明文回显**：后端只返回掩码；用户不改就不提交该字段。
  */
 
+/**
+ * 校验提示用 `translateStatic`（非组件版 `t`）而不是组件里的 `t`：
+ * zod 的 error 传函数后是**校验时**才求值，所以切换语言后提示会跟着变，
+ * 不会固化成加载时的语言。
+ */
 const schema = z.object({
   shopDomain: z
     .string()
-    .min(1, '请填写店铺域名')
-    .regex(/^[a-z0-9-]+\.myshopify\.com$/i, '格式应为 xxx.myshopify.com'),
-  apiVersion: z.string().min(1, '请填写 API 版本'),
+    .min(1, { error: () => translateStatic('settings.shop.domain.required') })
+    .regex(/^[a-z0-9-]+\.myshopify\.com$/i, {
+      error: () => translateStatic('settings.shop.domain.format'),
+    }),
+  apiVersion: z.string().min(1, {
+    error: () => translateStatic('settings.shop.apiVersion.required'),
+  }),
   tokenSource: z.enum(['auto', 'env', 'manual']),
   accessToken: z.string().optional(),
-  defaultAuthor: z.string().min(1, '请填写默认作者'),
+  defaultAuthor: z.string().min(1, {
+    error: () => translateStatic('settings.defaultAuthor.required'),
+  }),
   defaultReviewers: z.string().optional(),
   relatedProductTitles: z.string().optional(),
   defaultTimezone: z.string().min(1),
-  defaultPublishTime: z.string().regex(/^\d{2}:\d{2}$/, '格式应为 HH:mm'),
+  defaultPublishTime: z.string().regex(/^\d{2}:\d{2}$/, {
+    error: () => translateStatic('settings.publishTime.format'),
+  }),
   templateChoices: z.string().optional(),
 })
 
 type FormValues = z.infer<typeof schema>
+
+/**
+ * 时区下拉的文案在 `@/lib/datetime`（其他区域维护，只有中文），
+ * 这里按 value 映射到本区域的词条。
+ *
+ * 映射不到时（lib 以后新增了时区）：中文界面回落原 label，**英文界面回落 value**
+ * —— 英文界面宁可显示 `Asia/Kolkata`，也不能漏出汉字。
+ */
+const TIMEZONE_LABEL_KEY: Record<string, string> = {
+  'Asia/Shanghai': 'settings.timezone.asiaShanghai',
+  'America/New_York': 'settings.timezone.americaNewYork',
+  'America/Los_Angeles': 'settings.timezone.americaLosAngeles',
+  'Europe/London': 'settings.timezone.europeLondon',
+  'Europe/Berlin': 'settings.timezone.europeBerlin',
+  'Asia/Tokyo': 'settings.timezone.asiaTokyo',
+  'Asia/Singapore': 'settings.timezone.asiaSingapore',
+  'Australia/Sydney': 'settings.timezone.australiaSydney',
+  UTC: 'settings.timezone.utc',
+}
+
+/** 连接自检结果的一行摘要 */
+function verifySummary(
+  check: ConnectionCheck,
+  translate: (key: string, params?: Record<string, string | number>) => string
+): string {
+  if (!check.ok) {
+    return translate('settings.token.verify.failed', {
+      error: check.error ?? '',
+    })
+  }
+
+  const name = `${check.shopName ?? ''}${
+    check.shopDomain ? ` (${check.shopDomain})` : ''
+  }`
+  const scopes = check.scopes?.join(', ') || translate('common.unknown')
+  const blogMissing = check.blogMissingScopes?.length
+    ? translate('settings.token.verify.blogMissing', {
+        scopes: check.blogMissingScopes.join(
+          translate('settings.listSeparator')
+        ),
+      })
+    : ''
+
+  return `${translate('settings.token.verify.shop', { name })} · ${translate(
+    'settings.token.verify.scopes',
+    { scopes }
+  )}${blogMissing}`
+}
 
 const toLines = (value?: string) =>
   (value ?? '')
@@ -77,6 +140,7 @@ const toLines = (value?: string) =>
     .filter(Boolean)
 
 export function GlobalSettingsForm() {
+  const { t, lang } = useI18n()
   const queryClient = useQueryClient()
   const [showToken, setShowToken] = useState(false)
   const [check, setCheck] = useState<ConnectionCheck | null>(null)
@@ -136,7 +200,7 @@ export function GlobalSettingsForm() {
         templateChoices: toLines(values.templateChoices),
       }),
     onSuccess: () => {
-      toast.success('设置已保存，所有栏目发布器立即生效')
+      toast.success(t('settings.save.success'))
       queryClient.invalidateQueries({ queryKey: ['settings'] })
       form.setValue('accessToken', '')
     },
@@ -147,8 +211,8 @@ export function GlobalSettingsForm() {
     mutationFn: () => settingsApi.verify(),
     onSuccess: (result) => {
       setCheck(result)
-      if (result.ok) toast.success('Shopify 连接正常')
-      else toast.error(result.error ?? '连接失败')
+      if (result.ok) toast.success(t('settings.verify.success'))
+      else toast.error(result.error ?? t('settings.verify.failed'))
     },
     onError: (error: Error) => {
       setCheck({
@@ -164,7 +228,7 @@ export function GlobalSettingsForm() {
   const refresh = useMutation({
     mutationFn: () => settingsApi.refreshToken(),
     onSuccess: (next) => {
-      toast.success('已换新令牌')
+      toast.success(t('settings.token.refresh.success'))
       queryClient.setQueryData(['settings'], next)
       queryClient.invalidateQueries({ queryKey: ['settings'] })
     },
@@ -192,9 +256,11 @@ export function GlobalSettingsForm() {
         {/* ---------------- Shopify 连接 ---------------- */}
         <section className='space-y-4'>
           <div>
-            <h3 className='text-base font-medium'>Shopify 连接</h3>
+            <h3 className='text-base font-medium'>
+              {t('settings.section.connection')}
+            </h3>
             <p className='text-sm text-muted-foreground'>
-              店铺域名与 Admin API 版本。这两项所有发布器共用。
+              {t('settings.section.connection.desc')}
             </p>
           </div>
 
@@ -204,9 +270,12 @@ export function GlobalSettingsForm() {
               name='shopDomain'
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>店铺域名</FormLabel>
+                  <FormLabel>{t('settings.shop.domain')}</FormLabel>
                   <FormControl>
-                    <Input placeholder='your-store.myshopify.com' {...field} />
+                    <Input
+                      placeholder={t('settings.shop.domain.placeholder')}
+                      {...field}
+                    />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -217,12 +286,15 @@ export function GlobalSettingsForm() {
               name='apiVersion'
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Admin API 版本</FormLabel>
+                  <FormLabel>{t('settings.shop.apiVersion')}</FormLabel>
                   <FormControl>
-                    <Input placeholder='2026-04' {...field} />
+                    <Input
+                      placeholder={t('settings.shop.apiVersion.placeholder')}
+                      {...field}
+                    />
                   </FormControl>
                   <FormDescription>
-                    原脚本使用 2026-04，升级前请先做一次连接自检。
+                    {t('settings.shop.apiVersion.desc')}
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -236,22 +308,22 @@ export function GlobalSettingsForm() {
         {/* ---------------- Token ---------------- */}
         <section className='space-y-4'>
           <div>
-            <h3 className='text-base font-medium'>访问 Token</h3>
+            <h3 className='text-base font-medium'>
+              {t('settings.token.section')}
+            </h3>
             <p className='text-sm text-muted-foreground'>
-              Token 只需在这一处维护，保存后全部 10 个栏目立即生效。
+              {t('settings.token.section.desc')}
             </p>
           </div>
 
           <Alert>
             <AlertTitle className='text-xs'>
-              注意：自动换发的 token 只有约 24 小时有效期
+              {t('settings.token.notice.title')}
             </AlertTitle>
             <AlertDescription className='text-xs'>
-              Shopify 的 <code>client_credentials</code> 换来的 shpat_ 令牌实测
-              86398 秒（24
-              小时）后失效。所以平台把它当作**派生凭据**而不是配置：
-              长期保存的是 CLIENT_ID / CLIENT_SECRET，access token
-              在内存里缓存并在 到期前自动续期。请优先使用「自动续期」。
+              {t('settings.token.notice.before')}
+              <code>client_credentials</code>
+              {t('settings.token.notice.after')}
             </AlertDescription>
           </Alert>
 
@@ -260,7 +332,7 @@ export function GlobalSettingsForm() {
             name='tokenSource'
             render={({ field }) => (
               <FormItem className='space-y-3'>
-                <FormLabel>Token 来源</FormLabel>
+                <FormLabel>{t('settings.token.source')}</FormLabel>
                 <FormControl>
                   <RadioGroup
                     value={field.value}
@@ -296,7 +368,7 @@ export function GlobalSettingsForm() {
                                     variant='outline'
                                     className='border-emerald-500/40 text-[10px] font-normal text-emerald-600'
                                   >
-                                    不会过期
+                                    {t('settings.token.neverExpires')}
                                   </Badge>
                                 )}
                               </label>
@@ -305,8 +377,7 @@ export function GlobalSettingsForm() {
                               </p>
                               {disabled && (
                                 <p className='text-xs text-amber-600'>
-                                  未检测到 CLIENT_ID / CLIENT_SECRET，请在 .env
-                                  中配置后重启后端。
+                                  {t('settings.token.missingCredentials')}
                                 </p>
                               )}
                             </div>
@@ -346,12 +417,12 @@ export function GlobalSettingsForm() {
               name='accessToken'
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>新的 Token</FormLabel>
+                  <FormLabel>{t('settings.token.newToken')}</FormLabel>
                   <FormControl>
                     <div className='flex gap-2'>
                       <Input
                         type={showToken ? 'text' : 'password'}
-                        placeholder='shpat_...（留空表示不修改）'
+                        placeholder={t('settings.token.placeholder')}
                         autoComplete='off'
                         className='font-mono'
                         {...field}
@@ -361,7 +432,11 @@ export function GlobalSettingsForm() {
                         variant='outline'
                         size='icon'
                         onClick={() => setShowToken((prev) => !prev)}
-                        title={showToken ? '隐藏' : '显示'}
+                        title={
+                          showToken
+                            ? t('settings.token.hide')
+                            : t('settings.token.reveal')
+                        }
                       >
                         {showToken ? (
                           <EyeOff className='size-4' />
@@ -371,10 +446,7 @@ export function GlobalSettingsForm() {
                       </Button>
                     </div>
                   </FormControl>
-                  <FormDescription>
-                    保存到本地 0600 权限文件，界面只显示掩码。若 token
-                    已在仓库中出现过， 建议在 Shopify 后台重新签发。
-                  </FormDescription>
+                  <FormDescription>{t('settings.token.desc')}</FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
@@ -393,38 +465,35 @@ export function GlobalSettingsForm() {
               ) : (
                 <Plug className='size-4' />
               )}
-              连接自检
+              {t('settings.token.verify')}
             </Button>
             {check && (
               <span className='text-xs text-muted-foreground'>
-                {check.ok
-                  ? `店铺 ${check.shopName ?? ''}${check.shopDomain ? ` (${check.shopDomain})` : ''} · 权限 ${
-                      check.scopes?.join(', ') || '未知'
-                    }${
-                      check.blogMissingScopes?.length
-                        ? `（发博客还缺：${check.blogMissingScopes.join('、')}）`
-                        : ''
-                    }`
-                  : `失败：${check.error}`}
+                {verifySummary(check, t)}
               </span>
             )}
           </div>
 
           {check && !check.ok && (
             <Alert variant='destructive'>
-              <AlertTitle>连接自检失败</AlertTitle>
+              <AlertTitle>{t('settings.token.verify.errorTitle')}</AlertTitle>
               <AlertDescription>
                 {check.error}
                 {check.missingScopes && check.missingScopes.length > 0 && (
                   <span className='mt-1 block'>
-                    缺少权限：{check.missingScopes.join(', ')}
+                    {t('settings.token.verify.missingScopes', {
+                      scopes: check.missingScopes.join(', '),
+                    })}
                   </span>
                 )}
                 {check.blogMissingScopes &&
                   check.blogMissingScopes.length > 0 && (
                     <span className='mt-1 block text-xs'>
-                      发页面不受影响；但发博客文章还需要：
-                      {check.blogMissingScopes.join('、')}
+                      {t('settings.token.verify.blogScopesHint', {
+                        scopes: check.blogMissingScopes.join(
+                          t('settings.listSeparator')
+                        ),
+                      })}
                     </span>
                   )}
               </AlertDescription>
@@ -437,11 +506,11 @@ export function GlobalSettingsForm() {
         {/* ---------------- 栏目 → 博客映射自检 ---------------- */}
         <section className='space-y-4'>
           <div>
-            <h3 className='text-base font-medium'>栏目 → 博客映射自检</h3>
+            <h3 className='text-base font-medium'>
+              {t('settings.mapping.section')}
+            </h3>
             <p className='text-sm text-muted-foreground'>
-              把配置里的 blogName / blogHandle 与店铺实际数据逐条对比。 Shopify
-              侧的博客标题一旦被改，按标题匹配的发布器就会立刻失效，
-              所以这里提前暴露不一致。
+              {t('settings.mapping.section.desc')}
             </p>
           </div>
           <ChannelMappingCheck />
@@ -452,9 +521,11 @@ export function GlobalSettingsForm() {
         {/* ---------------- 发布默认值 ---------------- */}
         <section className='space-y-4'>
           <div>
-            <h3 className='text-base font-medium'>发布默认值</h3>
+            <h3 className='text-base font-medium'>
+              {t('settings.section.defaults')}
+            </h3>
             <p className='text-sm text-muted-foreground'>
-              新建排期与发布时的默认值，可在栏目页逐篇覆盖。
+              {t('settings.section.defaults.desc')}
             </p>
           </div>
 
@@ -464,12 +535,15 @@ export function GlobalSettingsForm() {
               name='defaultAuthor'
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>默认作者</FormLabel>
+                  <FormLabel>{t('settings.defaultAuthor')}</FormLabel>
                   <FormControl>
-                    <Input placeholder='Author Name' {...field} />
+                    <Input
+                      placeholder={t('settings.defaultAuthor.placeholder')}
+                      {...field}
+                    />
                   </FormControl>
                   <FormDescription>
-                    作为 Shopify metaobject 引用写入文章。
+                    {t('settings.defaultAuthor.desc')}
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -480,7 +554,7 @@ export function GlobalSettingsForm() {
               name='defaultTimezone'
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>默认时区</FormLabel>
+                  <FormLabel>{t('settings.timezone')}</FormLabel>
                   <Select value={field.value} onValueChange={field.onChange}>
                     <FormControl>
                       <SelectTrigger className='w-full'>
@@ -490,13 +564,17 @@ export function GlobalSettingsForm() {
                     <SelectContent>
                       {TIMEZONE_OPTIONS.map((option) => (
                         <SelectItem key={option.value} value={option.value}>
-                          {option.label}
+                          {TIMEZONE_LABEL_KEY[option.value]
+                            ? t(TIMEZONE_LABEL_KEY[option.value])
+                            : lang === 'zh'
+                              ? option.label
+                              : option.value}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                   <FormDescription>
-                    定时发布的时间按此时区解释并转换为带偏移的 ISO 时间。
+                    {t('settings.timezone.desc')}
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -509,11 +587,13 @@ export function GlobalSettingsForm() {
             name='defaultPublishTime'
             render={({ field }) => (
               <FormItem className='max-w-[200px]'>
-                <FormLabel>默认发布时间</FormLabel>
+                <FormLabel>{t('settings.publishTime')}</FormLabel>
                 <FormControl>
                   <Input type='time' {...field} />
                 </FormControl>
-                <FormDescription>新建排期时的默认时刻。</FormDescription>
+                <FormDescription>
+                  {t('settings.publishTime.desc')}
+                </FormDescription>
                 <FormMessage />
               </FormItem>
             )}
@@ -524,12 +604,15 @@ export function GlobalSettingsForm() {
             name='defaultReviewers'
             render={({ field }) => (
               <FormItem>
-                <FormLabel>默认审核人</FormLabel>
+                <FormLabel>{t('settings.defaultReviewers')}</FormLabel>
                 <FormControl>
-                  <Textarea placeholder='每行一个，或用逗号分隔' {...field} />
+                  <Textarea
+                    placeholder={t('settings.defaultReviewers.placeholder')}
+                    {...field}
+                  />
                 </FormControl>
                 <FormDescription>
-                  reviewer metaobject 引用，缺失时发布器会跳过该字段。
+                  {t('settings.defaultReviewers.desc')}
                 </FormDescription>
                 <FormMessage />
               </FormItem>
@@ -541,21 +624,22 @@ export function GlobalSettingsForm() {
             name='templateChoices'
             render={({ field }) => (
               <FormItem>
-                <FormLabel>页面模板清单</FormLabel>
+                <FormLabel>{t('settings.templateChoices')}</FormLabel>
                 <FormControl>
                   <Textarea
-                    placeholder='每行一个 templateSuffix，例如 community_post'
+                    placeholder={t('settings.templateChoices.placeholder')}
                     className='min-h-24 font-mono text-xs'
                     {...field}
                   />
                 </FormControl>
                 <FormDescription>
-                  「Custom 文章」的模板选择器会列出这些模板。留空则用内置的 5
-                  个栏目模板。
+                  {t('settings.templateChoices.desc')}
                   <br />
-                  如果能读店铺主题（需要 <code>read_themes</code>{' '}
-                  权限），会优先列出主题里 实际的{' '}
-                  <code>templates/page.*.liquid</code>，这份清单作为兜底。
+                  {t('settings.templateChoices.desc2.before')}
+                  <code>read_themes</code>
+                  {t('settings.templateChoices.desc2.middle')}
+                  <code>templates/page.*.liquid</code>
+                  {t('settings.templateChoices.desc2.after')}
                 </FormDescription>
                 <FormMessage />
               </FormItem>
@@ -567,13 +651,17 @@ export function GlobalSettingsForm() {
             name='relatedProductTitles'
             render={({ field }) => (
               <FormItem>
-                <FormLabel>关联产品标题池</FormLabel>
+                <FormLabel>{t('settings.relatedProductTitles')}</FormLabel>
                 <FormControl>
-                  <Textarea placeholder='每行一个产品标题' {...field} />
+                  <Textarea
+                    placeholder={t('settings.relatedProductTitles.placeholder')}
+                    {...field}
+                  />
                 </FormControl>
                 <FormDescription>
-                  用于替换正文中的 <code>[[related_products_1]]</code> 占位符，
-                  发布器按标题解析为 product GID。
+                  {t('settings.relatedProductTitles.desc.before')}
+                  <code>[[related_products_1]]</code>
+                  {t('settings.relatedProductTitles.desc.after')}
                 </FormDescription>
                 <FormMessage />
               </FormItem>
@@ -588,10 +676,10 @@ export function GlobalSettingsForm() {
             ) : (
               <Save className='size-4' />
             )}
-            保存并下发
+            {t('settings.save')}
           </Button>
           <p className='text-xs text-muted-foreground'>
-            保存后所有栏目发布器读取同一份配置。
+            {t('settings.save.hint')}
           </p>
         </div>
       </form>

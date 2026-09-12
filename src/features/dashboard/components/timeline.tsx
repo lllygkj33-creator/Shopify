@@ -14,6 +14,7 @@ import {
   startOfWeek,
 } from 'date-fns'
 import { CHANNELS } from '@/config/channels'
+import { channelLabel } from '@/i18n/channel-label'
 import {
   CONTENT_STATUS_META,
   type ContentStatus,
@@ -22,6 +23,7 @@ import {
 } from '@/types/content'
 import { isoToWallTime } from '@/lib/datetime'
 import { cn } from '@/lib/utils'
+import { useI18n } from '@/context/i18n-provider'
 import {
   Popover,
   PopoverContent,
@@ -68,11 +70,25 @@ type Window = {
   unitCount: number
   /** 一「格」代表多长时间 —— 决定内容落在哪一格 */
   unit: 'day' | 'week' | 'month'
-  /** 这一格的中文量词，用于「108 条」这种文案 */
-  unitLabel: string
 }
 
-function buildWindow(scale: TimelineScale, now: Date): Window {
+/** 文案取词函数（`useI18n().t` 的类型） */
+type Translate = (
+  key: string,
+  params?: Record<string, string | number>
+) => string
+
+/**
+ * 状态文案按语言取。
+ *
+ * 中文字面量与 `CONTENT_STATUS_META[status].label` 完全一致；
+ * 颜色等仍从 meta 取（那里是数据，不是文案）。
+ */
+function statusLabel(status: ContentStatus, t: Translate): string {
+  return t(`dashboard.status.${status}`)
+}
+
+function buildWindow(scale: TimelineScale, now: Date, t: Translate): Window {
   if (scale === 'day') {
     // 未来 7 天，每格 1 天
     const start = startOfDay(now)
@@ -87,7 +103,6 @@ function buildWindow(scale: TimelineScale, now: Date): Window {
       ticks,
       unitCount: 7,
       unit: 'day',
-      unitLabel: '今天',
     }
   }
 
@@ -95,8 +110,10 @@ function buildWindow(scale: TimelineScale, now: Date): Window {
     // 未来 5 周，每格 1 周
     const start = startOfWeek(now, { weekStartsOn: 1 })
     const ticks = Array.from({ length: 5 }, (_, index) => ({
-      label: `${format(addWeeks(start, index), 'MM-dd')} 起`,
-      sublabel: `第 ${index + 1} 周`,
+      label: t('dashboard.timeline.weekStart', {
+        date: format(addWeeks(start, index), 'MM-dd'),
+      }),
+      sublabel: t('dashboard.timeline.week', { index: index + 1 }),
       isToday: index === 0,
     }))
     return {
@@ -105,7 +122,6 @@ function buildWindow(scale: TimelineScale, now: Date): Window {
       ticks,
       unitCount: 5,
       unit: 'week',
-      unitLabel: '本周',
     }
   }
 
@@ -122,7 +138,6 @@ function buildWindow(scale: TimelineScale, now: Date): Window {
     ticks,
     unitCount: 6,
     unit: 'month',
-    unitLabel: '本月',
   }
 }
 
@@ -155,13 +170,15 @@ type Bucket = {
 }
 
 export function Timeline({ bars, scale, timezone, onSelect }: TimelineProps) {
+  const { t, lang } = useI18n()
+
   /**
    * 时间窗口只在切换粒度时重算。
    * `new Date()` 放在 useMemo 内部，避免每次渲染都生成新对象导致 memo 失效。
    * 代价是页面长时间挂着跨过午夜时窗口不会自动前移 —— 刷新即恢复，
    * 对本地单机工具来说可以接受。
    */
-  const window = useMemo(() => buildWindow(scale, new Date()), [scale])
+  const window = useMemo(() => buildWindow(scale, new Date(), t), [scale, t])
 
   /** 按栏目分组，再按「格」聚合 */
   const rows = useMemo(() => {
@@ -224,7 +241,7 @@ export function Timeline({ bars, scale, timezone, onSelect }: TimelineProps) {
         {/* ---------- 表头 ---------- */}
         <div className='grid grid-cols-[200px_1fr] border-b'>
           <div className='flex items-center px-3 py-2 text-xs font-medium text-muted-foreground'>
-            栏目 / 时间
+            {t('dashboard.timeline.channelColumn')}
           </div>
           <div
             className='grid'
@@ -262,7 +279,7 @@ export function Timeline({ bars, scale, timezone, onSelect }: TimelineProps) {
                 style={{ backgroundColor: row.channel.color }}
               />
               <span className='truncate text-sm'>
-                {row.channel.nameZh ?? row.channel.name}
+                {channelLabel(row.channel, lang)}
               </span>
               {row.total > 0 && (
                 <span className='ms-auto shrink-0 font-mono text-[10px] text-muted-foreground'>
@@ -311,7 +328,7 @@ export function Timeline({ bars, scale, timezone, onSelect }: TimelineProps) {
                       {cell && (
                         <BucketBlock
                           cell={cell}
-                          channelLabel={row.channel.nameZh ?? row.channel.name}
+                          channelLabel={channelLabel(row.channel, lang)}
                           tick={tick}
                           timezone={timezone}
                           onSelect={onSelect}
@@ -324,7 +341,7 @@ export function Timeline({ bars, scale, timezone, onSelect }: TimelineProps) {
 
               {row.total === 0 && (
                 <div className='pointer-events-none absolute inset-y-0 left-3 flex items-center text-xs text-muted-foreground/60'>
-                  暂无排期
+                  {t('dashboard.timeline.noSchedule')}
                 </div>
               )}
             </div>
@@ -349,17 +366,15 @@ export function Timeline({ bars, scale, timezone, onSelect }: TimelineProps) {
                     : {}),
                 }}
               />
-              {CONTENT_STATUS_META[status].label}
+              {statusLabel(status, t)}
             </span>
           )
         )}
         <span className='flex items-center gap-1.5'>
           <span className='h-3 w-px bg-destructive/60' />
-          现在
+          {t('dashboard.timeline.now')}
         </span>
-        <span className='ms-auto'>
-          块上的数字是该格的内容条数，悬停或点击展开清单
-        </span>
+        <span className='ms-auto'>{t('dashboard.timeline.legend')}</span>
       </div>
     </div>
   )
@@ -390,6 +405,8 @@ function BucketBlock({
   timezone,
   onSelect,
 }: BucketBlockProps) {
+  const { t } = useI18n()
+
   /**
    * 悬停关闭要**延迟**。
    *
@@ -461,13 +478,23 @@ function BucketBlock({
           data-count={cell.count}
           data-status={cell.dominant}
           data-tick-index={cell.index}
-          aria-label={`${channelLabel} ${tick.label} 共 ${cell.count} 条`}
-          title={`${cell.count} 条：${cell.bars
+          aria-label={t('dashboard.timeline.bucketAria', {
+            channel: channelLabel,
+            tick: tick.label,
+            count: cell.count,
+          })}
+          title={`${t('dashboard.timeline.itemCount', {
+            count: cell.count,
+          })}${t('dashboard.timeline.titleSeparator')}${cell.bars
             .slice(0, 3)
             .map((bar) => bar.title)
-            .join(
-              '\n'
-            )}${cell.count > 3 ? `\n…另有 ${cell.count - 3} 条` : ''}`}
+            .join('\n')}${
+            cell.count > 3
+              ? `\n${t('dashboard.timeline.tooltipMore', {
+                  count: cell.count - 3,
+                })}`
+              : ''
+          }`}
           onMouseEnter={hoverOpen}
           onMouseLeave={scheduleClose}
           /*
@@ -510,16 +537,13 @@ function BucketBlock({
               {channelLabel} · {tick.label}
             </span>
             <span className='font-mono text-muted-foreground'>
-              {cell.count} 条
+              {t('dashboard.timeline.itemCount', { count: cell.count })}
             </span>
           </div>
           {cell.composition.length > 1 && (
             <div className='mt-0.5 text-[10px] text-muted-foreground'>
               {cell.composition
-                .map(
-                  ([status, count]) =>
-                    `${CONTENT_STATUS_META[status].label} ${count}`
-                )
+                .map(([status, count]) => `${statusLabel(status, t)} ${count}`)
                 .join(' · ')}
             </div>
           )}
@@ -551,6 +575,8 @@ const BLOCK_HOVER_CLASS =
 
 /** 块的可见内容：条数 + 状态构成细条。不放标题（见块上的注释）。 */
 function BlockFace({ cell }: { cell: Bucket }) {
+  const { t } = useI18n()
+
   return (
     <>
       {/*
@@ -561,7 +587,9 @@ function BlockFace({ cell }: { cell: Bucket }) {
       */}
       <span className='flex min-w-0 items-baseline gap-1'>
         <span className='font-mono text-sm font-semibold'>{cell.count}</span>
-        <span className='truncate text-[10px] opacity-80'>条</span>
+        <span className='truncate text-[10px] opacity-80'>
+          {t('dashboard.timeline.countUnit')}
+        </span>
       </span>
 
       {/* 状态构成细条：只有一种状态时就是一条实色，不额外干扰 */}

@@ -11,27 +11,69 @@
  * 全局默认时区来自设置（GEO 里 config.json 用 America/Chicago，
  * app_config.json 用 Asia/Shanghai —— 这个冲突已在新平台里收敛为一处配置）。
  */
+import { getLang, t } from '@/i18n'
 
-/** 常用时区候选（覆盖 Zima 团队协作场景） */
+/**
+ * 常用时区候选（覆盖 Zima 团队协作场景）。
+ *
+ * `label` 是 getter：时区名本身不翻译，括号里的说明跟着界面语言走，
+ * 而消费方（设置页的下拉框）仍然只读 `option.label`，接口没变。
+ */
 export const TIMEZONE_OPTIONS = [
   {
     value: 'Asia/Shanghai',
-    label: 'Asia/Shanghai（中国标准时间，UTC+8）— 默认',
+    get label() {
+      return t('shell.tz.shanghai')
+    },
   },
   {
     value: 'America/New_York',
-    label: 'America/New_York（美国东部，UTC-5/-4）',
+    get label() {
+      return t('shell.tz.newYork')
+    },
   },
   {
     value: 'America/Los_Angeles',
-    label: 'America/Los_Angeles（美国西部，UTC-8/-7）',
+    get label() {
+      return t('shell.tz.losAngeles')
+    },
   },
-  { value: 'Europe/London', label: 'Europe/London（伦敦，UTC+0/+1）' },
-  { value: 'Europe/Berlin', label: 'Europe/Berlin（柏林，UTC+1/+2）' },
-  { value: 'Asia/Tokyo', label: 'Asia/Tokyo（日本，UTC+9）' },
-  { value: 'Asia/Singapore', label: 'Asia/Singapore（新加坡，UTC+8）' },
-  { value: 'Australia/Sydney', label: 'Australia/Sydney（悉尼，UTC+10/+11）' },
-  { value: 'UTC', label: 'UTC（协调世界时）' },
+  {
+    value: 'Europe/London',
+    get label() {
+      return t('shell.tz.london')
+    },
+  },
+  {
+    value: 'Europe/Berlin',
+    get label() {
+      return t('shell.tz.berlin')
+    },
+  },
+  {
+    value: 'Asia/Tokyo',
+    get label() {
+      return t('shell.tz.tokyo')
+    },
+  },
+  {
+    value: 'Asia/Singapore',
+    get label() {
+      return t('shell.tz.singapore')
+    },
+  },
+  {
+    value: 'Australia/Sydney',
+    get label() {
+      return t('shell.tz.sydney')
+    },
+  },
+  {
+    value: 'UTC',
+    get label() {
+      return t('shell.tz.utc')
+    },
+  },
 ]
 
 export const DEFAULT_TIMEZONE = 'Asia/Shanghai'
@@ -108,7 +150,7 @@ export function zonedWallTimeToDate(wallTime: string, timeZone: string): Date {
     /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2}))?$/
   )
   if (!match) {
-    throw new Error(`无法解析时间「${wallTime}」，期望格式 YYYY-MM-DDTHH:mm`)
+    throw new Error(t('shell.time.parseError', { value: wallTime }))
   }
 
   const [, y, mo, d, h, mi, s] = match
@@ -146,7 +188,12 @@ export function isoToWallTime(iso: string, timeZone: string): string {
   return `${p.year}-${pad(p.month)}-${pad(p.day)}T${pad(p.hour)}:${pad(p.minute)}`
 }
 
-/** 展示用：把 ISO 按指定时区格式化成人类可读文本 */
+/**
+ * 展示用：把 ISO 按指定时区格式化成人类可读文本。
+ *
+ * locale 跟着界面语言走（中文 `2026/09/15 23:59`、英文 `09/15/2026, 23:59`），
+ * 否则英文界面会显示成中文习惯的日期格式。只换 locale，字段与 24 小时制不变。
+ */
 export function formatInTimezone(
   iso: string | undefined,
   timeZone: string,
@@ -156,7 +203,7 @@ export function formatInTimezone(
   const date = new Date(iso)
   if (Number.isNaN(date.getTime())) return '—'
 
-  return new Intl.DateTimeFormat('zh-CN', {
+  return new Intl.DateTimeFormat(getLang() === 'zh' ? 'zh-CN' : 'en-US', {
     timeZone,
     year: 'numeric',
     month: '2-digit',
@@ -227,10 +274,20 @@ export function relativeTime(iso: string | undefined): string {
   const hour = 60 * minute
   const day = 24 * hour
 
-  const suffix = diffMs >= 0 ? '后' : '前'
-  if (abs < minute) return '刚刚'
-  if (abs < hour) return `${Math.round(abs / minute)} 分钟${suffix}`
-  if (abs < day) return `${Math.round(abs / hour)} 小时${suffix}`
-  if (abs < 30 * day) return `${Math.round(abs / day)} 天${suffix}`
+  if (abs < minute) return t('shell.time.justNow')
+
+  /**
+   * 词条键按「单位 + 单复数 + 方向」拼：`shell.time.minutesAgo` 等。
+   * 中文两种数词写法相同，英文靠这张表拿到 `1 minute ago` / `5 minutes ago`。
+   */
+  const unit = (count: number, name: 'minute' | 'hour' | 'day') => {
+    const plural = count === 1 ? '' : 's'
+    const direction = diffMs >= 0 ? 'Later' : 'Ago'
+    return t(`shell.time.${name}${plural}${direction}`, { count })
+  }
+
+  if (abs < hour) return unit(Math.round(abs / minute), 'minute')
+  if (abs < day) return unit(Math.round(abs / hour), 'hour')
+  if (abs < 30 * day) return unit(Math.round(abs / day), 'day')
   return formatInTimezone(iso, DEFAULT_TIMEZONE)
 }

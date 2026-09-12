@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import { getChannel } from '@/config/channels'
+import { channelLabel } from '@/i18n/channel-label'
 import { CONTENT_STATUS_META, type TimelineBar } from '@/types/content'
 import { ExternalLink, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -13,6 +14,7 @@ import {
   relativeTime,
   wallTimeToIso,
 } from '@/lib/datetime'
+import { useI18n } from '@/context/i18n-provider'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -71,6 +73,7 @@ type ContentProps = {
 function ScheduleDialogContent({ bar, timezone, onOpenChange }: ContentProps) {
   const queryClient = useQueryClient()
   const navigate = useNavigate()
+  const { t, lang } = useI18n()
   const [wallTime, setWallTime] = useState(() => {
     const iso = bar.scheduledAt ?? bar.publishedAt
     return iso ? isoToWallTime(iso, timezone) : ''
@@ -90,19 +93,18 @@ function ScheduleDialogContent({ bar, timezone, onOpenChange }: ContentProps) {
       // 本地记录与 Shopify 侧是两件事，必须分开告诉用户
       if (!result.sync.ok) {
         toast.warning(
-          result.sync.warning ?? result.sync.error ?? '线上排期未同步'
+          result.sync.warning ??
+            result.sync.error ??
+            t('dashboard.toast.syncPending')
         )
       } else if (result.sync.attempted) {
-        toast.success('排期已更新，并已同步到 Shopify')
+        toast.success(t('dashboard.toast.rescheduledSynced'))
       } else {
         // 没有 Shopify 对象的条目（例如发布失败过的）：只记录了时间，
         // 状态保持原样，要重新发布才会生效 —— 必须说清楚
-        toast.info(
-          '已记录新的排期时间；该条目在 Shopify 上还没有对象，需重新发布才会生效',
-          {
-            duration: 8000,
-          }
-        )
+        toast.info(t('dashboard.toast.rescheduledLocal'), {
+          duration: 8000,
+        })
       }
       invalidate()
       onOpenChange(false)
@@ -116,13 +118,15 @@ function ScheduleDialogContent({ bar, timezone, onOpenChange }: ContentProps) {
       if (!result.sync.ok) {
         // 最危险的一种：本地已退回草稿，但线上排期还活着 → 到点照样上线
         toast.error(
-          result.sync.warning ?? result.sync.error ?? '线上排期未能撤销',
+          result.sync.warning ??
+            result.sync.error ??
+            t('dashboard.toast.cancelFailed'),
           { duration: 10_000 }
         )
       } else if (result.sync.attempted) {
-        toast.success('已取消排期，并已撤销 Shopify 侧的排期')
+        toast.success(t('dashboard.toast.cancelledSynced'))
       } else {
-        toast.success('已取消排期并退回草稿')
+        toast.success(t('dashboard.toast.cancelledLocal'))
       }
       invalidate()
       onOpenChange(false)
@@ -148,7 +152,7 @@ function ScheduleDialogContent({ bar, timezone, onOpenChange }: ContentProps) {
               variant='outline'
               style={{ borderColor: `${meta.color}66`, color: meta.color }}
             >
-              {meta.label}
+              {t(`dashboard.status.${bar.status}`)}
             </Badge>
             {channel && (
               <span className='flex items-center gap-1.5 text-xs'>
@@ -156,23 +160,25 @@ function ScheduleDialogContent({ bar, timezone, onOpenChange }: ContentProps) {
                   className='size-2 rounded-full'
                   style={{ backgroundColor: channel.color }}
                 />
-                {channel.nameZh ?? channel.name}
+                {channelLabel(channel, lang)}
               </span>
             )}
             <span className='text-xs text-muted-foreground'>
-              {bar.contentType === 'page' ? '页面' : '博客文章'}
+              {bar.contentType === 'page'
+                ? t('dashboard.dialog.page')
+                : t('dashboard.dialog.blogArticle')}
             </span>
           </DialogDescription>
         </DialogHeader>
 
         <div className='space-y-3 text-sm'>
-          <Row label='发布路径'>
+          <Row label={t('dashboard.dialog.publishPath')}>
             <code className='rounded bg-muted px-1.5 py-0.5 text-xs'>
               {bar.publishedUrl ?? bar.handle}
             </code>
           </Row>
 
-          <Row label='排期时间'>
+          <Row label={t('dashboard.dialog.scheduledAt')}>
             {iso ? (
               <span>
                 {formatInTimezone(iso, timezone)}
@@ -181,7 +187,9 @@ function ScheduleDialogContent({ bar, timezone, onOpenChange }: ContentProps) {
                 </span>
               </span>
             ) : (
-              <span className='text-muted-foreground'>未排期（草稿）</span>
+              <span className='text-muted-foreground'>
+                {t('dashboard.dialog.unscheduled')}
+              </span>
             )}
           </Row>
 
@@ -190,7 +198,7 @@ function ScheduleDialogContent({ bar, timezone, onOpenChange }: ContentProps) {
               <Separator />
               <div className='rounded-md border border-destructive/40 bg-destructive/5 p-3'>
                 <div className='mb-1 text-xs font-medium text-destructive'>
-                  失败原因
+                  {t('dashboard.dialog.failureReason')}
                 </div>
                 <p className='text-xs leading-relaxed text-destructive/90'>
                   {bar.error}
@@ -205,7 +213,10 @@ function ScheduleDialogContent({ bar, timezone, onOpenChange }: ContentProps) {
             <Separator />
             <div className='space-y-2'>
               <Label htmlFor='reschedule-time' className='text-xs'>
-                改期（{timezone} · {formatTimezoneOffset(timezone)}）
+                {t('dashboard.dialog.reschedule', {
+                  timezone,
+                  offset: formatTimezoneOffset(timezone),
+                })}
               </Label>
               <div className='flex gap-2'>
                 <Input
@@ -227,11 +238,11 @@ function ScheduleDialogContent({ bar, timezone, onOpenChange }: ContentProps) {
                   {reschedule.isPending && (
                     <Loader2 className='size-4 animate-spin' />
                   )}
-                  保存
+                  {t('dashboard.dialog.save')}
                 </Button>
               </div>
               <p className='text-xs text-muted-foreground'>
-                时间按全局设置时区解释，提交给 Shopify 时会带上时区偏移。
+                {t('dashboard.dialog.saveHint')}
               </p>
             </div>
           </>
@@ -247,7 +258,7 @@ function ScheduleDialogContent({ bar, timezone, onOpenChange }: ContentProps) {
               })
             }
           >
-            打开栏目页
+            {t('dashboard.dialog.openChannel')}
           </Button>
           <div className='flex gap-2'>
             {bar.publishedUrl && bar.status === 'published' && (
@@ -258,7 +269,7 @@ function ScheduleDialogContent({ bar, timezone, onOpenChange }: ContentProps) {
                   rel='noreferrer noopener'
                 >
                   <ExternalLink className='size-4' />
-                  查看线上
+                  {t('dashboard.dialog.viewOnline')}
                 </a>
               </Button>
             )}
@@ -271,7 +282,7 @@ function ScheduleDialogContent({ bar, timezone, onOpenChange }: ContentProps) {
                 {cancel.isPending && (
                   <Loader2 className='size-4 animate-spin' />
                 )}
-                取消排期
+                {t('dashboard.dialog.cancelSchedule')}
               </Button>
             )}
           </div>

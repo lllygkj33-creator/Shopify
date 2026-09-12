@@ -165,6 +165,8 @@ export function resolveSiteConfig(
   const site = {
     brandName: get('brand.name', 'Content Publisher'),
     brandSubtitle: get('brand.subtitle'),
+    /** 界面默认语言：'zh' | 'en'（缺省英文，见 src/i18n） */
+    defaultLang: get('ui.defaultLang'),
     /** 前台域名（拼已发布内容的 URL 用） */
     storefrontDomain: get('storefront.domain', 'shop.example.com'),
     /** 自家域名后缀：这些域名按站内处理，不强制新标签页 */

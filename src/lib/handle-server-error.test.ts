@@ -1,4 +1,5 @@
 import { AxiosError } from 'axios'
+import { setLangGlobal } from '@/i18n'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { handleServerError } from './handle-server-error'
 
@@ -12,6 +13,9 @@ vi.mock('sonner', () => ({
 
 beforeEach(() => {
   vi.mocked(toastError).mockClear()
+
+  // 文案跟着语言走（非组件代码读模块级语言），显式钉在英文再断言
+  setLangGlobal('en')
 })
 
 describe('handleServerError', () => {

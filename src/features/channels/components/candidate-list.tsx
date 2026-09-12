@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import type { ParsedCandidate, PublishMode } from '@/types/content'
 import { AlertCircle, AlertTriangle } from 'lucide-react'
 import {
@@ -6,6 +7,7 @@ import {
   wallTimeToIso,
 } from '@/lib/datetime'
 import { cn } from '@/lib/utils'
+import { useI18n } from '@/context/i18n-provider'
 import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
@@ -68,6 +70,7 @@ export function CandidateList({
   onToggleAll,
   onPlanChange,
 }: CandidateListProps) {
+  const { t } = useI18n()
   const allSelected =
     candidates.length > 0 && candidates.every((c) => selected.has(c.tempId))
 
@@ -80,13 +83,21 @@ export function CandidateList({
               <Checkbox
                 checked={allSelected}
                 onCheckedChange={(checked) => onToggleAll(Boolean(checked))}
-                aria-label='全选'
+                aria-label={t('channels.list.selectAll')}
               />
             </TableHead>
-            <TableHead className='min-w-[280px]'>文章</TableHead>
-            <TableHead className='w-[220px]'>发布目标</TableHead>
-            <TableHead className='w-[130px]'>校验</TableHead>
-            <TableHead className='w-[330px]'>发布方式</TableHead>
+            <TableHead className='min-w-[280px]'>
+              {t('channels.list.col.article')}
+            </TableHead>
+            <TableHead className='w-[220px]'>
+              {t('channels.list.col.target')}
+            </TableHead>
+            <TableHead className='w-[130px]'>
+              {t('channels.list.col.validation')}
+            </TableHead>
+            <TableHead className='w-[330px]'>
+              {t('channels.list.col.mode')}
+            </TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -111,17 +122,19 @@ export function CandidateList({
                     checked={selected.has(candidate.tempId)}
                     disabled={blocked || busy}
                     onCheckedChange={() => onToggle(candidate.tempId)}
-                    aria-label={`选择 ${candidate.title}`}
+                    aria-label={t('channels.list.select', {
+                      title: candidate.title,
+                    })}
                   />
                 </TableCell>
 
                 <TableCell className='align-top'>
                   <div className='space-y-1'>
                     <p className='text-sm leading-snug font-medium'>
-                      {candidate.title || '(无标题)'}
+                      {candidate.title || t('channels.list.untitled')}
                     </p>
                     <p className='truncate font-mono text-xs text-muted-foreground'>
-                      {candidate.handle || '(无 handle)'}
+                      {candidate.handle || t('channels.list.noHandle')}
                     </p>
                     <p className='truncate text-xs text-muted-foreground/70'>
                       {candidate.sourceFile}
@@ -135,16 +148,16 @@ export function CandidateList({
                   {candidate.contentType === 'blog_article' ? (
                     <div className='space-y-1 text-xs'>
                       <Badge variant='secondary' className='font-normal'>
-                        博客文章
+                        {t('channels.contentType.blog')}
                       </Badge>
                       <p className='text-muted-foreground'>
-                        {candidate.blogName ?? '未识别博客'}
+                        {candidate.blogName ?? t('channels.list.blogUnknown')}
                       </p>
                     </div>
                   ) : (
                     <div className='space-y-1 text-xs'>
                       <Badge variant='secondary' className='font-normal'>
-                        页面
+                        {t('channels.contentType.page')}
                       </Badge>
                       {templateOptions ? (
                         // 模板自由的栏目（Custom 文章）：可搜索选定
@@ -160,7 +173,8 @@ export function CandidateList({
                         />
                       ) : (
                         <p className='font-mono text-muted-foreground'>
-                          {candidate.template ?? '默认模板'}
+                          {candidate.template ??
+                            t('channels.list.defaultTemplate')}
                         </p>
                       )}
                     </div>
@@ -185,7 +199,7 @@ export function CandidateList({
                       variant='outline'
                       className='border-emerald-500/40 text-xs font-normal text-emerald-600'
                     >
-                      校验通过
+                      {t('channels.list.valid')}
                     </Badge>
                   )}
                 </TableCell>
@@ -205,16 +219,24 @@ export function CandidateList({
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value='now'>立即发布</SelectItem>
-                        <SelectItem value='schedule'>定时发布</SelectItem>
-                        <SelectItem value='draft'>存为草稿</SelectItem>
+                        <SelectItem value='now'>
+                          {t('channels.list.mode.now')}
+                        </SelectItem>
+                        <SelectItem value='schedule'>
+                          {t('channels.list.mode.schedule')}
+                        </SelectItem>
+                        <SelectItem value='draft'>
+                          {t('channels.list.mode.draft')}
+                        </SelectItem>
                       </SelectContent>
                     </Select>
 
                     {plan.mode === 'schedule' && (
                       <div className='space-y-1'>
                         <Label className='text-[10px] text-muted-foreground'>
-                          发布时间（{formatTimezoneOffset(timezone)}）
+                          {t('channels.list.time', {
+                            offset: formatTimezoneOffset(timezone),
+                          })}
                         </Label>
                         <Input
                           type='datetime-local'
@@ -230,13 +252,15 @@ export function CandidateList({
                         {plan.wallTime && (
                           <>
                             <p className='font-mono text-[10px] text-muted-foreground'>
-                              提交值 {wallTimeToIso(plan.wallTime, timezone)}
+                              {t('channels.list.submittedValue', {
+                                value: wallTimeToIso(plan.wallTime, timezone),
+                              })}
                             </p>
                             {isPastWallTime(plan.wallTime, timezone) && (
                               // 后端与脚本都禁止已过去的时间（ALLOW_PAST_SCHEDULE=False），
                               // 这里提前标出来，避免点了发布才失败
                               <p className='text-[10px] font-medium text-destructive'>
-                                时间已过去，无法发布
+                                {t('channels.list.pastTime')}
                               </p>
                             )}
                           </>
@@ -260,9 +284,10 @@ function IssueBadge({
   count,
 }: {
   level: 'error' | 'warning'
-  message: string
+  message: ReactNode
   count: number
 }) {
+  const { t } = useI18n()
   const isError = level === 'error'
   return (
     <Tooltip>
@@ -281,7 +306,14 @@ function IssueBadge({
           ) : (
             <AlertTriangle className='size-3' />
           )}
-          {count} 项{isError ? '错误' : '提示'}
+          {t('channels.list.issues', {
+            count,
+            level: t(
+              isError
+                ? 'channels.list.level.error'
+                : 'channels.list.level.warning'
+            ),
+          })}
         </Badge>
       </TooltipTrigger>
       <TooltipContent className='max-w-sm whitespace-pre-line'>

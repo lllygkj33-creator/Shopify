@@ -8,6 +8,7 @@ import {
   ShieldAlert,
 } from 'lucide-react'
 import { formatInTimezone, relativeTime } from '@/lib/datetime'
+import { useI18n } from '@/context/i18n-provider'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
@@ -35,14 +36,24 @@ type TokenStatusPanelProps = {
   onRefresh: () => void
 }
 
-function formatRemaining(seconds: number | null | undefined): string {
-  if (seconds == null) return '未知'
-  if (seconds <= 0) return '已过期'
+function formatRemaining(
+  seconds: number | null | undefined,
+  t: (key: string, params?: Record<string, string | number>) => string
+): string {
+  if (seconds == null) return t('common.unknown')
+  if (seconds <= 0) return t('settings.token.remaining.expired')
   const hours = Math.floor(seconds / HOUR)
   const minutes = Math.floor((seconds % HOUR) / 60)
-  if (hours >= 48) return `${Math.floor(hours / 24)} 天 ${hours % 24} 小时`
-  if (hours >= 1) return `${hours} 小时 ${minutes} 分`
-  return `${minutes} 分`
+  if (hours >= 48) {
+    return t('settings.token.remaining.daysHours', {
+      days: Math.floor(hours / 24),
+      hours: hours % 24,
+    })
+  }
+  if (hours >= 1) {
+    return t('settings.token.remaining.hoursMinutes', { hours, minutes })
+  }
+  return t('settings.token.remaining.minutes', { minutes })
 }
 
 export function TokenStatusPanel({
@@ -51,6 +62,7 @@ export function TokenStatusPanel({
   refreshing,
   onRefresh,
 }: TokenStatusPanelProps) {
+  const { t } = useI18n()
   const sourceMeta = TOKEN_SOURCE_META[settings.tokenSource]
   const remaining = settings.tokenExpiresInSeconds ?? null
 
@@ -64,7 +76,9 @@ export function TokenStatusPanel({
     <div className='space-y-3 rounded-md border p-3'>
       {/* ---- 第一行：当前 token ---- */}
       <div className='flex flex-wrap items-center gap-2 text-xs'>
-        <span className='text-muted-foreground'>当前生效</span>
+        <span className='text-muted-foreground'>
+          {t('settings.token.current')}
+        </span>
         {settings.hasAccessToken ? (
           <>
             <Badge
@@ -85,14 +99,14 @@ export function TokenStatusPanel({
           // auto 模式下后端是懒加载令牌：凭据齐全但还没换过，
           // 这时说「未配置」会误导用户，应该是中性提示
           <Badge variant='outline' className='text-muted-foreground'>
-            凭据已配置，首次调用时自动换取令牌
+            {t('settings.token.pending')}
           </Badge>
         ) : (
           <Badge
             variant='outline'
             className='border-amber-500/50 text-amber-600'
           >
-            未配置 token，无法发布
+            {t('settings.token.absent')}
           </Badge>
         )}
 
@@ -110,14 +124,18 @@ export function TokenStatusPanel({
             <Clock className='size-3.5' style={{ color: statusColor }} />
             {settings.tokenNeverExpires ? (
               <span className='text-muted-foreground'>
-                长期有效（该来源不会自动续期）
+                {t('settings.token.neverExpiresLong')}
               </span>
             ) : (
               <span style={{ color: statusColor }}>
-                剩余 {formatRemaining(remaining)}
+                {t('settings.token.remaining', {
+                  remaining: formatRemaining(remaining, t),
+                })}
                 {settings.tokenExpiresAt && (
                   <span className='ms-1 text-muted-foreground'>
-                    · 到期 {formatInTimezone(settings.tokenExpiresAt, timezone)}
+                    {t('settings.token.expiresAt', {
+                      at: formatInTimezone(settings.tokenExpiresAt, timezone),
+                    })}
                   </span>
                 )}
               </span>
@@ -126,7 +144,9 @@ export function TokenStatusPanel({
 
           {settings.tokenLastRefreshedAt && (
             <span className='text-muted-foreground'>
-              上次刷新 {relativeTime(settings.tokenLastRefreshedAt)}
+              {t('settings.token.lastRefreshed', {
+                time: relativeTime(settings.tokenLastRefreshedAt ?? undefined),
+              })}
             </span>
           )}
 
@@ -143,7 +163,7 @@ export function TokenStatusPanel({
             ) : (
               <RefreshCw className='size-3' />
             )}
-            立即换新
+            {t('settings.token.refresh')}
           </Button>
         </div>
       )}
@@ -157,7 +177,7 @@ export function TokenStatusPanel({
 
       {settings.tokenError && (
         <p className='text-xs text-destructive'>
-          最近一次错误：{settings.tokenError}
+          {t('settings.token.lastError', { error: settings.tokenError })}
         </p>
       )}
 

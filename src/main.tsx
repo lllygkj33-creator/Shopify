@@ -7,10 +7,12 @@ import {
   QueryClientProvider,
 } from '@tanstack/react-query'
 import { RouterProvider, createRouter } from '@tanstack/react-router'
+import { t } from '@/i18n'
 import { toast } from 'sonner'
 import { handleServerError } from '@/lib/handle-server-error'
 import { DirectionProvider } from './context/direction-provider'
 import { FontProvider } from './context/font-provider'
+import { I18nProvider } from './context/i18n-provider'
 import { ThemeProvider } from './context/theme-provider'
 // Generated Routes
 import { routeTree } from './routeTree.gen'
@@ -41,7 +43,7 @@ const queryClient = new QueryClient({
 
         if (error instanceof AxiosError) {
           if (error.response?.status === 304) {
-            toast.error('Content not modified!')
+            toast.error(t('shell.error.notModified'))
           }
         }
       },
@@ -53,10 +55,10 @@ const queryClient = new QueryClient({
         if (error.response?.status === 401) {
           // 本地单机、无登录（PRD §2）：401 只可能是 Shopify token 失效，
           // 交给全局设置页处理，不做跳转
-          toast.error('Shopify Token 无效或已过期，请在「全局设置」中更新')
+          toast.error(t('shell.error.tokenInvalid'))
         }
         if (error.response?.status === 500) {
-          toast.error('Internal Server Error!')
+          toast.error(t('shell.error.serverError'))
           // Only navigate to error page in production to avoid disrupting HMR in development
           if (import.meta.env.PROD) {
             router.navigate({ to: '/500' })
@@ -92,13 +94,15 @@ if (!rootElement.innerHTML) {
   root.render(
     <StrictMode>
       <QueryClientProvider client={queryClient}>
-        <ThemeProvider>
-          <FontProvider>
-            <DirectionProvider>
-              <RouterProvider router={router} />
-            </DirectionProvider>
-          </FontProvider>
-        </ThemeProvider>
+        <I18nProvider>
+          <ThemeProvider>
+            <FontProvider>
+              <DirectionProvider>
+                <RouterProvider router={router} />
+              </DirectionProvider>
+            </FontProvider>
+          </ThemeProvider>
+        </I18nProvider>
       </QueryClientProvider>
     </StrictMode>
   )

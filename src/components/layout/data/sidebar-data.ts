@@ -1,5 +1,8 @@
+import { useMemo } from 'react'
 import { CHANNELS, type Channel } from '@/config/channels'
 import { site } from '@/config/site'
+import type { Lang } from '@/i18n'
+import { channelLabel } from '@/i18n/channel-label'
 import {
   BookOpenCheck,
   Boxes,
@@ -16,6 +19,7 @@ import {
   Users,
 } from 'lucide-react'
 import { BrandMark } from '@/assets/brand-mark'
+import { useI18n } from '@/context/i18n-provider'
 import { type SidebarData } from '../types'
 
 /**
@@ -38,14 +42,10 @@ const CHANNEL_ICONS: Record<string, React.ElementType> = {
   makerworld: Package,
 }
 
-/** 菜单标签：页面类栏目显示中文名（PRD §3.2 的菜单项命名） */
-function channelLabel(channel: Channel): string {
-  return channel.nameZh ?? channel.name
-}
-
-function channelToNavItem(channel: Channel) {
+/** 菜单标签：栏目按语言取 nameZh / name（PRD §3.2 的菜单项命名） */
+function channelToNavItem(channel: Channel, lang: Lang) {
   return {
-    title: channelLabel(channel),
+    title: channelLabel(channel, lang),
     url: `/channels/${channel.id}`,
     icon: CHANNEL_ICONS[channel.id] ?? FileText,
   }
@@ -56,40 +56,50 @@ function channelToNavItem(channel: Channel) {
  *
  * 内容栏目**由 CHANNELS 自动生成**，不手写菜单项：
  * 以后要加栏目（例如把 Model / APP 放出来），只需改 config/channels.ts 一处。
+ *
+ * 做成 hook 而不是常量：菜单标题要跟着界面语言走，常量在模块加载时就定死了，
+ * 切换语言后不会更新。组件调用它会订阅 i18n context，语言一变就重渲染。
  */
-export const sidebarData: SidebarData = {
-  brand: {
-    // 品牌名来自站点配置（site.config.local.json 里放真实值）
-    name: site.brandName,
-    subtitle: site.brandSubtitle,
-    // 用 Shopify 官方标识（购物袋 logo），一眼看出内容发到哪去；
-    // 组件内用 currentColor，以便跟随侧边栏主题色。
-    logo: BrandMark,
-  },
-  navGroups: [
-    {
-      title: '概览',
-      items: [
+export function useSidebarData(): SidebarData {
+  const { t, lang } = useI18n()
+
+  return useMemo<SidebarData>(
+    () => ({
+      brand: {
+        // 品牌名来自站点配置（site.config.local.json 里放真实值）
+        name: site.brandName,
+        subtitle: site.brandSubtitle,
+        // 用 Shopify 官方标识（购物袋 logo），一眼看出内容发到哪去；
+        // 组件内用 currentColor，以便跟随侧边栏主题色。
+        logo: BrandMark,
+      },
+      navGroups: [
         {
-          title: '仪表盘',
-          url: '/',
-          icon: LayoutDashboard,
+          title: t('nav.group.overview'),
+          items: [
+            {
+              title: t('nav.dashboard'),
+              url: '/',
+              icon: LayoutDashboard,
+            },
+          ],
+        },
+        {
+          title: t('shell.nav.group.content'),
+          items: CHANNELS.map((channel) => channelToNavItem(channel, lang)),
+        },
+        {
+          title: t('shell.nav.group.system'),
+          items: [
+            {
+              title: t('nav.settings'),
+              url: '/settings',
+              icon: Settings,
+            },
+          ],
         },
       ],
-    },
-    {
-      title: '内容栏目',
-      items: CHANNELS.map(channelToNavItem),
-    },
-    {
-      title: '系统',
-      items: [
-        {
-          title: '全局设置',
-          url: '/settings',
-          icon: Settings,
-        },
-      ],
-    },
-  ],
+    }),
+    [t, lang]
+  )
 }

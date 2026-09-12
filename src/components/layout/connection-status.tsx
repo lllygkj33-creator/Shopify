@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import { AlertTriangle, ChevronRight, Plug } from 'lucide-react'
 import { settingsApi, USE_MOCK } from '@/lib/api'
+import { useI18n } from '@/context/i18n-provider'
 import { Badge } from '@/components/ui/badge'
 import {
   SidebarMenu,
@@ -17,6 +18,7 @@ import { Skeleton } from '@/components/ui/skeleton'
  * 所以这里展示更有价值的信息：Shopify 店铺是否已连上、token 来自哪里。
  */
 export function ConnectionStatus() {
+  const { t } = useI18n()
   const { data, isLoading, isError } = useQuery({
     queryKey: ['settings'],
     queryFn: () => settingsApi.get(),
@@ -39,12 +41,16 @@ export function ConnectionStatus() {
   }
 
   const connected = !isError && Boolean(data?.hasAccessToken)
-  const domain = data?.shopDomain || '未配置店铺'
+  const domain = data?.shopDomain || t('shell.connection.noStore')
 
   return (
     <SidebarMenu>
       <SidebarMenuItem>
-        <SidebarMenuButton size='lg' asChild tooltip='打开全局设置'>
+        <SidebarMenuButton
+          size='lg'
+          asChild
+          tooltip={t('shell.connection.openSettings')}
+        >
           <Link to='/settings' className='gap-2'>
             <div
               className='flex aspect-square size-8 items-center justify-center rounded-lg border'
@@ -62,8 +68,13 @@ export function ConnectionStatus() {
               <span className='truncate font-medium'>{domain}</span>
               <span className='truncate text-xs text-muted-foreground'>
                 {connected
-                  ? `Token 来自 ${data?.tokenSource === 'env' ? '环境变量' : '手动配置'}`
-                  : 'Token 未配置，无法发布'}
+                  ? t('shell.connection.tokenFrom', {
+                      source:
+                        data?.tokenSource === 'env'
+                          ? t('shell.connection.sourceEnv')
+                          : t('shell.connection.sourceManual'),
+                    })
+                  : t('shell.connection.tokenMissing')}
               </span>
             </div>
             <ChevronRight className='ms-auto size-4' />
@@ -75,7 +86,7 @@ export function ConnectionStatus() {
               variant='outline'
               className='w-full justify-center border-dashed text-[10px] font-normal text-muted-foreground'
             >
-              演示数据模式（内置数据，未连后端）
+              {t('shell.mock.badge')}
             </Badge>
           </div>
         )}

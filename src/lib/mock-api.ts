@@ -9,6 +9,8 @@
  * 方便对照截图与回归。
  */
 import { CHANNELS } from '@/config/channels'
+import { site } from '@/config/site'
+import { t } from '@/i18n'
 import type {
   BlogItem,
   ContentItem,
@@ -22,7 +24,6 @@ import type {
   SyncStatus,
 } from '@/types/content'
 import { isoToWallTime, wallTimeToIso } from './datetime'
-import { site } from '@/config/site'
 
 const HOUR = 3600_000
 const DAY = 24 * HOUR
@@ -162,8 +163,10 @@ const SEEDS: Seed[] = [
     status: 'failed',
     dayOffset: -1,
     hour: 23,
-    error:
-      'articleCreate 返回 userErrors: 正文少于 4 个 H2，无法插入 related_products_1',
+    // getter：演示数据在模块加载时构建，直接写 t() 会把语言定死成加载那一刻
+    get error() {
+      return t('shell.mock.seedError')
+    },
     blogName: 'Support & Tips',
   },
   {
@@ -282,10 +285,10 @@ function buildItems(now = Date.now()): ContentItem[] {
       handle: seed.handle,
       blogName: seed.blogName,
       template: seed.template ?? channel?.template,
-      bodyHtml: `<article class="${channel?.htmlClass ?? ''}"><h2>演示正文</h2><p>Mock 数据，用于验证 UI 布局与状态展示。</p></article>`,
-      summary: '演示用摘要文本。',
+      bodyHtml: `<article class="${channel?.htmlClass ?? ''}">${t('shell.mock.body')}</article>`,
+      summary: t('shell.mock.summary'),
       metaTitle: seed.title,
-      metaDescription: '演示用 meta description。',
+      metaDescription: t('shell.mock.metaDescription'),
       author: settings.defaultAuthor,
       reviewer: settings.defaultReviewers[0],
       relatedProducts: [settings.relatedProductTitles[0]],
@@ -483,10 +486,10 @@ export const mockApi = {
         contentType: input.contentType,
         title: input.title,
         handle: input.handle,
-        bodyHtml: '<article><h2>新发布</h2></article>',
-        summary: '演示用摘要。',
+        bodyHtml: `<article><h2>${t('shell.mock.newlyPublished')}</h2></article>`,
+        summary: t('shell.mock.summaryShort'),
         metaTitle: input.title,
-        metaDescription: '演示用 meta description。',
+        metaDescription: t('shell.mock.metaDescription'),
         status,
         scheduledAt: input.scheduledAt,
         publishedAt:
@@ -519,7 +522,7 @@ export const mockApi = {
   /** 演示模式：本地没有真实的 Shopify 对象，如实返回 attempted=false */
   reschedule(id: string, scheduledAt: string) {
     const item = ensureStore().find((entry) => entry.id === id)
-    if (!item) throw new Error(`未找到内容 ${id}`)
+    if (!item) throw new Error(t('shell.mock.notFound', { id }))
     item.scheduledAt = scheduledAt
     item.status = 'scheduled'
     item.updatedAt = new Date().toISOString()
@@ -529,7 +532,7 @@ export const mockApi = {
         attempted: false,
         ok: true,
         action: 'reschedule',
-        warning: '演示模式：没有真实的 Shopify 对象，未做同步',
+        warning: t('shell.mock.syncWarning'),
       },
     }
   },
@@ -560,7 +563,7 @@ export const mockApi = {
 
   cancelSchedule(id: string) {
     const item = ensureStore().find((entry) => entry.id === id)
-    if (!item) throw new Error(`未找到内容 ${id}`)
+    if (!item) throw new Error(t('shell.mock.notFound', { id }))
     item.status = 'draft'
     item.scheduledAt = undefined
     item.updatedAt = new Date().toISOString()
@@ -570,7 +573,7 @@ export const mockApi = {
         attempted: false,
         ok: true,
         action: 'cancel',
-        warning: '演示模式：没有真实的 Shopify 对象，未做同步',
+        warning: t('shell.mock.syncWarning'),
       },
     }
   },

@@ -1,8 +1,12 @@
 import { CHANNELS } from '@/config/channels'
+import { LANG_COOKIE_MAX_AGE, LANG_COOKIE_NAME } from '@/i18n'
+import { clearCookies } from '@/test-utils/cookies'
 import type { TimelineBar } from '@/types/content'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, render } from 'vitest-browser-react'
 import { userEvent } from 'vitest/browser'
+import { setCookie } from '@/lib/cookies'
+import { I18nProvider } from '@/context/i18n-provider'
 import { Timeline } from './timeline'
 
 /**
@@ -42,12 +46,15 @@ function barsToday(count: number): TimelineBar[] {
 
 async function renderTimeline(bars: TimelineBar[], onSelect = vi.fn()) {
   const screen = await render(
-    <Timeline
-      bars={bars}
-      scale='day'
-      timezone='Asia/Shanghai'
-      onSelect={onSelect}
-    />
+    // 时间轴用 useI18n()，必须包在 Provider 里
+    <I18nProvider>
+      <Timeline
+        bars={bars}
+        scale='day'
+        timezone='Asia/Shanghai'
+        onSelect={onSelect}
+      />
+    </I18nProvider>
   )
   return { screen, onSelect }
 }
@@ -55,12 +62,15 @@ async function renderTimeline(bars: TimelineBar[], onSelect = vi.fn()) {
 describe('Timeline 按时间格聚合', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    // 断言的都是中文文案，而测试浏览器的语言多半不是中文 —— 显式钉死语言
+    setCookie(LANG_COOKIE_NAME, 'zh', LANG_COOKIE_MAX_AGE)
   })
 
   // 浮层渲染在 portal 里，不属于 render 的容器；不卸载的话上一个用例的
   // 时间轴会留在文档里，querySelectorAll 会把两个实例的块混在一起数
   afterEach(() => {
     cleanup()
+    clearCookies(LANG_COOKIE_NAME)
   })
 
   it('同一格里的多条聚合成一个块，条数写在块上', async () => {
@@ -203,5 +213,15 @@ describe('Timeline 按时间格聚合', () => {
     await renderTimeline([])
 
     expect(document.body.textContent).toContain('暂无排期')
+  })
+
+  it('切到英文后文案跟着变，栏目名取英文 name', async () => {
+    setCookie(LANG_COOKIE_NAME, 'en', LANG_COOKIE_MAX_AGE)
+
+    await renderTimeline([])
+
+    expect(document.body.textContent).toContain('Nothing scheduled')
+    expect(document.body.textContent).not.toContain('暂无排期')
+    expect(document.body.textContent).toContain(CHANNELS[0].name)
   })
 })

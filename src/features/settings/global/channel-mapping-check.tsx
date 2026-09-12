@@ -1,7 +1,9 @@
 import { useQuery } from '@tanstack/react-query'
 import { CHANNELS } from '@/config/channels'
+import { channelLabel } from '@/i18n/channel-label'
 import { AlertTriangle, CheckCircle2, RefreshCw } from 'lucide-react'
 import { blogsApi } from '@/lib/api'
+import { useI18n } from '@/context/i18n-provider'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -37,6 +39,7 @@ import {
 type MatchKind = 'handle' | 'title' | 'none'
 
 export function ChannelMappingCheck() {
+  const { t, lang } = useI18n()
   const { data, isLoading, isError, error, refetch, isFetching } = useQuery({
     queryKey: ['blogs'],
     queryFn: () => blogsApi.list(),
@@ -84,12 +87,10 @@ export function ChannelMappingCheck() {
   if (isError) {
     return (
       <Alert variant='destructive'>
-        <AlertTitle>无法获取店铺博客列表</AlertTitle>
+        <AlertTitle>{t('settings.mapping.error.title')}</AlertTitle>
         <AlertDescription className='space-y-2'>
           <p>{(error as Error).message}</p>
-          <p className='text-xs'>
-            需要先配置可用的 Token（可在上方的「连接自检」里排查）。
-          </p>
+          <p className='text-xs'>{t('settings.mapping.error.hint')}</p>
         </AlertDescription>
       </Alert>
     )
@@ -99,7 +100,10 @@ export function ChannelMappingCheck() {
     <div className='space-y-3'>
       <div className='flex items-center justify-between'>
         <p className='text-xs text-muted-foreground'>
-          共 {rows.length} 个博客栏目，店铺里有 {blogs.length} 个博客
+          {t('settings.mapping.summary', {
+            channels: rows.length,
+            blogs: blogs.length,
+          })}
         </p>
         <Button
           variant='ghost'
@@ -110,7 +114,7 @@ export function ChannelMappingCheck() {
           <RefreshCw
             className={isFetching ? 'size-3 animate-spin' : 'size-3'}
           />
-          重新核对
+          {t('settings.mapping.recheck')}
         </Button>
       </div>
 
@@ -118,18 +122,22 @@ export function ChannelMappingCheck() {
         <Alert variant='destructive'>
           <AlertTriangle className='size-4' />
           <AlertTitle>
-            有 {broken.length} 个栏目在店铺里找不到对应博客
+            {t('settings.mapping.broken.title', { count: broken.length })}
           </AlertTitle>
           <AlertDescription>
             <span>
-              {broken.map((row) => row.channel.name).join('、')}{' '}
-              的名称与店铺实际不符。发布这些栏目会直接失败（运行时找不到
-              Blog）。
+              {t('settings.mapping.broken.desc', {
+                names: broken
+                  .map((row) => row.channel.name)
+                  .join(t('settings.listSeparator')),
+              })}
             </span>
             <span className='mt-1 block text-xs'>
-              修法：把 <code>src/config/channels.ts</code> 里的{' '}
-              <code>blogName</code> 改成右侧「店铺实际」的值，或在 Shopify
-              后台把博客改成配置里的名字。
+              {t('settings.mapping.broken.fix.before')}
+              <code>src/config/channels.ts</code>
+              {t('settings.mapping.broken.fix.middle')}
+              <code>blogName</code>
+              {t('settings.mapping.broken.fix.after')}
             </span>
           </AlertDescription>
         </Alert>
@@ -138,14 +146,17 @@ export function ChannelMappingCheck() {
       {broken.length === 0 && (
         <Alert>
           <CheckCircle2 className='size-4 text-emerald-600' />
-          <AlertTitle>全部栏目都能匹配到店铺博客</AlertTitle>
+          <AlertTitle>{t('settings.mapping.ok.title')}</AlertTitle>
           {titleOnly.length > 0 && (
             <AlertDescription>
-              其中 {titleOnly.length} 个是**靠标题**匹配成功的（handle
-              不一致）：
-              {titleOnly.map((row) => row.channel.name).join('、')}。
-              标题随时可能被改动，建议把 <code>blogHandle</code>{' '}
-              也修正为店铺实际值。
+              {t('settings.mapping.ok.titleOnly.before', {
+                count: titleOnly.length,
+                names: titleOnly
+                  .map((row) => row.channel.name)
+                  .join(t('settings.listSeparator')),
+              })}
+              <code>blogHandle</code>
+              {t('settings.mapping.ok.titleOnly.after')}
             </AlertDescription>
           )}
         </Alert>
@@ -155,18 +166,28 @@ export function ChannelMappingCheck() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className='min-w-[150px]'>栏目</TableHead>
-              <TableHead className='min-w-[190px]'>配置的 blogName</TableHead>
-              <TableHead className='min-w-[150px]'>配置的 blogHandle</TableHead>
-              <TableHead className='min-w-[190px]'>店铺实际</TableHead>
-              <TableHead className='w-[90px]'>状态</TableHead>
+              <TableHead className='min-w-[150px]'>
+                {t('settings.mapping.col.channel')}
+              </TableHead>
+              <TableHead className='min-w-[190px]'>
+                {t('settings.mapping.col.blogName')}
+              </TableHead>
+              <TableHead className='min-w-[150px]'>
+                {t('settings.mapping.col.blogHandle')}
+              </TableHead>
+              <TableHead className='min-w-[190px]'>
+                {t('settings.mapping.col.actual')}
+              </TableHead>
+              <TableHead className='w-[90px]'>
+                {t('settings.mapping.col.status')}
+              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {rows.map((row) => (
               <TableRow key={row.channel.id}>
                 <TableCell className='text-sm'>
-                  {row.channel.nameZh ?? row.channel.name}
+                  {channelLabel(row.channel, lang)}
                 </TableCell>
                 <TableCell className='font-mono text-xs'>
                   {row.channel.blogName}
@@ -199,14 +220,14 @@ export function ChannelMappingCheck() {
                       variant='outline'
                       className='border-amber-500/50 text-xs font-normal text-amber-600'
                     >
-                      仅标题
+                      {t('settings.mapping.status.titleOnly')}
                     </Badge>
                   ) : (
                     <Badge
                       variant='outline'
                       className='border-destructive/50 text-xs font-normal text-destructive'
                     >
-                      找不到
+                      {t('settings.mapping.status.missing')}
                     </Badge>
                   )}
                 </TableCell>
@@ -218,10 +239,16 @@ export function ChannelMappingCheck() {
 
       {unusedBlogs.length > 0 && (
         <p className='text-xs text-muted-foreground'>
-          店铺里未被任何栏目使用的博客：
-          {unusedBlogs
-            .map((blog) => `${blog.name}（${blog.handle}）`)
-            .join('、')}
+          {t('settings.mapping.unused', {
+            names: unusedBlogs
+              .map((blog) =>
+                t('settings.mapping.blogWithHandle', {
+                  name: blog.name,
+                  handle: blog.handle,
+                })
+              )
+              .join(t('settings.listSeparator')),
+          })}
         </p>
       )}
     </div>

@@ -10,6 +10,7 @@
  * （Shopify publishDate 要求如此）。时区只在「UI 输入」与「展示」时参与。
  */
 import type { ChannelContentType } from '@/config/channels'
+import { t } from '@/i18n'
 
 // ---------------------------------------------------------------------------
 // 发布状态机
@@ -30,34 +31,58 @@ export type ContentStatus =
   | 'failed'
   | 'publishing'
 
+/**
+ * `label` / `description` 是 getter：读取时按当前语言取词条，
+ * 所以界面切语言后重新渲染就能拿到新文案（`color` 与语言无关）。
+ */
 export const CONTENT_STATUS_META: Record<
   ContentStatus,
   { label: string; color: string; description: string }
 > = {
   draft: {
-    label: '草稿',
+    get label() {
+      return t('shell.status.draft.label')
+    },
     color: '#94a3b8',
-    description: '已入库但未排期，可随时发布',
+    get description() {
+      return t('shell.status.draft.desc')
+    },
   },
   scheduled: {
-    label: '待发布',
+    get label() {
+      return t('shell.status.scheduled.label')
+    },
     color: '#3b82f6',
-    description: '已提交 Shopify，将在指定时间自动上线',
+    get description() {
+      return t('shell.status.scheduled.desc')
+    },
   },
   published: {
-    label: '已发布',
+    get label() {
+      return t('shell.status.published.label')
+    },
     color: '#22c55e',
-    description: '已上线',
+    get description() {
+      return t('shell.status.published.desc')
+    },
   },
   failed: {
-    label: '发布失败',
+    get label() {
+      return t('shell.status.failed.label')
+    },
     color: '#ef4444',
-    description: '发布被 Shopify 拒绝，可重试',
+    get description() {
+      return t('shell.status.failed.desc')
+    },
   },
   publishing: {
-    label: '发布中',
+    get label() {
+      return t('shell.status.publishing.label')
+    },
     color: '#f59e0b',
-    description: '正在提交到 Shopify',
+    get description() {
+      return t('shell.status.publishing.desc')
+    },
   },
 }
 
@@ -248,28 +273,45 @@ export type ParsedFile = {
  */
 export type TokenSource = 'auto' | 'env' | 'manual'
 
+/**
+ * 令牌来源的展示文案。同样用 getter 按当前语言取，`autoRenew` 与语言无关。
+ */
 export const TOKEN_SOURCE_META: Record<
   TokenSource,
   { label: string; autoRenew: boolean; hint: string; warning?: string }
 > = {
   auto: {
-    label: '自动续期（推荐）',
+    get label() {
+      return t('shell.tokenSource.auto.label')
+    },
     autoRenew: true,
-    hint: '用 .env 里的 CLIENT_ID / CLIENT_SECRET 换发 token，到期前自动换新，不需要人工维护。',
+    get hint() {
+      return t('shell.tokenSource.auto.hint')
+    },
   },
   env: {
-    label: '环境变量静态 token',
+    get label() {
+      return t('shell.tokenSource.env.label')
+    },
     autoRenew: false,
-    hint: '读取 .env 里的 SHOPIFY_ACCESS_TOKEN。仅适合不过期的自定义应用长期 token。',
-    warning:
-      '静态 token 不会被自动续期。如果它是 client_credentials 换来的（24 小时有效），明天会突然 401，请改用「自动续期」。',
+    get hint() {
+      return t('shell.tokenSource.env.hint')
+    },
+    get warning() {
+      return t('shell.tokenSource.env.warning')
+    },
   },
   manual: {
-    label: '界面手动输入',
+    get label() {
+      return t('shell.tokenSource.manual.label')
+    },
     autoRenew: false,
-    hint: '粘贴一个 shpat_ token，保存在本地 0600 权限文件中，界面只显示掩码。',
-    warning:
-      '手动 token 不会被自动续期。若粘贴的是 24 小时有效期的 token，次日发布就会失败。',
+    get hint() {
+      return t('shell.tokenSource.manual.hint')
+    },
+    get warning() {
+      return t('shell.tokenSource.manual.warning')
+    },
   },
 }
 

@@ -2,10 +2,12 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import { CHANNELS } from '@/config/channels'
+import { channelLabel } from '@/i18n/channel-label'
 import type { TimelineBar, TimelineScale } from '@/types/content'
 import { CalendarPlus, ChevronDown, RefreshCw } from 'lucide-react'
 import { contentApi, settingsApi, USE_MOCK } from '@/lib/api'
 import { DEFAULT_TIMEZONE } from '@/lib/datetime'
+import { useI18n } from '@/context/i18n-provider'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import {
@@ -26,6 +28,7 @@ import {
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ConfigDrawer } from '@/components/config-drawer'
+import { LangSwitch } from '@/components/lang-switch'
 import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
 import { Search } from '@/components/search'
@@ -36,6 +39,7 @@ import { Timeline } from './components/timeline'
 
 export function Dashboard() {
   const navigate = useNavigate()
+  const { t, lang } = useI18n()
   const [scale, setScale] = useState<TimelineScale>('day')
   const [selected, setSelected] = useState<TimelineBar | null>(null)
 
@@ -61,6 +65,7 @@ export function Dashboard() {
     <>
       <Header>
         <Search className='me-auto' />
+        <LangSwitch />
         <ThemeSwitch />
         <ConfigDrawer />
       </Header>
@@ -68,16 +73,18 @@ export function Dashboard() {
       <Main>
         <div className='mb-4 flex flex-wrap items-center justify-between gap-3'>
           <div>
-            <h1 className='text-2xl font-bold tracking-tight'>排期仪表盘</h1>
+            <h1 className='text-2xl font-bold tracking-tight'>
+              {t('dashboard.title')}
+            </h1>
             <p className='text-sm text-muted-foreground'>
-              所有栏目的发布时间轴 · 时区 {timezone}
+              {t('dashboard.subtitle', { timezone })}
             </p>
           </div>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button>
                 <CalendarPlus className='size-4' />
-                新建排期
+                {t('dashboard.newSchedule')}
                 <ChevronDown className='size-4' />
               </Button>
             </DropdownMenuTrigger>
@@ -85,7 +92,9 @@ export function Dashboard() {
               align='end'
               className='max-h-80 w-56 overflow-y-auto'
             >
-              <DropdownMenuLabel>选择栏目</DropdownMenuLabel>
+              <DropdownMenuLabel>
+                {t('dashboard.selectChannel')}
+              </DropdownMenuLabel>
               <DropdownMenuSeparator />
               {CHANNELS.map((channel) => (
                 <DropdownMenuItem
@@ -101,7 +110,7 @@ export function Dashboard() {
                     className='size-2.5 rounded-full'
                     style={{ backgroundColor: channel.color }}
                   />
-                  {channel.nameZh ?? channel.name}
+                  {channelLabel(channel, lang)}
                 </DropdownMenuItem>
               ))}
             </DropdownMenuContent>
@@ -110,18 +119,28 @@ export function Dashboard() {
 
         {USE_MOCK && (
           <Alert className='mb-4'>
-            <AlertTitle>演示数据模式</AlertTitle>
+            <AlertTitle>{t('dashboard.mock.title')}</AlertTitle>
             <AlertDescription>
-              下面这些排期是<strong>内置的假数据</strong>，不是你的店铺内容。
-              想看真实数据：停掉当前服务，改用{' '}
+              {t('dashboard.mock.body')
+                .split('<strong>')
+                .flatMap((chunk) => chunk.split('</strong>'))
+                .map((chunk, index) =>
+                  // 词条里的 <strong> 是「重点在哪半句」的标记，不能当 HTML 注入，
+                  // 所以按标记切片后用 <strong> 渲染
+                  index % 2 === 0 ? (
+                    <span key={index}>{chunk}</span>
+                  ) : (
+                    <strong key={index}>{chunk}</strong>
+                  )
+                )}
               <code className='rounded bg-muted px-1 py-0.5 text-xs'>
                 pnpm dev
               </code>
-              （连接真实后端），演示模式只在{' '}
+              {t('dashboard.mock.bodyTail')}{' '}
               <code className='rounded bg-muted px-1 py-0.5 text-xs'>
                 pnpm dev:mock
               </code>{' '}
-              下开启。
+              {t('dashboard.mock.bodyTailEnd')}
             </AlertDescription>
           </Alert>
         )}
@@ -132,9 +151,9 @@ export function Dashboard() {
           <Card>
             <CardHeader className='flex flex-row flex-wrap items-center justify-between gap-3 space-y-0'>
               <div>
-                <CardTitle>发布排期</CardTitle>
+                <CardTitle>{t('dashboard.schedule.title')}</CardTitle>
                 <CardDescription>
-                  每行一个栏目，色块为该内容的预定发布时间。点击色块可查看详情、改期或取消。
+                  {t('dashboard.schedule.description')}
                 </CardDescription>
               </div>
               <div className='flex items-center gap-2'>
@@ -143,9 +162,15 @@ export function Dashboard() {
                   onValueChange={(value) => setScale(value as TimelineScale)}
                 >
                   <TabsList>
-                    <TabsTrigger value='day'>未来 7 天</TabsTrigger>
-                    <TabsTrigger value='week'>未来 5 周</TabsTrigger>
-                    <TabsTrigger value='month'>未来 6 月</TabsTrigger>
+                    <TabsTrigger value='day'>
+                      {t('dashboard.scale.day')}
+                    </TabsTrigger>
+                    <TabsTrigger value='week'>
+                      {t('dashboard.scale.week')}
+                    </TabsTrigger>
+                    <TabsTrigger value='month'>
+                      {t('dashboard.scale.month')}
+                    </TabsTrigger>
                   </TabsList>
                 </Tabs>
                 <Button
@@ -153,7 +178,7 @@ export function Dashboard() {
                   size='icon'
                   onClick={() => timelineQuery.refetch()}
                   disabled={timelineQuery.isFetching}
-                  title='刷新'
+                  title={t('dashboard.action.refresh')}
                 >
                   <RefreshCw
                     className={
@@ -175,7 +200,9 @@ export function Dashboard() {
               ) : timelineQuery.isError ? (
                 <div className='px-6 pb-6'>
                   <Alert variant='destructive'>
-                    <AlertTitle>排期数据加载失败</AlertTitle>
+                    <AlertTitle>
+                      {t('dashboard.timeline.loadFailed')}
+                    </AlertTitle>
                     <AlertDescription>
                       {(timelineQuery.error as Error).message}
                     </AlertDescription>
@@ -191,9 +218,7 @@ export function Dashboard() {
                   */}
                   {bars.length === 0 && (
                     <div className='mx-6 mb-4 rounded-md border border-dashed p-3 text-xs text-muted-foreground'>
-                      还没有任何排期内容。去左侧任一栏目页上传 JSON
-                      文件并设置发布时间 —— 发布后（或排期到点由 Shopify
-                      上线）内容就会出现在这里。 点色块可以改期或取消。
+                      {t('dashboard.timeline.empty')}
                     </div>
                   )}
                   <Timeline

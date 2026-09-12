@@ -1,26 +1,35 @@
+import { CHANNELS } from '@/config/channels'
+import { translate, type Lang } from '@/i18n'
+import { channelLabel } from '@/i18n/channel-label'
+import { clearCookies } from '@/test-utils/cookies'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, type RenderResult } from 'vitest-browser-react'
 import { userEvent } from 'vitest/browser'
+import { I18nProvider } from '@/context/i18n-provider'
 import { SearchProvider } from '@/context/search-provider'
-import { sidebarData } from '@/components/layout/data/sidebar-data'
 
-const COMMAND_MENU_PLACEHOLDER = 'Type a command or search...'
+/** 命令面板的文案跟着语言走，测试显式钉在英文，断言才好读 */
+const TEST_LANG: Lang = 'en'
+
+const COMMAND_MENU_PLACEHOLDER = translate(
+  TEST_LANG,
+  'shell.command.placeholder'
+)
 
 /**
- * 断言用的菜单项从**真实侧边栏数据**里取，不写死字符串。
+ * 断言用的菜单项从**真实词条与栏目配置**里推导，不写死字符串。
  *
  * 之前这里写的是模板自带的 `Dashboard` / `Tasks` / `Settings Account`，
  * 侧边栏换成 Zima 的栏目后就全找不到、测试变红 —— 但页面其实没问题。
- * 从 sidebarData 推导后，以后改菜单不用回来改测试。
+ * 侧边栏第 1 组是仪表盘、第 2 组由 `CHANNELS` 自动生成，所以这里也照这个来。
  *
  * 嵌套子项（NavCollapsible）在真实数据里目前没有，那种分支由
  * `search-provider-nested.test.tsx` 用 fixture 覆盖。
  */
-const firstGroup = sidebarData.navGroups[0]
-const topLevelItem = firstGroup.items[0] as { title: string; url: string }
-const channelItem = sidebarData.navGroups[1].items[0] as {
-  title: string
-  url: string
+const topLevelItem = translate(TEST_LANG, 'nav.dashboard')
+const channelItem = {
+  title: channelLabel(CHANNELS[0], TEST_LANG),
+  url: `/channels/${CHANNELS[0].id}`,
 }
 
 const mocks = vi.hoisted(() => ({
@@ -43,7 +52,11 @@ vi.mock('@/context/theme-provider', () => ({
 type ShortcutModifier = 'Control' | 'Meta'
 
 async function renderWithSearchProvider() {
-  return await render(<SearchProvider>{null}</SearchProvider>)
+  return await render(
+    <I18nProvider>
+      <SearchProvider>{null}</SearchProvider>
+    </I18nProvider>
+  )
 }
 
 /**
@@ -76,6 +89,9 @@ async function openCommandPalette(
 describe('SearchProvider and CommandMenu', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+
+    clearCookies()
+    document.cookie = `content-publisher-lang=${TEST_LANG}`
   })
 
   it('renders the command palette when the palette is open', async () => {
@@ -87,11 +103,23 @@ describe('SearchProvider and CommandMenu', () => {
     await expect
       .element(getByPlaceholder(COMMAND_MENU_PLACEHOLDER))
       .toBeInTheDocument()
-    await expect.element(getByText('Theme')).toBeInTheDocument()
-    await expect.element(getByText('Light')).toBeInTheDocument()
-    await expect.element(getByText('Dark')).toBeInTheDocument()
-    await expect.element(getByText('System')).toBeInTheDocument()
-    await expect.element(getByText(topLevelItem.title)).toBeInTheDocument()
+    await expect
+      .element(getByText(translate(TEST_LANG, 'common.theme')))
+      .toBeInTheDocument()
+    // 主题项按 role=option 找：侧边栏「系统」分组标题的英文也叫 System，
+    // 纯文本查询会同时命中分组标题，撞在 strict mode 上
+    for (const key of [
+      'common.theme.light',
+      'common.theme.dark',
+      'common.theme.system',
+    ]) {
+      await expect
+        .element(
+          screen.getByRole('option', { name: translate(TEST_LANG, key) })
+        )
+        .toBeInTheDocument()
+    }
+    await expect.element(getByText(topLevelItem)).toBeInTheDocument()
   })
 
   it('does not show the dialog content when search is closed', async () => {

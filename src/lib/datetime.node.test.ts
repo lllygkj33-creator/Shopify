@@ -8,11 +8,14 @@
  *  - 3 月 8 日 02:00 → 03:00（春季前移，当天 02:30 这个墙上时间不存在）
  *  - 11 月 1 日 02:00 → 01:00（秋季后移，01:30 出现两次）
  */
-import { describe, expect, it } from 'vitest'
+import { setLangGlobal } from '@/i18n'
+import { afterEach, describe, expect, it } from 'vitest'
 import {
+  formatInTimezone,
   formatTimezoneOffset,
   getTimezoneOffsetMinutes,
   isoToWallTime,
+  relativeTime,
   wallTimeToIso,
   zonedWallTimeToDate,
 } from '@/lib/datetime'
@@ -148,5 +151,64 @@ describe('zonedWallTimeToDate', () => {
     expect(isoToWallTime(date.toISOString(), 'Europe/Berlin')).toBe(
       '2026-04-01T07:00'
     )
+  })
+})
+
+/**
+ * 语言相关的输出。
+ *
+ * 这两处以前是写死的：相对时间只有中文（「3 天前」），绝对时间固定 `zh-CN`
+ * （渲染成 `2026/09/15 23:59`）。英文界面拿去截图就会露中文/中文日期习惯，
+ * 所以钉住两侧的具体输出。
+ */
+describe('文案按界面语言输出', () => {
+  const now = Date.now()
+  const ago = (ms: number) => new Date(now - ms).toISOString()
+  const later = (ms: number) => new Date(now + ms).toISOString()
+
+  afterEach(() => {
+    setLangGlobal('zh')
+  })
+
+  it('英文界面：相对时间是英文，且区分单复数', () => {
+    setLangGlobal('en')
+
+    expect(relativeTime(ago(10_000))).toBe('Just now')
+    expect(relativeTime(ago(60_000))).toBe('1 minute ago')
+    expect(relativeTime(ago(5 * 60_000))).toBe('5 minutes ago')
+    expect(relativeTime(ago(2 * 3_600_000))).toBe('2 hours ago')
+    expect(relativeTime(ago(3 * 86_400_000))).toBe('3 days ago')
+    // 用 75 秒而不是正好 60 秒：这里的 now 是模块级取的，跑到这一行已经过去几毫秒，
+    // 卡在 60 秒边界上会被判成「刚刚」
+    expect(relativeTime(later(75_000))).toBe('in 1 minute')
+    expect(relativeTime(later(2 * 3_600_000))).toBe('in 2 hours')
+  })
+
+  it('中文界面：相对时间与改动前完全一致', () => {
+    setLangGlobal('zh')
+
+    expect(relativeTime(ago(10_000))).toBe('刚刚')
+    expect(relativeTime(ago(60_000))).toBe('1 分钟前')
+    expect(relativeTime(ago(3 * 86_400_000))).toBe('3 天前')
+    expect(relativeTime(later(2 * 3_600_000))).toBe('2 小时后')
+  })
+
+  it('绝对时间：locale 跟语言走，字段与 24 小时制不变', () => {
+    const iso = '2026-09-15T15:59:00.000Z'
+
+    setLangGlobal('zh')
+    expect(formatInTimezone(iso, 'Asia/Shanghai')).toBe('2026/09/15 23:59')
+
+    setLangGlobal('en')
+    expect(formatInTimezone(iso, 'Asia/Shanghai')).toBe('09/15/2026, 23:59')
+    expect(formatInTimezone(iso, 'Asia/Shanghai', { withSeconds: true })).toBe(
+      '09/15/2026, 23:59:00'
+    )
+  })
+
+  it('空值仍是占位符 —，与语言无关', () => {
+    setLangGlobal('en')
+    expect(relativeTime(undefined)).toBe('—')
+    expect(formatInTimezone(undefined, 'Asia/Shanghai')).toBe('—')
   })
 })

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { AlertTriangle, Check, ChevronsUpDown, Info } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useI18n } from '@/context/i18n-provider'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -43,6 +44,7 @@ export function TemplatePicker({
   disabled,
   onChange,
 }: TemplatePickerProps) {
+  const { t } = useI18n()
   const [open, setOpen] = useState(false)
 
   return (
@@ -60,18 +62,25 @@ export function TemplatePicker({
             disabled={disabled}
             className='h-8 w-[210px] justify-between font-mono text-xs font-normal'
           >
-            <span className='truncate'>{value || '选择模板…'}</span>
+            <span className='truncate'>
+              {value || t('channels.template.placeholder')}
+            </span>
             <ChevronsUpDown className='size-3 shrink-0 opacity-50' />
           </Button>
         </PopoverTrigger>
         <PopoverContent align='start' className='w-[280px] p-0'>
           <Command>
-            <CommandInput placeholder='搜索模板名…' className='h-9' />
+            <CommandInput
+              placeholder={t('channels.template.search')}
+              className='h-9'
+            />
             <CommandList>
-              <CommandEmpty>
-                没有匹配的模板。可以直接改 JSON 里的 template 字段。
-              </CommandEmpty>
-              <CommandGroup heading={`可选模板（${options.length}）`}>
+              <CommandEmpty>{t('channels.template.empty')}</CommandEmpty>
+              <CommandGroup
+                heading={t('channels.template.group', {
+                  count: options.length,
+                })}
+              >
                 {options.map((option) => (
                   <CommandItem
                     key={option}
@@ -101,17 +110,21 @@ export function TemplatePicker({
           Shopify 对不存在的 templateSuffix 是**静默回退**到主题默认模板、
           不报错，所以这是没有 read_themes 权限时最需要防的一种静默失败。 */}
       {value && options.length > 0 && !options.includes(value) && (
-        <p
+        <div
           className='flex items-start gap-1 text-[10px] text-amber-600'
           title={source === 'manual' ? (sourceReason ?? undefined) : undefined}
         >
           <AlertTriangle className='mt-0.5 size-3 shrink-0' />
           <span>
-            不在清单里
-            {source === 'manual' ? '（清单来自设置）' : ''}
-            ：Shopify 会静默回退到主题默认模板，请确认模板名拼写
+            {t('channels.template.notListed', {
+              source:
+                source === 'manual'
+                  ? t('channels.template.notListed.manual')
+                  : '',
+            })}
+            {t('channels.template.notListed.hint')}
           </span>
-        </p>
+        </div>
       )}
 
       {source && (
@@ -121,7 +134,7 @@ export function TemplatePicker({
               variant='outline'
               className='border-emerald-500/40 px-1 py-0 text-[10px] font-normal text-emerald-600'
             >
-              读自店铺主题
+              {t('channels.template.source.shopify')}
             </Badge>
           ) : (
             <Badge
@@ -129,7 +142,7 @@ export function TemplatePicker({
               className='px-1 py-0 text-[10px] font-normal'
               title={sourceReason ?? undefined}
             >
-              来自设置清单
+              {t('channels.template.source.manual')}
             </Badge>
           )}
           {source === 'manual' && <Info className='size-3' />}

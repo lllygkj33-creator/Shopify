@@ -1,6 +1,7 @@
 import { Link } from '@tanstack/react-router'
 import { Menu, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useI18n } from '@/context/i18n-provider'
 import {
   SidebarMenu,
   SidebarMenuButton,
@@ -8,12 +9,12 @@ import {
   useSidebar,
 } from '@/components/ui/sidebar'
 import { Button } from '../ui/button'
-import { sidebarData } from './data/sidebar-data'
+import { useSidebarData } from './data/sidebar-data'
 
 /** 侧边栏顶部品牌区（替代模板的 workspace 切换器） */
 export function AppTitle() {
   const { setOpenMobile } = useSidebar()
-  const { brand } = sidebarData
+  const { brand } = useSidebarData()
 
   return (
     <SidebarMenu>
@@ -52,6 +53,7 @@ function ToggleSidebar({
   onClick,
   ...props
 }: React.ComponentProps<typeof Button>) {
+  const { t } = useI18n()
   const { toggleSidebar } = useSidebar()
 
   return (
@@ -69,7 +71,7 @@ function ToggleSidebar({
     >
       <X className='md:hidden' />
       <Menu className='max-md:hidden' />
-      <span className='sr-only'>Toggle Sidebar</span>
+      <span className='sr-only'>{t('shell.toggleSidebar')}</span>
     </Button>
   )
 }

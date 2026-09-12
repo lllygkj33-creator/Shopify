@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState } from 'react'
 import { FolderOpen, Loader2, Upload } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useI18n } from '@/context/i18n-provider'
 import { Button } from '@/components/ui/button'
 
 /**
@@ -83,6 +84,7 @@ export function FolderDropzone({
   disabled,
   className,
 }: FolderDropzoneProps) {
+  const { t } = useI18n()
   const [dragging, setDragging] = useState(false)
   const [reading, setReading] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -192,10 +194,12 @@ export function FolderDropzone({
       </div>
       <div className='space-y-1'>
         <p className='text-sm font-medium'>
-          {reading ? '正在读取文件…' : '把包含 JSON 的文件夹拖到这里'}
+          {reading
+            ? t('channels.dropzone.reading')
+            : t('channels.dropzone.idle')}
         </p>
         <p className='text-xs text-muted-foreground'>
-          或点击下方按钮选择本地文件夹，支持一次导入多个 JSON
+          {t('channels.dropzone.hint')}
         </p>
       </div>
       <Button
@@ -206,7 +210,7 @@ export function FolderDropzone({
         onClick={() => inputRef.current?.click()}
       >
         <FolderOpen className='size-4' />
-        选择文件夹
+        {t('channels.dropzone.pick')}
       </Button>
       <input
         ref={inputRef}

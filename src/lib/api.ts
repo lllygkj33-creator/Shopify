@@ -32,6 +32,7 @@
  *     （对应 PublishResult.items[].error）。
  */
 import axios, { AxiosError } from 'axios'
+import { t } from '@/i18n'
 import type {
   BlogItem,
   ContentScheduleResult,
@@ -101,12 +102,16 @@ function toApiError(error: unknown): ApiError {
           const field = Array.isArray(item.loc) ? item.loc.join('.') : ''
           return `${field}: ${item.msg ?? ''}`.trim()
         })
-        .join('；')
-      return new ApiError(message || '请求参数校验失败', status, detail)
+        .join(t('shell.separator.clause'))
+      return new ApiError(
+        message || t('shell.api.paramInvalid'),
+        status,
+        detail
+      )
     }
     if (error.code === 'ERR_NETWORK') {
       return new ApiError(
-        `无法连接后端 ${API_BASE_URL}，请确认后端已启动（或设置 VITE_USE_MOCK=true 使用演示数据）`,
+        t('shell.api.backendUnreachable', { baseUrl: API_BASE_URL }),
         status
       )
     }
@@ -206,7 +211,7 @@ export const templatesApi = {
           'nas-a-vs-b',
           'makerworld-page',
         ],
-        reason: '演示模式：展示内置博客清单（VITE_USE_MOCK=true）',
+        reason: t('shell.api.mockTemplates'),
       })
     }
     return get<TemplateList>('/api/theme/templates')

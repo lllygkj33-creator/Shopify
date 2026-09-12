@@ -11,6 +11,7 @@ import {
 import { toast } from 'sonner'
 import { syncApi } from '@/lib/api'
 import { relativeTime } from '@/lib/datetime'
+import { useI18n } from '@/context/i18n-provider'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
@@ -65,6 +66,7 @@ function SortedCounts({ counts }: { counts: Record<string, number> }) {
 }
 
 function SyncResult({ report }: { report: SyncReport }) {
+  const { t } = useI18n()
   const drift = report.updated + report.gone
   const skippedTotal = Object.values(report.skipped).reduce((a, b) => a + b, 0)
 
@@ -72,10 +74,10 @@ function SyncResult({ report }: { report: SyncReport }) {
     <div className='space-y-1.5 rounded-md border bg-muted/30 p-2 text-xs'>
       <p className='flex items-center gap-1.5 font-medium'>
         <CheckCircle2 className='size-3.5 text-emerald-600' />
-        拉到 {report.scheduledPulled} 条未发布排期
+        {t('settings.sync.result.pulled', { count: report.scheduledPulled })}
         {report.scheduledFound > 0 && (
           <span className='font-normal text-muted-foreground'>
-            （线上未发布的未来排期共 {report.scheduledFound} 条）
+            {t('settings.sync.result.found', { count: report.scheduledFound })}
           </span>
         )}
       </p>
@@ -83,7 +85,7 @@ function SyncResult({ report }: { report: SyncReport }) {
       {Object.keys(report.byChannel).length > 0 && (
         <details>
           <summary className='cursor-pointer text-muted-foreground'>
-            按栏目分布
+            {t('settings.sync.result.byChannel')}
           </summary>
           <div className='mt-1 ps-2'>
             <SortedCounts counts={report.byChannel} />
@@ -94,7 +96,7 @@ function SyncResult({ report }: { report: SyncReport }) {
       {skippedTotal > 0 && (
         <details>
           <summary className='cursor-pointer text-muted-foreground'>
-            跳过 {skippedTotal} 条（不属于平台任何栏目）
+            {t('settings.sync.result.skipped', { count: skippedTotal })}
           </summary>
           <div className='mt-1 ps-2'>
             <SortedCounts counts={report.skipped} />
@@ -108,23 +110,31 @@ function SyncResult({ report }: { report: SyncReport }) {
         ) : (
           <AlertTriangle className='size-3.5 text-amber-600' />
         )}
-        对账 {report.checked} 条
+        {t('settings.sync.result.checked', { count: report.checked })}
         {drift === 0 ? (
-          <span className='text-muted-foreground'>· 本地与线上一致</span>
+          <span className='text-muted-foreground'>
+            {t('settings.sync.result.consistent')}
+          </span>
         ) : (
           <span className='text-muted-foreground'>
-            · 修正 {drift} 条
-            {report.updated > 0 && `（状态更新 ${report.updated}`}
+            {t('settings.sync.result.drift', { count: drift })}
+            {report.updated > 0 &&
+              t('settings.sync.result.updated', { count: report.updated })}
             {report.gone > 0 &&
-              `${report.updated > 0 ? '，' : '（'}线上已删除 ${report.gone}`}
-            {`）`}
+              t(
+                report.updated > 0
+                  ? 'settings.sync.result.goneMore'
+                  : 'settings.sync.result.goneOnly',
+                { count: report.gone }
+              )}
+            {t('settings.sync.result.close')}
           </span>
         )}
       </p>
 
       {report.gone > 0 && (
         <p className='text-muted-foreground'>
-          已删除的对象会在列表里标注原因，不会被静默移除。
+          {t('settings.sync.result.goneNote')}
         </p>
       )}
     </div>
@@ -132,6 +142,7 @@ function SyncResult({ report }: { report: SyncReport }) {
 }
 
 export function SyncPanel({ hasCredentials, timezone }: SyncPanelProps) {
+  const { t } = useI18n()
   const queryClient = useQueryClient()
   const [result, setResult] = useState<SyncReport | null>(null)
 
@@ -145,7 +156,7 @@ export function SyncPanel({ hasCredentials, timezone }: SyncPanelProps) {
     onSuccess: (report) => {
       setResult(report)
       if (report.error) {
-        toast.error(`同步失败：${report.error}`)
+        toast.error(t('settings.sync.toast.failed', { error: report.error }))
         return
       }
       // 对账可能改了状态/时间/标题，列表和仪表盘都要重新拉
@@ -156,16 +167,25 @@ export function SyncPanel({ hasCredentials, timezone }: SyncPanelProps) {
       void queryClient.invalidateQueries({ queryKey: ['sync-status'] })
 
       const drift = report.updated + report.gone
-      const parts = [`拉到 ${report.scheduledPulled} 条排期`]
-      if (drift > 0) parts.push(`修正 ${drift} 条`)
-      if (drift === 0) parts.push(`对账 ${report.checked} 条一致`)
+      const parts = [
+        t('settings.sync.toast.pulled', { count: report.scheduledPulled }),
+      ]
+      if (drift > 0)
+        parts.push(t('settings.sync.toast.fixed', { count: drift }))
       if (drift === 0) {
-        toast.success(parts.join('，'))
+        parts.push(
+          t('settings.sync.toast.consistent', { count: report.checked })
+        )
+      }
+      const summary = parts.join(t('settings.listJoin'))
+      if (drift === 0) {
+        toast.success(summary)
       } else {
-        toast.info(parts.join('，'))
+        toast.info(summary)
       }
     },
-    onError: (error: Error) => toast.error(`同步失败：${error.message}`),
+    onError: (error: Error) =>
+      toast.error(t('settings.sync.toast.failed', { error: error.message })),
   })
 
   const status = statusQuery.data
@@ -174,30 +194,42 @@ export function SyncPanel({ hasCredentials, timezone }: SyncPanelProps) {
   return (
     <div className='space-y-3 rounded-md border p-3'>
       <div className='flex flex-wrap items-center gap-2 text-xs'>
-        <span className='text-muted-foreground'>已跟踪</span>
+        <span className='text-muted-foreground'>
+          {t('settings.sync.tracked')}
+        </span>
         <Badge variant='outline' className='font-mono'>
           {status ? status.trackedContents : '—'}
         </Badge>
         {status && status.scheduledContents > 0 && (
           <span className='text-muted-foreground'>
-            （其中排期中 {status.scheduledContents} 条）
+            {t('settings.sync.tracked.scheduled', {
+              count: status.scheduledContents,
+            })}
           </span>
         )}
 
         {status?.lastSyncAt ? (
           <span className='text-muted-foreground'>
-            上次同步 {relativeTime(status.lastSyncAt)}
+            {t('settings.sync.lastSync', {
+              time: relativeTime(status.lastSyncAt ?? undefined),
+            })}
           </span>
         ) : (
-          status && <span className='text-muted-foreground'>尚未同步</span>
+          status && (
+            <span className='text-muted-foreground'>
+              {t('settings.sync.never')}
+            </span>
+          )
         )}
 
         {status && (
           <span className='ms-auto text-muted-foreground'>
-            自动同步
+            {t('settings.sync.auto')}{' '}
             {status.syncIntervalMinutes > 0
-              ? ` 每 ${status.syncIntervalMinutes} 分钟`
-              : '已关闭'}
+              ? t('settings.sync.auto.every', {
+                  minutes: status.syncIntervalMinutes,
+                })
+              : t('settings.sync.auto.off')}
           </span>
         )}
       </div>
@@ -215,20 +247,17 @@ export function SyncPanel({ hasCredentials, timezone }: SyncPanelProps) {
           ) : (
             <RefreshCw className='size-3.5' />
           )}
-          立即同步
+          {t('settings.sync.run')}
         </Button>
         <span className='text-xs text-muted-foreground'>
-          （时区 {timezone}）
+          {t('settings.sync.timezone', { timezone })}
         </span>
       </div>
 
       {!hasCredentials && (
         <p className='flex items-start gap-1.5 text-xs text-amber-600'>
           <ShieldAlert className='mt-0.5 size-3.5 shrink-0' />
-          <span>
-            店铺凭据未配置，对账不可用。请先在上面填好 CLIENT_ID /
-            CLIENT_SECRET。
-          </span>
+          <span>{t('settings.sync.noCredentials')}</span>
         </p>
       )}
 
@@ -238,9 +267,11 @@ export function SyncPanel({ hasCredentials, timezone }: SyncPanelProps) {
       <p className='flex items-start gap-1.5 text-xs text-muted-foreground'>
         <AlertTriangle className='mt-0.5 size-3.5 shrink-0' />
         <span>
-          定时发布由 Shopify 自己执行（创建时就带未来发布时间），
-          <strong className='font-medium'>本平台没有本地定时任务</strong>
-          ，不存在服务没开导致漏发的情况。对账只负责把线上的真实状态同步回本地。
+          {t('settings.sync.note.before')}
+          <strong className='font-medium'>
+            {t('settings.sync.note.strong')}
+          </strong>
+          {t('settings.sync.note.after')}
         </span>
       </p>
     </div>

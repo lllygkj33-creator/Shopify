@@ -3,6 +3,7 @@ import { CONTENT_STATUS_META, type ContentStatus } from '@/types/content'
 import { ExternalLink, RefreshCw } from 'lucide-react'
 import { historyApi } from '@/lib/api'
 import { formatInTimezone, relativeTime } from '@/lib/datetime'
+import { useI18n } from '@/context/i18n-provider'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -26,6 +27,7 @@ type HistoryTableProps = {
 }
 
 export function HistoryTable({ channelId, timezone }: HistoryTableProps) {
+  const { t } = useI18n()
   const { data, isLoading, isFetching, refetch } = useQuery({
     queryKey: ['history', channelId],
     queryFn: () => historyApi.list(channelId),
@@ -47,7 +49,7 @@ export function HistoryTable({ channelId, timezone }: HistoryTableProps) {
     return (
       <div className='rounded-lg border border-dashed px-6 py-12 text-center'>
         <p className='text-sm text-muted-foreground'>
-          该栏目还没有发布记录。上传 JSON 并发布后，这里会记录每一篇的结果。
+          {t('channels.history.empty')}
         </p>
       </div>
     )
@@ -65,17 +67,25 @@ export function HistoryTable({ channelId, timezone }: HistoryTableProps) {
           <RefreshCw
             className={isFetching ? 'size-4 animate-spin' : 'size-4'}
           />
-          刷新
+          {t('channels.history.refresh')}
         </Button>
       </div>
       <div className='rounded-lg border'>
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className='min-w-[260px]'>标题</TableHead>
-              <TableHead className='w-[100px]'>状态</TableHead>
-              <TableHead className='w-[190px]'>发布时间</TableHead>
-              <TableHead className='w-[180px]'>结果</TableHead>
+              <TableHead className='min-w-[260px]'>
+                {t('channels.history.col.title')}
+              </TableHead>
+              <TableHead className='w-[100px]'>
+                {t('channels.history.col.status')}
+              </TableHead>
+              <TableHead className='w-[190px]'>
+                {t('channels.history.col.publishedAt')}
+              </TableHead>
+              <TableHead className='w-[180px]'>
+                {t('channels.history.col.result')}
+              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -134,10 +144,12 @@ export function HistoryTable({ channelId, timezone }: HistoryTableProps) {
                         className='inline-flex items-center gap-1 text-primary hover:underline'
                       >
                         <ExternalLink className='size-3' />
-                        查看
+                        {t('channels.history.view')}
                       </a>
                     ) : (
-                      <span className='text-muted-foreground'>已提交</span>
+                      <span className='text-muted-foreground'>
+                        {t('channels.history.submitted')}
+                      </span>
                     )}
                   </TableCell>
                 </TableRow>

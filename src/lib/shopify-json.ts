@@ -19,6 +19,8 @@
  */
 import { CHANNELS, type Channel, type PageSpec } from '@/config/channels'
 import { site } from '@/config/site'
+import { getLang, t } from '@/i18n'
+import { channelLabel } from '@/i18n/channel-label'
 import type {
   ParsedCandidate,
   ParsedFile,
@@ -139,9 +141,9 @@ function matchPageChannel(record: RawRecord): Channel | undefined {
   return undefined
 }
 
-/** 栏目的展示名 */
-function channelLabel(channel: Channel): string {
-  return channel.nameZh ?? channel.name
+/** 栏目的展示名（按当前语言取 name / nameZh） */
+function channelName(channel: Channel): string {
+  return channelLabel(channel, getLang())
 }
 
 /**
@@ -175,9 +177,10 @@ function resolveUploadChannel(
   if (current && detected && detected.id !== current.id) {
     return {
       channelId: current.id,
-      mismatch:
-        `这份 JSON 属于「${channelLabel(detected)}」栏目，不能在` +
-        `「${channelLabel(current)}」栏目上传；请到「${channelLabel(detected)}」栏目重新上传`,
+      mismatch: t('shell.json.channelMismatch', {
+        detected: channelName(detected),
+        current: channelName(current),
+      }),
     }
   }
 
@@ -187,7 +190,15 @@ function resolveUploadChannel(
 
 /** 把「进错栏目」挂成 error 级问题（error 才会拦住发布） */
 function mismatchIssue(mismatch: string | undefined): ValidationIssue[] {
-  return mismatch ? [{ level: 'error', field: '栏目', message: mismatch }] : []
+  return mismatch
+    ? [
+        {
+          level: 'error',
+          field: t('shell.json.field.channel'),
+          message: mismatch,
+        },
+      ]
+    : []
 }
 
 /** 从正文里抽出所有 class 名 */
@@ -255,7 +266,7 @@ function checkPageHtmlRules(
     issues.push({
       level: 'error',
       field: 'html',
-      message: '正文包含 <h1>；H1 应由 page.title / Liquid 输出，请改用 <h2>',
+      message: t('shell.json.h1Forbidden'),
     })
   }
 
@@ -264,13 +275,13 @@ function checkPageHtmlRules(
     issues.push({
       level: 'error',
       field: 'html',
-      message: '正文包含 <h2>；H2 标题必须由 VS Liquid 模板输出',
+      message: t('shell.json.h2Forbidden'),
     })
   } else if (h2Count < h2Min) {
     issues.push({
       level: 'error',
       field: 'html',
-      message: `正文必须至少包含 ${h2Min} 个 <h2> 章节；当前 ${h2Count} 个`,
+      message: t('shell.json.h2Min', { min: h2Min, count: h2Count }),
     })
   }
 
@@ -280,14 +291,14 @@ function checkPageHtmlRules(
       issues.push({
         level: 'error',
         field: 'html',
-        message: `第 ${index + 1} 张图片缺少非空 alt 属性`,
+        message: t('shell.json.imageAlt', { n: index + 1 }),
       })
     }
     if (!/\btitle\s*=\s*["'][^"']+["']/i.test(tag)) {
       issues.push({
         level: 'error',
         field: 'html',
-        message: `第 ${index + 1} 张图片缺少非空 title 属性`,
+        message: t('shell.json.imageTitle', { n: index + 1 }),
       })
     }
   })
@@ -298,7 +309,7 @@ function checkPageHtmlRules(
       issues.push({
         level: 'error',
         field: 'html',
-        message: `第 ${index + 1} 个链接缺少非空 title 属性`,
+        message: t('shell.json.linkTitle', { n: index + 1 }),
       })
     }
   })
@@ -397,7 +408,7 @@ function checkExternalLinks(html: string): ValidationIssue[] {
       issues.push({
         level: 'error',
         field: 'html',
-        message: `第 ${position} 个链接缺少 href`,
+        message: t('shell.json.linkHref', { n: position }),
       })
       return
     }
@@ -405,7 +416,7 @@ function checkExternalLinks(html: string): ValidationIssue[] {
       issues.push({
         level: 'error',
         field: 'html',
-        message: `第 ${position} 个链接缺少非空 title 属性`,
+        message: t('shell.json.linkTitle', { n: position }),
       })
     }
 
@@ -434,7 +445,7 @@ function checkExternalLinks(html: string): ValidationIssue[] {
       issues.push({
         level: 'error',
         field: 'html',
-        message: `第 ${position} 个链接是外部链接，必须使用 target="_blank"`,
+        message: t('shell.json.linkTargetBlank', { n: position }),
       })
     }
     const missing = ['noopener', 'noreferrer'].filter(
@@ -444,14 +455,17 @@ function checkExternalLinks(html: string): ValidationIssue[] {
       issues.push({
         level: 'error',
         field: 'html',
-        message: `第 ${position} 个外部链接的 rel 缺少 ${missing.join('、')}`,
+        message: t('shell.json.linkRel', {
+          n: position,
+          tokens: missing.join(t('shell.separator.item')),
+        }),
       })
     }
     if (!rel.has('nofollow')) {
       issues.push({
         level: 'error',
         field: 'html',
-        message: `第 ${position} 个第三方链接必须包含 nofollow`,
+        message: t('shell.json.linkNofollow', { n: position }),
       })
     }
   })
@@ -493,7 +507,7 @@ function checkPageSource(
     issues.push({
       level: 'error',
       field: spec.sourceKey,
-      message: `缺少 ${spec.sourceKey} 来源对象（发布必填）`,
+      message: t('shell.json.sourceMissing', { key: spec.sourceKey }),
     })
     return issues
   }
@@ -504,7 +518,7 @@ function checkPageSource(
       issues.push({
         level: 'error',
         field: field(name),
-        message: `${field(name)} 必须是字符串`,
+        message: t('shell.json.sourceNotString', { field: field(name) }),
       })
       continue
     }
@@ -514,7 +528,7 @@ function checkPageSource(
       issues.push({
         level: 'error',
         field: field(name),
-        message: `${field(name)} 不能为空`,
+        message: t('shell.json.sourceEmpty', { field: field(name) }),
       })
       continue
     }
@@ -525,7 +539,7 @@ function checkPageSource(
       issues.push({
         level: 'error',
         field: field(name),
-        message: `必须以 ${prefix} 开头`,
+        message: t('shell.json.sourcePrefix', { prefix }),
       })
     }
 
@@ -534,7 +548,7 @@ function checkPageSource(
       issues.push({
         level: 'error',
         field: field(name),
-        message: `格式不正确（应匹配 ${pattern}）`,
+        message: t('shell.json.sourceRegex', { pattern }),
       })
     }
 
@@ -545,7 +559,7 @@ function checkPageSource(
       issues.push({
         level: 'error',
         field: field(name),
-        message: `必须是完整的 http(s) 链接`,
+        message: t('shell.json.sourceHttpUrl'),
       })
       continue
     }
@@ -560,7 +574,7 @@ function checkPageSource(
           issues.push({
             level: 'error',
             field: field(name),
-            message: `必须指向 ${allowed.join(' / ')}`,
+            message: t('shell.json.sourceHost', { hosts: allowed.join(' / ') }),
           })
         }
       } catch {
@@ -573,7 +587,7 @@ function checkPageSource(
       issues.push({
         level: 'error',
         field: field(name),
-        message: `必须是「${expected}」，当前「${trimmed}」`,
+        message: t('shell.json.sourceExact', { expected, actual: trimmed }),
       })
     }
 
@@ -584,7 +598,7 @@ function checkPageSource(
       issues.push({
         level: 'error',
         field: field(name),
-        message: '只能包含数字或留空',
+        message: t('shell.json.sourceDigits'),
       })
     }
   }
@@ -598,7 +612,9 @@ function checkPageSource(
           issues.push({
             level: 'error',
             field: field('url'),
-            message: `必须指向模型页（路径需包含 ${spec.sourcePathContains}）`,
+            message: t('shell.json.sourceModelPath', {
+              segment: spec.sourcePathContains,
+            }),
           })
         }
       } catch {
@@ -648,14 +664,13 @@ export function checkRelatedProductsPlaceholder(
     issues.push({
       level: 'error',
       field: 'html代码',
-      message: `正文只有 ${h2Count} 个 H2，无法插入 [[related_products_1]] 占位符（需要 ≥ 4 个 H2），且正文未自带占位符`,
+      message: t('shell.json.relatedProductsH2', { count: h2Count }),
     })
   } else if (h2Count === 0) {
     issues.push({
       level: 'warning',
       field: 'html代码',
-      message:
-        '正文没有 H2 标题，无法自动插入关联产品占位符；若模板需要占位符请手动加入 [[related_products_1]]',
+      message: t('shell.json.relatedProductsNoH2'),
     })
   }
   return issues
@@ -724,49 +739,59 @@ function normalizeBlogCandidate(
     issues.push({
       level: 'error',
       field: 'blog title',
-      message: '缺少文章标题',
+      message: t('shell.json.missingTitle'),
     })
   if (!handle)
     issues.push({
       level: 'error',
       field: 'url',
-      message: '缺少文章 handle（url）',
+      message: t('shell.json.missingHandle'),
     })
   if (!html)
-    issues.push({ level: 'error', field: 'html代码', message: '缺少正文 HTML' })
+    issues.push({
+      level: 'error',
+      field: 'html代码',
+      message: t('shell.json.missingBody'),
+    })
 
   // 脚本把这 6 个字段全部视为必填（缺一个就整体报错），所以这里是 error
   if (!metaTitle)
     issues.push({
       level: 'error',
       field: 'meta title',
-      message: '缺少 meta title（发布必填）',
+      message: t('shell.json.missingMetaTitle'),
     })
   if (!metaDescription)
     issues.push({
       level: 'error',
       field: 'meta description',
-      message: '缺少 meta description（发布必填）',
+      message: t('shell.json.missingMetaDescription'),
     })
   if (!summary)
     issues.push({
       level: 'error',
       field: 'summary',
-      message: '缺少 summary（发布必填）',
+      message: t('shell.json.missingSummary'),
     })
 
   if (metaDescription && metaDescription.length > META_TEXT_MAX_LENGTH) {
     issues.push({
       level: 'error',
       field: 'meta description',
-      message: `meta description 超过 ${META_TEXT_MAX_LENGTH} 个字符，当前 ${metaDescription.length}`,
+      message: t('shell.json.metaDescriptionTooLong', {
+        max: META_TEXT_MAX_LENGTH,
+        length: metaDescription.length,
+      }),
     })
   }
   if (summary && summary.length > META_TEXT_MAX_LENGTH) {
     issues.push({
       level: 'error',
       field: 'summary',
-      message: `summary 超过 ${META_TEXT_MAX_LENGTH} 个字符，当前 ${summary.length}`,
+      message: t('shell.json.summaryTooLong', {
+        max: META_TEXT_MAX_LENGTH,
+        length: summary.length,
+      }),
     })
   }
 
@@ -775,7 +800,7 @@ function normalizeBlogCandidate(
     issues.push({
       level: 'error',
       field: 'url',
-      message: `handle 只能包含小写字母、数字和连字符；当前值「${handle}」`,
+      message: t('shell.json.handlePattern', { handle }),
     })
   }
 
@@ -783,7 +808,7 @@ function normalizeBlogCandidate(
     issues.push({
       level: 'warning',
       field: 'url',
-      message: `博客文章的 url 应为不带前导斜杠的 handle，已自动规范化为「${handle}」`,
+      message: t('shell.json.articleUrlNormalized', { handle }),
     })
   }
 
@@ -797,14 +822,13 @@ function normalizeBlogCandidate(
     issues.push({
       level: 'error',
       field: 'html代码',
-      message:
-        '无法确定博客归属：正文缺少 zima-*-article class，且当前栏目没有默认 Blog',
+      message: t('shell.json.blogUnknown'),
     })
   } else if (resolved.source === 'channel') {
     issues.push({
       level: 'warning',
       field: 'html代码',
-      message: `正文未带 zima-*-article class，已按当前栏目默认博客「${resolved.blogName}」发布`,
+      message: t('shell.json.blogFallback', { blog: resolved.blogName ?? '' }),
     })
   }
   const author = pick(raw, 'author', '作者')
@@ -812,7 +836,7 @@ function normalizeBlogCandidate(
     issues.push({
       level: 'warning',
       field: 'author',
-      message: '未指定作者，将使用全局设置里的默认作者',
+      message: t('shell.json.authorMissing'),
     })
   }
 
@@ -888,36 +912,44 @@ function normalizePageCandidate(
 
   // ---- 必填字段（脚本 require_text，全部是硬错误） ----
   if (!title) {
-    issues.push({ level: 'error', field: 'title', message: '缺少页面标题' })
+    issues.push({
+      level: 'error',
+      field: 'title',
+      message: t('shell.json.missingPageTitle'),
+    })
   }
   if (!bareHandle) {
     issues.push({
       level: 'error',
       field: 'url',
-      message: '缺少页面路径（url）',
+      message: t('shell.json.missingPageUrl'),
     })
   } else if (!ARTICLE_HANDLE_PATTERN.test(bareHandle)) {
     issues.push({
       level: 'error',
       field: 'url',
-      message: `路径 handle 只能包含小写字母、数字和连字符；当前值「${bareHandle}」`,
+      message: t('shell.json.pageHandlePattern', { handle: bareHandle }),
     })
   }
   if (!html) {
-    issues.push({ level: 'error', field: 'html', message: '缺少页面正文 HTML' })
+    issues.push({
+      level: 'error',
+      field: 'html',
+      message: t('shell.json.missingPageBody'),
+    })
   }
   if (!metaTitle) {
     issues.push({
       level: 'error',
       field: 'meta title',
-      message: '缺少 meta title（发布必填）',
+      message: t('shell.json.missingMetaTitle'),
     })
   }
   if (!metaDescription) {
     issues.push({
       level: 'error',
       field: 'td / meta description',
-      message: '缺少 meta description（发布必填）',
+      message: t('shell.json.missingMetaDescription'),
     })
   }
 
@@ -933,7 +965,7 @@ function normalizePageCandidate(
       issues.push({
         level: 'error',
         field: 'template',
-        message: '缺少 template：该栏目的模板由 JSON 指定，必须填写',
+        message: t('shell.json.templateRequired'),
       })
     }
   } else if (!template) {
@@ -941,14 +973,19 @@ function normalizePageCandidate(
       level: 'error',
       field: 'template',
       message: expectedTemplate
-        ? `缺少 template，该栏目要求「${expectedTemplate}」`
-        : '缺少 template，且该栏目未登记模板规格',
+        ? t('shell.json.templateMissingExpected', {
+            template: expectedTemplate,
+          })
+        : t('shell.json.templateMissingSpec'),
     })
   } else if (expectedTemplate && template !== expectedTemplate) {
     issues.push({
       level: 'error',
       field: 'template',
-      message: `template 必须是「${expectedTemplate}」，当前为「${template}」`,
+      message: t('shell.json.templateMismatch', {
+        expected: expectedTemplate,
+        actual: template,
+      }),
     })
   }
 
@@ -959,7 +996,10 @@ function normalizePageCandidate(
     issues.push({
       level: 'error',
       field: 'meta title',
-      message: `meta title 应在 ${spec.metaTitleMax} 个字符以内；当前 ${metaTitle.length}`,
+      message: t('shell.json.metaTitleTooLong', {
+        max: spec.metaTitleMax,
+        length: metaTitle.length,
+      }),
     })
   }
   if (spec?.metaDescriptionMin || spec?.metaDescriptionMax) {
@@ -974,7 +1014,11 @@ function normalizePageCandidate(
       issues.push({
         level: 'error',
         field: 'td / meta description',
-        message: `meta description 应在 ${spec.metaDescriptionMin}~${spec.metaDescriptionMax} 字符之间；当前 ${length}`,
+        message: t('shell.json.metaDescriptionRange', {
+          min: spec.metaDescriptionMin ?? 0,
+          max: spec.metaDescriptionMax ?? 0,
+          length,
+        }),
       })
     }
   }
@@ -986,7 +1030,10 @@ function normalizePageCandidate(
       issues.push({
         level: 'error',
         field: 'summary',
-        message: `summary 应至少 ${spec.summaryMin} 个字符；当前 ${summaryValue.length}`,
+        message: t('shell.json.summaryTooShort', {
+          min: spec.summaryMin,
+          length: summaryValue.length,
+        }),
       })
     }
   }
@@ -1007,7 +1054,7 @@ function normalizePageCandidate(
       issues.push({
         level: 'error',
         field: 'html',
-        message: `正文必须包含「${required}」`,
+        message: t('shell.json.bodyMustContain', { text: required }),
       })
     }
   }
@@ -1020,14 +1067,14 @@ function normalizePageCandidate(
       issues.push({
         level: 'error',
         field: 'html',
-        message: `${marker}：必须恰好有一个开标记 ${open}`,
+        message: t('shell.json.markerOpen', { marker, tag: open }),
       })
     }
     if (countOccurrences(html, close) !== 1) {
       issues.push({
         level: 'error',
         field: 'html',
-        message: `${marker}：必须恰好有一个闭标记 ${close}`,
+        message: t('shell.json.markerClose', { marker, tag: close }),
       })
     }
   }
@@ -1038,7 +1085,7 @@ function normalizePageCandidate(
       issues.push({
         level: 'error',
         field: 'html',
-        message: `正文包含未替换的占位串：${placeholder}`,
+        message: t('shell.json.forbiddenPlaceholder', { placeholder }),
       })
     }
   }
@@ -1048,14 +1095,13 @@ function normalizePageCandidate(
     issues.push({
       level: 'error',
       field: 'published',
-      message: 'published 必须为 true（该栏目的排期接口要求）',
+      message: t('shell.json.publishedMustBeTrue'),
     })
   } else if (pickRaw(raw, 'published') === false) {
     issues.push({
       level: 'warning',
       field: 'published',
-      message:
-        'JSON 中 published=false；实际是否上线由你在发布时选择的「发布方式」决定',
+      message: t('shell.json.publishedFalse'),
     })
   }
 
@@ -1065,7 +1111,7 @@ function normalizePageCandidate(
       issues.push({
         level: 'error',
         field: 'related_products',
-        message: 'related_products 必须为空数组；商品链接请直接写在正文里',
+        message: t('shell.json.relatedProductsMustBeEmpty'),
       })
     }
   }
@@ -1087,7 +1133,7 @@ function normalizePageCandidate(
     issues.push({
       level: 'warning',
       field: resolvedSourceKey,
-      message: `缺少 ${resolvedSourceKey} 来源信息；该栏目规格尚未核对，此处只做提示`,
+      message: t('shell.json.sourceUnverified', { key: resolvedSourceKey }),
     })
   }
   // Custom 文章（sourceKeySuffix）的来源对象是**可选**的：
@@ -1164,7 +1210,9 @@ export function parseJsonContent(
       filePath,
       detected: 'unknown',
       candidates: [],
-      error: `JSON 语法错误：${(error as Error).message}`,
+      error: t('shell.json.syntaxError', {
+        message: (error as Error).message,
+      }),
     }
   }
 
@@ -1240,7 +1288,9 @@ export function parseJsonContent(
         filePath,
         detected: 'page',
         candidates: [],
-        error: `解析失败：${(error as Error).message}`,
+        error: t('shell.json.parseFailed', {
+          message: (error as Error).message,
+        }),
       }
     }
   }
@@ -1251,8 +1301,7 @@ export function parseJsonContent(
     filePath,
     detected: 'unknown',
     candidates: [],
-    error:
-      '无法识别的 JSON 结构。期望：博客文章为数组（含 blog title / url / html代码），页面为单对象（含 url 与 template）。',
+    error: t('shell.json.unknownStructure'),
   }
 }
 
@@ -1267,13 +1316,18 @@ function errorCandidate(
     tempId: tempId(`${filePath}#${index}#error`),
     channelId: id,
     contentType: 'blog_article',
-    title: `(第 ${index + 1} 条解析失败)`,
+    title: t('shell.json.itemFailed', { n: index + 1 }),
     handle: '',
     bodyHtml: '',
     sourceFile: filePath,
     sourceIndex: index,
     publishKey: `${id}|${basename(filePath)}|${index}|`,
-    issues: [{ level: 'error', message: `解析失败：${message}` }],
+    issues: [
+      {
+        level: 'error',
+        message: t('shell.json.parseFailed', { message }),
+      },
+    ],
     publishable: false,
   }
 }
