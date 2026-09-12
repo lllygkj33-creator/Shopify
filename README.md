@@ -1,8 +1,10 @@
-# Zima 发布平台（zima-shopify）
+# Shopify 内容发布平台
 
-ZimaSpace 的 **Shopify 内容托管发布平台**：本地选文件夹 → 上传 JSON → 指定时间定时发布 → 在仪表盘看排期全景。
+**Shopify 内容托管发布平台**：本地选文件夹 → 上传 JSON → 指定时间定时发布 → 在仪表盘看排期全景。
 
 取代原先「命令行脚本 + 日期文件夹命名 + 每个脚本各自硬编码 token」的做法。
+仓库自带通用占位配置（`site.config.json`），接自己的店铺只需加一份
+`site.config.local.json` —— 见下方「站点配置」。
 
 > 当前状态：**前端 UI 框架已完成**（M1 全部 + M2/M3/M5 的界面部分）；
 > **后端已完成「配置与令牌」链路**（连接自检、24 小时令牌自动续期、栏目映射核对），
@@ -167,7 +169,7 @@ src/
 
 scripts/
 ├── verify-ui.mjs                真实浏览器冒烟检查
-└── fixtures/                    冒烟检查用的 JSON（复刻 GEO 真实结构）
+└── fixtures/                    冒烟检查用的 JSON（真实 JSON 结构，值已 token 化）
     ├── tech-ai-hub/batch.json     博客数组：一条无 class、一条只有 2 个 H2
     └── Discord/community.json     页面单对象：template=discord-page
 ```
@@ -191,7 +193,7 @@ scripts/
 
 ### 2. 定时发布用 Shopify 原生能力，不用本地调度器
 
-`GEO/publish_articles.py` 的现有做法是 `isPublished: false` + 未来 `publishDate`，
+参考实现的做法是 `isPublished: false` + 未来 `publishDate`，
 由 **Shopify 自己到点上线**。因此本项目不需要「到点触发发布」的 APScheduler 任务：
 
 - 本地没开机 → 文章照样按时发布（没有单点故障）
@@ -211,8 +213,8 @@ scripts/
 PRD §4.3 写的是「由 `html代码` 里的 class 推断博客」。但核对真实样本后发现：
 
 - `tech-ai-hub` 的正文是**裸 `<article>`，没有 class**
-- `buying-guide` 才有 `class="zima-buying-guide-article"`
-- class 用复数 `zima-product-comparisons-article`，而文件夹是单数 `product-comparison`
+- 只有部分博客栏目在正文里带 `<article class="...">`（值在栏目配置的 `htmlClass`）
+- 正文 class 与栏目文件夹名不一定同形（例如 class 用复数、文件夹用单数）
 
 所以实现为：**有 class 用 class，没有则落回当前栏目的默认博客**，并在不一致时给出提示
 （见 `resolveBlogName()`）。
@@ -226,7 +228,7 @@ PRD §4.3 写的是「由 `html代码` 里的 class 推断博客」。但核对�
 「本地 N 条 vs 线上 M 条对不上」的漂移问题。
 
 「未来的」这半句很关键：**排期不是平台独有的事**。内容可能是在 Shopify
-后台、或别的工具（GEO 那套脚本）排上去的 —— 实测店铺里就有 **172 条**
+后台、或别的工具排上去的 —— 实测店铺里就有 **172 条**
 这样的排期页面，平台一条都不知道。不拉进来的话仪表盘的「排期全景」是残缺的：
 用户明明排了 100 多条，界面写 0。所以同步要做两件事：
 
@@ -311,37 +313,36 @@ Shopify 的 `client_credentials` 流程换来的 `shpat_` 令牌**只有约 24 �
 
 ---
 
-## 排查记录：发现的两个真实问题
+## 排查记录：移植时踩到的两类坑
 
-### ① GEO 有两个栏目实际上根本发不出去 🔴
+### ① 博客标题必须与店铺**逐字一致**，否则根本发不出去 🔴
 
-`publish_articles.py` 的 `find_blog_gid()` 用 `casefold()` 做**精确标题匹配**，
-匹配不上直接 `raise RuntimeError`。而 `GEO/config.json` 里写的名称有两个与店铺实际不符：
+按标题匹配博客时用的是 `casefold()` **精确匹配**，匹配不上直接抛错。
+而配置里写的名称很容易与实际不符：
 
-| 栏目                 | `GEO/config.json` 写的 | 店铺实际              | 结果                                         |
-| -------------------- | ---------------------- | --------------------- | -------------------------------------------- |
-| tech-ai-hub          | `Tech & AI Hub`        | `Tech & AI HUB`       | ✅ casefold 能匹配（HUB 大小写差异）         |
-| support-tips         | `Support & Tips`       | `Support & Tips`      | ✅                                           |
-| product-comparison   | `Product Comparisons`  | `Product Comparisons` | ✅（但 handle 是复数 `product-comparisons`） |
-| **nas-server-setup** | `NAS Server Setup`     | `NAS & Server Setup`  | ❌ **发不出去**                              |
-| **buying-guide**     | `Buying Guides`        | `Buying Guide`        | ❌ **发不出去**                              |
+| 情况                  | 例子                                                                                | 结果               |
+| --------------------- | ----------------------------------------------------------------------------------- | ------------------ |
+| 只差大小写            | `Tech & AI **Hub**` vs `Tech & AI **HUB**`                                          | ✅ casefold 能匹配 |
+| 多了/少了一个词或符号 | `NAS Server Setup` vs `NAS **&** Server Setup`<br>`Buying Guides` vs `Buying Guide` | ❌ **发不出去**    |
 
-本项目已把 `src/config/channels.ts` 改成**店铺实际值**（并保留 handle），
-同时在设置页加了「栏目 → 博客映射自检」，把「配置值 vs 店铺实际值」直接摆出来，
-让这类不一致在设置页就暴露，而不是等发布失败才发现。
+所以栏目配置里的 `blogName` 必须是店铺里的**实际标题**，而 `blogHandle` 也一并保留。
+设置页还有「栏目 → 博客映射自检」，把「配置值 vs 店铺实际值」直接摆出来，
+让不一致在设置页暴露，而不是等发布失败才发现。
 
-> 顺带一个建议：**优先按 `blogHandle` 匹配，标题匹配只作兜底**。
+> 建议：**优先按 `blogHandle` 匹配，标题匹配只作兜底**。
 > handle 在 Shopify 里稳定且 URL 安全；标题随时可能被运营改掉，
 > 而标题一改，按标题匹配的发布器就会立刻失效。
 
-### ② 参考代码里的凭据是硬编码的真实值 🔴
+### ② 凭据绝不能写进代码 🔴
 
-你给的 token 参考代码、以及 `GEO/.env.example`、`geo_app/app_config.json`、
-`publish_articles.py` 里都出现了**明文真实凭据**（`shpat_` / `shpss_`）。
+移植时见过把**明文真实凭据**（`shpat_` / `shpss_`）直接写进脚本与示例配置的做法。
 
 本项目的处理：**任何位置都不写入明文**，只从 `.env` 读取（`.env` 已在 `.gitignore` 中）；
 接口只回传掩码；错误信息里的密钥会被自动替换（有测试覆盖）。
-`manual` 模式落盘的文件权限收紧到 `0600`。
+手动填写的 token 落盘权限收紧到 `0600`。
+
+> 如果你的参考实现里曾经提交过真实凭据，**去 Shopify 后台轮换掉** ——
+> 提交过的密钥即使后来删掉，也仍然留在 git 历史里。
 
 **仍建议在 Shopify 后台轮换 `client_id` / `client_secret`。**
 
@@ -391,7 +392,7 @@ Shopify 的 `client_credentials` 流程换来的 `shpat_` 令牌**只有约 24 �
     "meta title": "...",
     "meta description": "...",
     "summary": "...",
-    "html代码": "<article class=\"zima-buying-guide-article\">...</article>"
+    "html代码": "<article class=\"example-blog-a-article\">...</article>"
   }
 ]
 ```
@@ -420,27 +421,21 @@ Shopify 的 `client_credentials` 流程换来的 `shpat_` 令牌**只有约 24 �
 
 ---
 
-## 与 GEO 项目的对应关系
+## 与既有脚本做法的差异
 
-本项目的 Shopify API 逻辑**参考并移植** `GEO/publish_articles.py`（1587 行，明文可读）。
-移植时核对出几处与 PRD 描述不符的事实，已按实际代码为准：
+本项目的 Shopify API 逻辑是**基于既有脚本重新实现**的。移植时核对出几处假设与实际不符，
+按实际行为为准：
 
-| PRD 说法                                                    | 实际情况                                                                 |
-| ----------------------------------------------------------- | ------------------------------------------------------------------------ |
-| 现有 `.py` 带 `%TSD-Header-###%` 混淆前缀，需按已知逻辑重写 | **全仓库搜索零命中**，脚本都是明文 Python，可直接移植                    |
-| `page_geo.py` 为混淆文件                                    | 该文件**不存在**；GEO 只有博客 `articleCreate`，**页面发布器是全新工作** |
-| 发布时机靠日期文件夹决定                                    | 确实如此；新平台由 createdAt/publishDate 驱动，已脱离文件夹              |
-| Token 分散在各脚本                                          | 确实如此（且 `app_config.json` 里还是明文）；新平台收敛为一处            |
+| 常见假设                               | 实际情况                                                               |
+| -------------------------------------- | ---------------------------------------------------------------------- |
+| 现有脚本带混淆前缀，需要按已知逻辑重写 | 搜索零命中，脚本都是明文 Python，可直接阅读移植                        |
+| 存在一个专门的页面发布脚本             | **不存在**；既有实现只有博客 `articleCreate`，**页面发布器是全新工作** |
+| 发布时机靠日期文件夹决定               | 确实如此；新平台由 `createdAt` / `publishDate` 驱动，已脱离文件夹命名  |
+| Token 分散在各脚本                     | 确实如此（部分还是明文）；新平台收敛为一处，只从 `.env` 读             |
 
-默认值差异已收敛：`GEO/config.json` 用 `America/Chicago`，`geo_app/app_config.json` 用
-`Asia/Shanghai` + 23:59 —— 新平台**统一为 `Asia/Shanghai`**，这也与店铺实际的
-`shop.ianaTimezone`（实测 `Asia/Shanghai`）一致，避免排期时间出现 13~14 小时偏移。
-
-### ⚠️ 安全提醒
-
-`GEO/.env.example`、`GEO/geo_app/app_config.json`、`GEO/publish_articles.py` 中都出现过
-**明文真实的 `shpat_` token 与 `shpss_` client secret**。建议在 Shopify 后台**轮换这两个凭据**。
-本项目不会写入任何明文密钥，`.env` 已在 `.gitignore` 中。
+时区也统一了：既有配置里出现过 `America/Chicago` 与 `Asia/Shanghai` 两种，
+新平台**统一为 `Asia/Shanghai`**（可在站点配置里改），与店铺的 `shop.ianaTimezone`
+保持一致，避免排期时间出现十几小时偏移。
 
 ---
 
@@ -472,15 +467,19 @@ Shopify 的 `client_credentials` 流程换来的 `shpat_` 令牌**只有约 24 �
 
 ## 品牌标识
 
-- **favicon**：`public/images/favicon.svg` = ZimaSpace 官网的 `favicon.svg` **原样**
-  （`#F5F5F5` 圆角底 + 黑色 mark）—— 图标需要自带背景，所以不改成透明的单色字形。
-  `favicon.png` / `favicon_light.png` 由 `pnpm assets:favicon` 从该 SVG 生成（48×48）。
-- **侧边栏标识**：`src/assets/zima-mark.tsx` —— 用同一份官方路径数据，但**去掉底块**
-  并改用 `currentColor`，跟随侧边栏主题色。若保留 #F5F5F5 底块，
-  深色主题下会变成「黑字压深底」看不清。
+仓库自带的是**通用占位标识**，换成自己的即可 —— 不需要改代码逻辑：
 
-官网的 `logo_zima.svg` **不是矢量**（base64 的 PNG 套在 SVG 壳里，438×94），
-所以没有采用；需要带字标的地方用文字即可。
+- **favicon**：`public/images/favicon.svg` 是占位图形（圆角底 + 单色字形）。
+  图标需要自带背景，所以没有改成透明单色字形。
+  `favicon.png` / `favicon_light.png` 由 `pnpm assets:favicon` 从该 SVG 生成（48×48）。
+- **侧边栏标识**：`src/assets/brand-mark.tsx` 是一个中性几何字形，
+  用 `currentColor` 跟随侧边栏主题色 —— 这样亮色/暗色主题都能正常显示。
+  换成自己的 logo：把里面的 `<path d="...">` 换成你的 SVG 路径即可。
+- **品牌名**：不在代码里，来自站点配置的 `brand.name` / `brand.subtitle`
+  （见「站点配置」一节）。
+
+> 用固定色（而不是 `currentColor`）的 logo 在深色主题下容易出现
+> 「深色字压深色底」看不清的情况，替换时留意一下。
 
 ---
 
@@ -500,7 +499,7 @@ SSL_CERT_FILE=/etc/ssl/cert.pem .venv/bin/pip install -r requirements.txt
 装完 httpx 后 certifi 就位，后续请求走 certifi 不再受影响。
 `backend/app/ssl_fix.py` 做了统一兜底（优先 certifi，其次 `/etc/ssl/cert.pem`），
 `/api/health` 会返回当前生效的 CA 文件与默认上下文的 CA 数量，便于排查。
-这与 `GEO/geo_app/ssl_fix.py` 的处理一致。
+这与常见的 macOS Python 证书处理方式一致。
 
 ### pnpm 11 的构建脚本白名单
 

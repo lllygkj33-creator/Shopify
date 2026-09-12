@@ -139,7 +139,7 @@ Shopify 侧留作**事实校验**：定时对账，把线上真实状态同步�
 （`backend/app/shopify/channel_map.py`，模板表从发布规格推导，
 博客表与前端 `channels.ts` 交叉校验）。
 
-认不出栏目的**不入库但报数** —— 实测有 2 篇排期文章在 `zima-campaign-hub`
+认不出栏目的**不入库但报数** —— 实测有 2 篇排期文章在 某个不在平台栏目内的博客
 博客里，不属于平台任何栏目。
 
 **2. 对账已知对象**
@@ -178,7 +178,7 @@ Shopify 侧留作**事实校验**：定时对账，把线上真实状态同步�
 
 ### 表结构
 
-见 `backend/app/storage.py`。库落在 `data/zima_shopify.db`（已在 `.gitignore` 中），
+见 `backend/app/storage.py`。库落在 `data/` 下的 SQLite 文件（已在 `.gitignore` 中），
 可用环境变量 `DATABASE_PATH` 覆盖（测试就指向临时文件）。
 
 ### 改期 / 取消排期：必须同时改 Shopify 侧
@@ -240,7 +240,7 @@ Shopify 侧留作**事实校验**：定时对账，把线上真实状态同步�
 | `url` 必须匹配 `^[a-z0-9]+(-[a-z0-9]+)*$`（大写 / 下划线 / 中文会被 Shopify 拒） | 错误 |
 | 正文没有 `[[related_products_1]]` 时需 **≥ 4 个 H2** 才能自动注入 | 错误 |
 | 无法确定博客归属（无 class 且栏目无默认博客） | 错误 |
-| 正文未带 `zima-*-article` class → 回落栏目默认博客 | 提示 |
+| 正文未带栏目配置的 `htmlClass` → 回落栏目默认博客 | 提示 |
 | 未指定 `author` → 用全局默认作者 | 提示 |
 
 ### 页面 —— **规则按栏目不同**，不要写死在通用代码里
@@ -271,7 +271,7 @@ Shopify 侧留作**事实校验**：定时对账，把线上真实状态同步�
 | 其他来源校验 | `author_profile_url` 前缀 `/u/` | `channel_name` 剥掉 `#` | `platform` 必须 `MakerWorld`、`model_id` 纯数字 |
 | 图片规则 | `alt` + `title` | 同左 | 再加 **`alt` 长度 50~100**、**必须 `loading="lazy"`** |
 | 链接规则 | `title` | 同左 | 再加：禁止 anchor 文本（`docs`/`see…guide`/`click here`…）、内链不得 `target="_blank"`、外链必须 `_blank`+`noopener`+`noreferrer`、第三方必须 `nofollow` | 同左，**且内联锚文本必须 2~6 个英文单词**（媒体卡片豁免） |
-| 正文要求 | — | — | **必须引用原始模型页 URL** | **必须含「A Note from Zima」与「The Story Is Still Being Written」** | **8 对 COMPARE 标记各恰好一次 + `data-zima-compare-meta` + 禁占位串 + `published` 必须 true + `related_products` 必须为空** | 无专属要求 |
+| 正文要求 | — | — | **必须引用原始模型页 URL** | **必须含栏目配置里的固定文案** | **8 对 COMPARE 标记各恰好一次 + 栏目配置里的 `requireMetaAttribute` + 禁占位串 + `published` 必须 true + `related_products` 必须为空** | 无专属要求 |
 | 反链 | — | — | — | **可选：发布后往已有博客文章追加幂等上下文反链** | — |
 | 资源注入 | — | — | — | — | **发布时自动注入 3 个 YouTube + 3 篇博客卡片** |
 
@@ -419,7 +419,7 @@ MakerWorld / VS 保留更严的一套（含「站内链接不得开新标签页�
       // --- 发布前置引用 ---
       "author": "Author Name",                    // metaobject 引用
       "reviewer": "Reviewer One",           // metaobject 引用
-      "relatedProducts": ["ZimaCube 2 ..."],    // 按标题解析为 product GID
+      "relatedProducts": ["<产品标题>"],    // 按标题解析为 product GID
       "tags": ["..."],
       // --- 来源追溯 ---
       "sourceFile": "buying-guide/batch4.json",

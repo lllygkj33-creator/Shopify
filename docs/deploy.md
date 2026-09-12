@@ -90,7 +90,7 @@ GitHub 网页 → New repository：
 ### 1.4 关联并推送
 
 ```bash
-cd zima-shopify
+cd Shopify            # 仓库名
 git remote add origin git@github.com:<用户>/<仓库>.git   # 已存在则 set-url
 git push -u origin main
 ```
@@ -103,7 +103,7 @@ git ls-remote --heads origin
 git rev-parse HEAD
 
 # 敏感文件确认没上去
-for f in site.config.local.json .env data/settings.json data/zima_shopify.db; do
+for f in site.config.local.json .env data/settings.json data/*.db; do
   git ls-files --error-unmatch "$f" >/dev/null 2>&1 && echo "❌ $f 被跟踪" || echo "✓ $f 未跟踪"
 done
 ```
@@ -155,12 +155,12 @@ done
 | 容器内路径 | 内容 |
 |---|---|
 | `/data/settings.json` | 界面里保存的设置（店铺、时区、默认作者/评审人、模板清单） |
-| `/data/zima_shopify.db` | SQLite：平台发过的 + 线上未来排期 |
+| `/data/<数据库文件>` | SQLite：平台发过的 + 线上未来排期 |
 | `/data/publish_history.jsonl` | 发布历史 |
 | `/data/manual_token.json` | 手动填的 token（代码里刻意单独放、权限 0600） |
 | `/config/site.config.local.json` | 你的真实域名/品牌/博客名/主题模板名 |
 
-对应环境变量 `DATABASE_PATH=/data/zima_shopify.db`（数据目录由 `DATA_DIR` 决定，
+对应环境变量 `DATABASE_PATH=/data/<数据库文件>`（数据目录由 `DATA_DIR` 决定，
 容器里指向 `/data`）。
 
 ### 2.4 凭据：走环境变量，绝不进镜像
@@ -187,16 +187,16 @@ SYNC_INTERVAL_MINUTES=15
 
 ```yaml
 services:
-  zima-shopify:
+  content-publisher:
     build: .
-    image: zima-shopify:latest
-    container_name: zima-shopify
+    image: content-publisher:latest
+    container_name: content-publisher
     restart: unless-stopped
     ports:
       - "8848:8000"
     environment:
       TZ: Asia/Shanghai
-      DATABASE_PATH: /data/zima_shopify.db
+      DATABASE_PATH: /data/content.db
       SHOPIFY_SHOP_DOMAIN: ${SHOPIFY_SHOP_DOMAIN}
       SHOPIFY_CLIENT_ID: ${SHOPIFY_CLIENT_ID}
       SHOPIFY_CLIENT_SECRET: ${SHOPIFY_CLIENT_SECRET}
@@ -321,7 +321,9 @@ ZimaOS 的 App Store 支持添加**自定义容器**：在 Web UI 里粘贴 Dock
 （或填镜像 / 端口 / 卷）。它是 CasaOS 系，社区里"通过 webui 自己加的
 docker-compose/cli 容器"说的就是这条路径 —— 参考
 [IceWhaleTech/ZimaOS#328](https://github.com/IceWhaleTech/ZimaOS/issues/328)、
-[ZimaOS 1.7 应用管理](https://shop.zimaspace.com/blogs/zima-campaign-hub/zimaos-1-7-self-hosted-app-management)。
+[IceWhale 官方仓库](https://github.com/IceWhaleTech/ZimaOS)。
+
+界面上的具体位置请以你机器上的实际版本为准。
 
 > ⚠️ 界面上的**具体按钮文案**请以你机器上的实际版本为准 —— 我没有在 ZimaOS 界面里
 > 操作过，这里只写机制与需要填的内容。
@@ -358,10 +360,9 @@ git clone https://<用户名>:<PAT>@github.com/<用户>/<仓库>.git
 在 Mac 上：
 
 ```bash
-git archive --format=tar.gz -o /tmp/zima-shopify.tar.gz HEAD
+git archive --format=tar.gz -o /tmp/content-publisher.tar.gz HEAD
 ```
-把这个 tar.gz 连同 `.env`、`site.config.local.json` 一起拷到设备（共享文件夹 / scp），
-在设备上解开即可。
+把这个 tar.gz 连同 `.env`、`site.config.local.json` 一起拷到设备（共享文件夹 / scp），在设备上解开即可。
 
 > ⚠️ `.env` 里有 `client_secret`，传输走可信通道（局域网共享 / scp），别用微信之类中转。
 
@@ -382,10 +383,10 @@ docker compose up -d --build
 **B. 本机构建后推镜像（适合多机 / 不想在设备上装构建工具链）**
 
 ```bash
-docker build -t <registry>/zima-shopify:1.0 .
-docker push <registry>/zima-shopify:1.0
+docker build -t <registry>/content-publisher:1.0 .
+docker push <registry>/content-publisher:1.0
 ```
-设备侧 compose 里把 `build: .` 换成 `image: <registry>/zima-shopify:1.0`。
+设备侧 compose 里把 `build: .` 换成 `image: <registry>/content-publisher:1.0`。
 
 > 本机（Mac）没有 Docker 时只能走 B 的前提也不成立 —— 那就走 A 或 C，
 > 让**有 Docker 的那台机器**去构建。
@@ -450,7 +451,7 @@ SQLite 用 WAL 模式，冷备前先停容器最稳。
 git pull
 docker compose up -d --build     # A 方案
 # 或
-docker pull <registry>/zima-shopify:<新版本> && docker compose up -d   # B 方案
+docker pull <registry>/content-publisher:<新版本> && docker compose up -d   # B 方案
 ```
 
 `data/` 是挂载卷，升级不动它。
