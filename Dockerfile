@@ -7,12 +7,9 @@
 # 构建：
 #   docker build -t zima-shopify:latest .
 #
-# 注意：**凭据**不打进镜像，运行时用环境变量/挂载给（见 docker-compose.yml）。
-# 但**站点配置**会被编译进前端产物：`src/config/site.ts` 在 `pnpm build` 时用
-# import.meta.glob 读取 site.config.local.json，所以构建时该文件在不在，
-# 决定了前端是「通用占位值」还是「你的真实域名/品牌」。
-#   - CI 构建（仓库里没有该文件，它被 gitignore）→ 干净通用版，可公开
-#   - 本机/设备上用真实配置构建 → 镜像里含你的真实值，**不要推公开仓库**
+# 注意：凭据与真实站点配置**都不进镜像**，运行时用挂载/环境变量给（见 docker-compose.yml）。
+# 站点配置由后端在响应 index.html 时注入（backend/app/main.py 的 inject_site_config），
+# 所以前端不需要在构建期拿到它 —— 镜像永远是通用版，可以公开分发。
 
 # ---------------------------------------------------------------------------
 # 阶段 1：构建前端
@@ -46,7 +43,7 @@ ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     # 后端读的数据目录（SQLite / 设置 / 发布历史 / 手动 token）
     # 对应 .gitignore 里的 /data/，运行时用卷挂载进来
-    DATABASE_PATH=/app/data/zima_shopify.db \
+    DATABASE_PATH=/app/data/content_publisher.db \
     # 前端构建产物位置；存在即由后端托管
     FRONTEND_DIST=/app/dist
 

@@ -57,8 +57,8 @@ function buildMockSettings(): GlobalSettings {
       ? site.defaultReviewers
       : ['Reviewer One', 'Reviewer Two'],
     relatedProductTitles: [
-      'ZimaCube 2 Personal Cloud Home NAS',
-      'ZimaBoard 2 - Mini Home Server for Your Big Idea',
+      'ExampleCube 2 Personal Cloud Home NAS',
+      'ExampleBoard 2 - Mini Home Server for Your Big Idea',
     ],
     defaultTimezone: 'Asia/Shanghai',
     defaultPublishTime: '09:30',
@@ -231,7 +231,7 @@ const SEEDS: Seed[] = [
   },
   {
     channelId: 'vs',
-    title: 'ZimaCube 2 vs Synology DS923+ for Home Labs',
+    title: 'ExampleCube 2 vs Synology DS923+ for Home Labs',
     handle: '/pages/example-product-a-vs-example-nas',
     status: 'scheduled',
     dayOffset: 5,
@@ -240,7 +240,7 @@ const SEEDS: Seed[] = [
   },
   {
     channelId: 'makerworld',
-    title: 'MakerWorld: 3D-Printed ZimaBoard Wall Mount',
+    title: 'MakerWorld: 3D-Printed ExampleBoard Wall Mount',
     handle: '/pages/makerworld-example-wall-mount',
     status: 'draft',
     dayOffset: 7,
@@ -387,7 +387,7 @@ export const mockApi = {
   checkConnection() {
     return {
       ok: true,
-      shopName: 'ZimaSpace',
+      shopName: 'Demo Store',
       apiVersion: settings.apiVersion,
       scopes: ['read_content', 'write_content'],
       missingScopes: [],

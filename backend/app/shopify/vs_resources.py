@@ -5,7 +5,7 @@
 VS 对比页正文里的 `<!-- COMPARE:RESOURCES --> … <!-- /COMPARE:RESOURCES -->`
 是一个占位区块。发布器会：
 
-1. 从**标题**里识别涉及哪些 Zima 产品（ZimaCube 2 / ZimaBoard 2 / ZimaBlade）
+1. 从**标题**里识别涉及哪些 Zima 产品（ExampleCube 2 / ExampleBoard 2 / ExampleBlade）
 2. 按分配规则从维护好的资源库里抽 **3 个 YouTube 视频 + 3 篇博客**
 3. 生成统一的卡片 HTML，替换掉标记之间的内容
 
@@ -114,9 +114,11 @@ def resource_allocation(product_keys: Iterable[str]) -> dict[str, int]:
             unique_keys.append(key)
 
     if not unique_keys:
+        # 产品名从配置读（vs.productLabels），不在代码里写死产品名 ——
+        # 否则换一个部署就得改代码，而且错误提示会指向别的店铺的产品
+        known = " / ".join(str(label) for label in PRODUCT_LABELS.values())
         raise ResourceInjectionError(
-            "无法从标题里识别出 ZimaCube 2 / ZimaBoard 2 / ZimaBlade，"
-            "无法选择配套资源"
+            f"无法从标题里识别出 {known or '已配置的产品'}，无法选择配套资源"
         )
     if len(unique_keys) == 1:
         return {unique_keys[0]: 3}

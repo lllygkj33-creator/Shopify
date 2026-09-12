@@ -451,7 +451,7 @@ $ curl -s http://127.0.0.1:8848/api/health
 | 通用占位值（`Content Publisher` / `example-store.test`） | 页面上不出现 ✅ |
 | 控制台报错 | 0 ✅ |
 | `/api/*` 请求 | `settings` / `contents/timeline` / `contents/stats` 全部 200 ✅ |
-| 设置页 | 店铺 `zimaboard.myshopify.com`、API `2026-04`、品牌 token `ZimaSpace` ✅ |
+| 设置页 | 店铺 `zimaboard.myshopify.com`、API `2026-04`、品牌 token `Demo Store` ✅ |
 
 最容易忽略、但最该做的一项 —— **验证容器真的能连上 Shopify**：
 

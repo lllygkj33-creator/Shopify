@@ -43,13 +43,13 @@ from . import config as app_config
 def _resolve_db_path() -> Path:
     """数据库路径。
 
-    默认 `data/zima_shopify.db`；可用环境变量 `DATABASE_PATH` 覆盖
+    默认 `data/content_publisher.db`；可用环境变量 `DATABASE_PATH` 覆盖
     （`.env.example` 里已经声明了这个变量，测试也用它指向临时文件）。
     """
     configured = os.environ.get("DATABASE_PATH", "").strip()
     if configured:
         return Path(configured).expanduser()
-    return app_config.DATA_DIR / "zima_shopify.db"
+    return app_config.DATA_DIR / "content_publisher.db"
 
 
 DB_PATH = _resolve_db_path()

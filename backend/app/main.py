@@ -11,18 +11,23 @@ from __future__ import annotations
 import asyncio
 import contextlib
 from datetime import datetime, timezone
+from html import escape as html_escape
+import json
 import logging
+from pathlib import Path
+import re
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.staticfiles import StaticFiles
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from . import config as app_config
+from .site_config import site_config
 from .storage import store
 from . import ssl_fix  # noqa: F401  导入即生效（macOS CA 修复）
 from .shopify.backlink import (
@@ -1588,21 +1593,83 @@ async def debug_token() -> dict[str, Any]:
 # 必须在**所有 /api 路由之后**注册 —— 这是挂在根路径上的兜底路由。
 # 开发时不构建前端（dist 不存在），这里自动跳过，两边各跑各的。
 
+SITE_CONFIG_GLOBAL = "__SITE_CONFIG__"
+
+
+def page_title(config: dict[str, Any]) -> str:
+    """配置里的品牌名 → 浏览器标题（`品牌 · 副标题`）；没配品牌名就用模板里的占位标题。"""
+    brand = config.get("brand") or {}
+    name = str(brand.get("name") or "").strip()
+    subtitle = str(brand.get("subtitle") or "").strip()
+    if not name:
+        return ""
+    return f"{name} · {subtitle}" if subtitle else name
+
+
+def inject_site_config(html: str, config: dict[str, Any]) -> str:
+    """把生效的站点配置塞进 index.html（放在 `</head>` 前），并替换浏览器标题。
+
+    为什么不在构建期烘焙：
+      前端原本在 `pnpm build` 时把 `site.config.local.json` 编译进产物，
+      于是"想用真实配置"就必须让那个文件出现在构建上下文里 —— 构建出的镜像
+      就带上了真实域名/品牌，不能公开。改成运行期注入后，**镜像永远是通用版**，
+      真正生效的配置由后端（容器里读挂载的 local 文件）在响应 index.html 时给出。
+
+    JSON 里的 `</` 转义成 `<\\/`：配置值一旦含 `</script>` 就会截断脚本。
+    """
+    title = page_title(config)
+    if title:
+        html = re.sub(
+            r"<title>.*?</title>",
+            f"<title>{html_escape(title)}</title>",
+            html,
+            count=1,
+            flags=re.DOTALL,
+        )
+
+    payload = json.dumps(config, ensure_ascii=False).replace("</", "<\\/")
+    tag = f"<script>window.{SITE_CONFIG_GLOBAL}={payload}</script>"
+    if "</head>" in html:
+        return html.replace("</head>", f"{tag}</head>", 1)
+    return tag + html
+
+
+def _runtime_index_html() -> str | None:
+    """读 dist/index.html 并注入配置；没有构建产物时返回 None。"""
+    if _frontend_dist is None:
+        return None
+    index_file = Path(_frontend_dist) / "index.html"
+    if not index_file.is_file():
+        return None
+    return inject_site_config(
+        index_file.read_text(encoding="utf-8"), site_config.raw
+    )
+
 
 class SpaStaticFiles(StaticFiles):
-    """找不到文件时回落到 index.html。
+    """找不到文件时回落到 index.html；并在响应 index.html 时注入站点配置。
 
     前端是客户端路由（TanStack Router），直接打开 `/settings`、`/channels/x`
     这类路径时磁盘上没有对应文件 —— 不回落就是 404。
     """
 
     async def get_response(self, path: str, scope):  # type: ignore[override]
+        # html=True 时 `/` 会被规范化成 `.`，一并当作 index 处理
+        is_index = path in ("", ".", "index.html")
+        if is_index:
+            injected = _runtime_index_html()
+            if injected is not None:
+                return HTMLResponse(injected, headers={"Cache-Control": "no-store"})
+
         try:
             return await super().get_response(path, scope)
         except StarletteHTTPException as error:
-            if error.status_code == 404:
-                return await super().get_response("index.html", scope)
-            raise
+            if error.status_code != 404:
+                raise
+            injected = _runtime_index_html()
+            if injected is not None:
+                return HTMLResponse(injected, headers={"Cache-Control": "no-store"})
+            return await super().get_response("index.html", scope)
 
 
 _frontend_dist = app_config.resolved_frontend_dist()

@@ -186,7 +186,7 @@ async def test_verify_parses_shop_and_scopes():
                 200,
                 json={
                     "data": {
-                        "shop": {"name": "ZimaSpace", "myshopifyDomain": "your-store.myshopify.com"},
+                        "shop": {"name": "Demo Store", "myshopifyDomain": "your-store.myshopify.com"},
                         "currentAppInstallation": {
                             "accessScopes": [
                                 {"handle": "read_content"},
@@ -207,7 +207,7 @@ async def test_verify_parses_shop_and_scopes():
     result = await client.verify()
 
     assert result.ok is True
-    assert result.shop_name == "ZimaSpace"
+    assert result.shop_name == "Demo Store"
     assert result.shop_domain == "your-store.myshopify.com"
     assert "read_content" in result.scopes
     assert "read_files" in result.scopes
@@ -222,7 +222,7 @@ async def test_verify_flags_missing_write_scope():
                 200,
                 json={
                     "data": {
-                        "shop": {"name": "ZimaSpace"},
+                        "shop": {"name": "Demo Store"},
                         "currentAppInstallation": {
                             "accessScopes": [{"handle": "read_content"}]
                         },

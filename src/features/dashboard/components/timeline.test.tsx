@@ -31,7 +31,7 @@ function barsToday(count: number): TimelineBar[] {
     return {
       id: `bar-${index}`,
       channelId: CHANNEL_ID,
-      title: `ZimaBoard 2 vs ZimaBlade: Which Home Server Should You Build ${index}`,
+      title: `ExampleBoard 2 vs ExampleBlade: Which Home Server Should You Build ${index}`,
       handle: `handle-${index}`,
       status: 'scheduled',
       contentType: 'page',
@@ -157,7 +157,7 @@ describe('Timeline 按时间格聚合', () => {
       document.querySelectorAll('[data-testid="timeline-chip"]')
     ).map((el) => el.textContent ?? '')
     // 清单里是**完整标题**（那里有宽度），与块上只放条数相反
-    expect(titles[0]).toContain('ZimaBoard 2 vs ZimaBlade')
+    expect(titles[0]).toContain('ExampleBoard 2 vs ExampleBlade')
   })
 
   it('点清单里的单项会把该条回传给调用方', async () => {
@@ -179,7 +179,7 @@ describe('Timeline 按时间格聚合', () => {
     await userEvent.click(first)
 
     expect(onSelect).toHaveBeenCalledTimes(1)
-    expect(onSelect.mock.calls[0][0].title).toContain('ZimaBoard')
+    expect(onSelect.mock.calls[0][0].title).toContain('ExampleBoard')
   })
 
   it('只有一条时点了直接开详情，不弹清单', async () => {

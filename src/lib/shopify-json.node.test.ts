@@ -706,10 +706,10 @@ const DISCORD_HTML_4H2 =
 
 /** Discord 的 meta description 必须落在 120~170 字符 */
 const DISCORD_META_DESCRIPTION =
-  'ZimaCube 1 runs its drives hot when airflow is restricted. This thread covers bay spacing, fan curves, and front-panel obstructions that keep temperatures safe.'
+  'ExampleCube 1 runs its drives hot when airflow is restricted. This thread covers bay spacing, fan curves, and front-panel obstructions that keep temperatures safe.'
 
 const DISCORD_SOURCE = {
-  title: 'ZimaCube 1 HDD Temperature and Cooling',
+  title: 'ExampleCube 1 HDD Temperature and Cooling',
   url: 'https://discord.com/channels/123456789/987654321/555555555',
   excerpt: 'A thread about drive temperatures and airflow.',
   starter_name: 'Eric Brown',
@@ -720,8 +720,8 @@ const DISCORD_SOURCE = {
 
 function discordPage(overrides: Record<string, unknown> = {}) {
   return JSON.stringify({
-    title: 'ZimaCube 1 HDD Running Hot',
-    meta_title: 'ZimaCube 1 HDD Temperature: Improve Cooling',
+    title: 'ExampleCube 1 HDD Running Hot',
+    meta_title: 'ExampleCube 1 HDD Temperature: Improve Cooling',
     td: DISCORD_META_DESCRIPTION,
     url: '/pages/examplecube-1-hdd-temperature-cooling-airflow',
     template: 'discord-page',

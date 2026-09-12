@@ -556,7 +556,7 @@ function BlockFace({ cell }: { cell: Bucket }) {
       {/*
         块上只放**简要信息**：条数 + 状态构成，不放标题。
         一格通常只有一百来像素，塞完整标题必然被裁成
-        「1ZimaBoard 2 vs ZimaBlade: Which Home Se」这种半截字，
+        「1ExampleBoard 2 vs ExampleBlade: Which Home Se」这种半截字，
         看着像溢出了格子。完整标题在悬停清单里（那里有宽度）。
       */}
       <span className='flex min-w-0 items-baseline gap-1'>
