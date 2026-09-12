@@ -155,12 +155,12 @@ done
 | 容器内路径 | 内容 |
 |---|---|
 | `/data/settings.json` | 界面里保存的设置（店铺、时区、默认作者/评审人、模板清单） |
-| `/data/<数据库文件>` | SQLite：平台发过的 + 线上未来排期 |
+| `/app/data/` 下的 SQLite 文件 | SQLite：平台发过的 + 线上未来排期 |
 | `/data/publish_history.jsonl` | 发布历史 |
 | `/data/manual_token.json` | 手动填的 token（代码里刻意单独放、权限 0600） |
 | `/config/site.config.local.json` | 你的真实域名/品牌/博客名/主题模板名 |
 
-对应环境变量 `DATABASE_PATH=/data/<数据库文件>`（数据目录由 `DATA_DIR` 决定，
+对应环境变量 `DATABASE_PATH`（Dockerfile 里指向 `/app/data/` 下的库文件；数据目录由 `DATA_DIR` 决定，
 容器里指向 `/data`）。
 
 ### 2.4 凭据：走环境变量，绝不进镜像
@@ -196,13 +196,12 @@ services:
       - "8848:8000"
     environment:
       TZ: Asia/Shanghai
-      DATABASE_PATH: /data/content.db
       SHOPIFY_SHOP_DOMAIN: ${SHOPIFY_SHOP_DOMAIN}
       SHOPIFY_CLIENT_ID: ${SHOPIFY_CLIENT_ID}
       SHOPIFY_CLIENT_SECRET: ${SHOPIFY_CLIENT_SECRET}
       SYNC_INTERVAL_MINUTES: "15"
     volumes:
-      - ./data:/data
+      - ./data:/app/data
       - ./site.config.local.json:/app/site.config.local.json:ro
     env_file:
       - .env
@@ -328,43 +327,36 @@ docker-compose/cli 容器"说的就是这条路径 —— 参考
 > ⚠️ 界面上的**具体按钮文案**请以你机器上的实际版本为准 —— 我没有在 ZimaOS 界面里
 > 操作过，这里只写机制与需要填的内容。
 
-### 3.2 设备上怎么拿到代码（仓库是私有的，这步要处理）
+### 3.2 设备上怎么拿到代码
 
-Mac 上那两个文件（`.env`、`site.config.local.json`）不在仓库里，也得单独带过去。
-
-**A. Deploy Key（推荐，一次性配好，之后 `git pull` 就能升级）**
-
-在 ZimaOS 的终端里：
+**仓库已公开**，设备上直接克隆即可，不需要任何凭据：
 
 ```bash
-ssh-keygen -t ed25519 -f ~/.ssh/deploy -N ""
-cat ~/.ssh/deploy.pub
+git clone https://github.com/<用户>/Shopify.git
+cd Shopify
 ```
 
-把公钥贴到仓库的 **Settings → Deploy keys → Add deploy key**（**不要**勾
-"Allow write access"，只读就够）。然后：
+两个**不在仓库里**的文件（`.env` 与 `site.config.local.json`）要单独带过去：
 
 ```bash
-git clone git@github.com:<用户>/<仓库>.git
+# 在 Mac 上（两个文件都在仓库根目录，已被 gitignore）
+scp .env site.config.local.json <用户>@<设备IP>:~/Shopify/
 ```
 
-**B. HTTPS + 令牌**
+> ⚠️ `.env` 里有 `client_secret`，传输走局域网 / scp 这类可信通道，别用 IM 中转。
 
-```bash
-git clone https://<用户名>:<PAT>@github.com/<用户>/<仓库>.git
-```
-注意：令牌会留在 `.git/config` 里，设备被人碰到就等于泄露。
+<details>
+<summary>如果仓库仍设为私有（备选）</summary>
 
-**C. 打包拷过去（一次性，最简单，但升级要重拷）**
+**A. Deploy Key（推荐）** —— 设备上 `ssh-keygen`，公钥贴到仓库
+Settings → Deploy keys（只勾读权限），之后 `git clone git@github.com:...`。
 
-在 Mac 上：
+**B. HTTPS + PAT** —— 能用，但令牌会留在 `.git/config` 里，设备被人碰到就等于泄露。
 
-```bash
-git archive --format=tar.gz -o /tmp/content-publisher.tar.gz HEAD
-```
-把这个 tar.gz 连同 `.env`、`site.config.local.json` 一起拷到设备（共享文件夹 / scp），在设备上解开即可。
+**C. 打包拷过去** —— Mac 上 `git archive --format=tar.gz -o /tmp/repo.tar.gz HEAD`，
+连同两个文件一起拷到设备解开。一次性最省事，但升级要重拷。
 
-> ⚠️ `.env` 里有 `client_secret`，传输走可信通道（局域网共享 / scp），别用微信之类中转。
+</details>
 
 ### 3.3 镜像从哪来
 
@@ -399,9 +391,27 @@ docker push <registry>/content-publisher:1.0
 | 卷 | `data` 目录 + `site.config.local.json`（只读挂载） |
 | 环境变量 | 店铺凭据 + `TZ=Asia/Shanghai` |
 | 重启策略 | `unless-stopped`，设备重启后自动起来 |
+| **构建 vs 镜像** | 自定义安装界面通常只让填**镜像名**，不一定支持 `build:` —— 先在终端 `docker compose up -d --build` 把镜像建出来（compose 里已经写了 `image:` 名字），界面上就能引用它 |
 | 时区 | 设 `TZ=Asia/Shanghai` 让**日志时间戳**好读。**它不影响排期正确性** —— 见下方纠正 |
 
-### 3.5 安全边界（重要）
+### 3.5 起来之后怎么确认是好的
+
+```bash
+docker compose ps                      # 状态是 running
+docker compose logs -f --tail=50       # 看有没有报错
+curl -s http://127.0.0.1:8848/api/health   # 设备本机
+```
+
+浏览器打开 `http://<设备IP>:8848`，然后：
+
+| 检查 | 期望 |
+|---|---|
+| 仪表盘 | **没有**「演示数据模式」角标（有角标说明前端是用 mock 模式构建的） |
+| 设置页 | 店铺域名是你的真实域名，「栏目映射自检」5 行全 ✓ |
+| 点「立即同步」 | 返回「拉到 N 条未发布排期」，N 与店铺实际情况相符 |
+| 栏目页 | 能选本地文件夹、解析出候选、校验通过 |
+
+### 3.6 安全边界（重要）
 
 **这个平台没有登录鉴权。** 端口暴露到公网 = 把你的 Shopify 发布权公开。
 建议：
