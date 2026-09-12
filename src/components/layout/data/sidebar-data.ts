@@ -62,8 +62,8 @@ export const sidebarData: SidebarData = {
     // 品牌名来自站点配置（site.config.local.json 里放真实值）
     name: site.brandName,
     subtitle: site.brandSubtitle,
-    // 用 ZimaSpace 官方标识（取自官网 favicon.svg 的路径，
-    // 去掉底块并改用 currentColor，以便跟随侧边栏主题色）
+    // 用 Shopify 官方标识（购物袋 logo），一眼看出内容发到哪去；
+    // 组件内用 currentColor，以便跟随侧边栏主题色。
     logo: BrandMark,
   },
   navGroups: [
