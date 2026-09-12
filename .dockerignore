@@ -15,10 +15,15 @@ backend/.venv
 .git
 .gitignore
 
-# 本地配置与凭据（运行时用挂载给容器）
+# 凭据（运行时用环境变量/挂载给容器，绝不进镜像）
 .env
 .env.real
-site.config.local.json
+
+# 说明：site.config.local.json **故意不排除**。
+# 原因是前端配置在 `pnpm build` 时就被编译进 dist（import.meta.glob），
+# 所以想在设备上跑真实店铺，构建时必须能读到它，否则前端只有通用占位值。
+# 它已被 .gitignore 忽略，仓库里和 CI 上都不存在 → CI 出的镜像仍是通用版。
+# 代价：本地用它构建出的镜像里**含你的真实域名/品牌**，绝不能推到公开仓库。
 
 # 运行期数据（SQLite / 设置 / 历史 / 手动 token）
 data
