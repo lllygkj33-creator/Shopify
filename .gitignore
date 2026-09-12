@@ -53,5 +53,5 @@ __pycache__/
 # 本地部署覆盖（真实域名/品牌/产品名），绝不提交
 site.config.local.json
 
-# ZimaOS 导入用的 compose（含真实凭据）
-zimaos-import.local.yml
+# ZimaOS 面板应用定义（含真实路径与应用 id；凭据仍在 .env 里）
+zimaos-app.local.yml

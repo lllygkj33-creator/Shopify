@@ -1,0 +1,73 @@
+# ZimaOS 面板应用定义（通用模板）。
+#
+# 把这份文件复制成 `zimaos-app.local.yml` 再填真实值，然后整段粘进
+# ZimaOS dashboard 的「自定义安装 / Docker Compose」。
+# `zimaos-app.local.yml` 已被 .gitignore 忽略 —— 真实路径与真实应用 id 不进公开仓库。
+#
+# 字段规范（官方）：https://www.zimaspace.com/docs/zh/developer/app-store-compose-x-casaos
+#
+# 三个关键点，改错了就会出问题：
+#   1. `image:` + `pull_policy: never`，不要用 `build:`
+#      面板安装不会在设备上构建；而这个应用**必须**用真实配置构建出的镜像，
+#      所以引用设备本地已构建好的镜像，并禁止拉取。原因见 docs/deploy.md §3.3。
+#   2. 卷与 env_file 用**绝对路径**
+#      面板会把自己的 compose 放进自己的目录，`./data` 这类相对路径会解析到那里，
+#      结果是数据目录空了、真实配置丢了。
+#   3. `port_map` 是字符串，`main` 必须对应 services 里的键名
+name: content-publisher
+
+services:
+  content-publisher:
+    image: content-publisher:latest
+    pull_policy: never
+    container_name: content-publisher
+    restart: unless-stopped
+    ports:
+      - '8848:8000'
+    env_file:
+      # 凭据留在 .env 里，不进 compose、不进镜像
+      - /DATA/AppData/content-publisher/.env
+    environment:
+      TZ: Asia/Shanghai
+      SYNC_INTERVAL_MINUTES: '15'
+    volumes:
+      - /DATA/AppData/content-publisher/data:/app/data
+      - /DATA/AppData/content-publisher/site.config.local.json:/app/site.config.local.json:ro
+
+x-casaos:
+  id: com.example.content-publisher
+  main: content-publisher
+  index: /
+  port_map: '8848'
+  scheme: http
+  # 面板在**安装时**抓取图标，那时容器可能还没起来 → 指向一个公开可访问的地址
+  icon: https://raw.githubusercontent.com/<owner>/<repo>/main/public/images/app-icon-256.png
+  title:
+    en_US: Content Publisher
+    zh_CN: 内容发布平台
+  tagline:
+    en_US: Publish local JSON content to Shopify with validation and scheduling.
+    zh_CN: 本地 JSON 上传、栏目校验、定时排期，一键发布到 Shopify。
+  description:
+    en_US: |
+      A self-hosted console for publishing structured content to Shopify.
+      Validates channel ownership, template whitelist and links before publishing,
+      supports instant / scheduled / draft publishing, and reconciles scheduled
+      items back from Shopify.
+    zh_CN: |
+      自托管的 Shopify 内容发布控制台。发布前校验栏目归属、主题模板白名单与外链规则；
+      支持立即 / 定时 / 草稿三种发布方式，并按 GID 与 Shopify 对账。
+  category: Productivity
+  architectures:
+    - amd64
+  version: '0.1.0'
+  update_at: '2026-09-12'
+  author: <你的名字>
+  developer: <你的名字>
+  repo: https://github.com/<owner>/<repo>
+  docs: https://github.com/<owner>/<repo>/blob/main/docs/deploy.md
+  tips:
+    before_install:
+      zh_CN: >-
+        本应用使用设备本地构建的镜像。请先在本机用 `docker compose up -d --build`
+        构建出镜像，否则会因为它无法从镜像仓库拉取而安装失败。
