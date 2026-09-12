@@ -10,10 +10,10 @@
 # （两种形态：设备上 `--build` 构建，或先把镜像推到 registry 再改 image）。
 
 services:
-  zima-shopify:
+  content-publisher:
     build: .
-    image: zima-shopify:latest
-    container_name: zima-shopify
+    image: content-publisher:latest
+    container_name: content-publisher
     restart: unless-stopped
 
     ports:

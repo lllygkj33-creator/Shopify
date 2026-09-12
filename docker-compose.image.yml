@@ -1,0 +1,55 @@
+# 用镜像部署（推荐给 ZimaOS）—— 直接粘进「自定义安装」即可。
+#
+# 与仓库根目录那份 docker-compose.yml 的区别：
+#   - 那份用 `build: .`，适合在**有源码的机器**上构建（开发 / 自己构建）
+#   - 这份用 `image:`，只需要能拉到镜像，**设备上不需要源码、也不需要构建工具链**
+#
+# 镜像由 GitHub Actions 自动构建推送到 GHCR（见 .github/workflows/docker-publish.yml），
+# 每次 push 到 main 就会重新构建，两种 CPU 架构都有。
+#
+# 用之前要做的两件事：
+#   ① 把本文件里的 <尖括号> 占位替换掉（店铺凭据、数据目录、配置文件路径）
+#   ② 把 site.config.local.json 传到设备上（见文件末尾说明）
+#
+# 装到 ZimaOS：App Store → 自定义安装，把本文件内容粘进去。
+
+services:
+  content-publisher:
+    image: ghcr.io/lllygkj33-creator/shopify:latest
+    container_name: content-publisher
+    restart: unless-stopped
+
+    ports:
+      - "8848:8000"
+
+    environment:
+      # 日志时间戳用哪个时区（不影响排期正确性 —— 后端全程用 UTC）
+      TZ: Asia/Shanghai
+      # 后台对账间隔（分钟）。0 = 关闭
+      SYNC_INTERVAL_MINUTES: "15"
+
+      # ---- 店铺凭据（必填）----
+      SHOPIFY_SHOP_DOMAIN: "<你的店铺>.myshopify.com"
+      SHOPIFY_CLIENT_ID: "<client_id>"
+      SHOPIFY_CLIENT_SECRET: "<client_secret>"
+
+    volumes:
+      # 运行期数据：SQLite + settings.json + 发布历史 + 手动 token
+      # 换成你设备上的实际目录；ZimaOS 一般放在 /DATA/AppData/ 下
+      - /DATA/AppData/content-publisher/data:/app/data
+
+      # 你的站点配置（域名/品牌/博客名/主题模板名）。
+      # ⚠️ 这个文件要**先存在**再启动 —— 否则 Docker 会建一个同名**目录**，
+      #    站点配置就会读不到（界面会显示通用占位值）。
+      - /DATA/AppData/content-publisher/site.config.local.json:/app/site.config.local.json:ro
+
+# ---------------------------------------------------------------------------
+# site.config.local.json 怎么弄到设备上
+# ---------------------------------------------------------------------------
+#
+# 最省事：在 Mac 上把仓库里那份（已含你的真实值）传过去
+#
+#   scp site.config.local.json root@<设备IP>:/DATA/AppData/content-publisher/
+#
+# 如果一开始只想试跑，可以先不挂这一行：程序会用仓库自带的通用占位配置启动，
+# 界面能打开、能连店铺，但博客名与主题模板名是占位值，发布到具体栏目会校验失败。
