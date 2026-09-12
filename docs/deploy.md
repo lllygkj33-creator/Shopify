@@ -5,10 +5,9 @@
 > | 步骤 | 状态 |
 > |---|---|
 > | 1. 推送到 GitHub | ✅ **已完成并验证**（远端 SHA 与本地一致，凭据审计 0 命中） |
-> | 2. 打包 Docker | 🟡 **代码与配置已完成**：Dockerfile / .dockerignore / docker-compose.yml 都在，
->    并**以非容器方式实测过同源托管可用**（见 §2.6）。**镜像构建本身未在本机验证 —— 本机没装 Docker**。 |
-> | 3. 推到 ZimaOS | 🟡 文档与 compose 已就绪（§3.0 有速查清单）；执行需要你在设备上操作，我没有那台设备的访问权 |
-> | 4. 正式运行 | 🟡 首次配置与验收命令已实测（在本机以非容器方式），其余待执行 |
+> | 2. 打包 Docker | ✅ **已在真机完成**：多阶段镜像在 ZimaOS 上冷构建成功（无缓存命中，≈30 秒，183 MB），后端同源托管前端实测可用 |
+> | 3. 推到 ZimaOS | ✅ **已完成并验证**：容器 `Up`，`/api/*` 全 200，容器内换到 Shopify token（HTTP 200），首次同步拉到 **116 条排期**并正确归类到栏目 |
+> | 4. 正式运行 | 🟡 首次配置与验收已实测；长期运行（重启自愈、备份）待时间检验 |
 >
 > 凡标了实测的地方都有真实输出；没跑过的地方我写"未验证"，不写成已完成。
 
@@ -123,7 +122,7 @@ done
 
 ---
 
-## 2. 打包 Docker 🟡（代码完成、同源已验证；镜像构建待验）
+## 2. 打包 Docker ✅（镜像已在 ZimaOS 上冷构建成功）
 
 ### 2.1 方案：单容器
 
@@ -180,8 +179,16 @@ SYNC_INTERVAL_MINUTES=15
 > 时区换算在前端用 `Intl` 做。所以容器是 UTC 也无所谓，`TZ` 只是让日志好读。
 > 结论修正了，但这条弯路本身值得记：**别凭印象断言"不设就会出错"**。
 
-`.env` 与 `site.config.local.json` 都在 `.gitignore` 里，用**挂载**的方式给容器，
-不 `COPY` 进镜像 —— 这样镜像可以随意分发。
+`.env`（凭据）始终**不 `COPY` 进镜像**，只用环境变量/挂载给容器，所以镜像里没有秘密。
+
+`site.config.local.json` 的处置要分两半说清楚（**这一点最初我写错了，第 3 节做了更正**）：
+
+- **后端**运行时只从挂载读取它 → 不依赖镜像内容；
+- **前端**的配置是在 `pnpm build` 时被 `import.meta.glob` 读进去、编译进产物的 →
+  构建的那一刻它必须在场。
+
+所以它是「构建期依赖、运行期也可挂载」，而不是「与镜像无关」。
+结论：**用真实配置构建出的镜像不要公开分发**（详见 §3.3）。
 
 ### 2.5 compose（已落地为仓库里的 `docker-compose.yml`）
 
@@ -280,27 +287,34 @@ docker compose up -d --build
 
 ---
 
-## 3. 推到 ZimaOS ⬜
+## 3. 推到 ZimaOS ✅（已在真机上跑通）
+
+> 本节是**实测记录**，不是推演。执行时间：2026-09-12。
+> 设备：ZimaOS，`x86_64`，Docker 27.5.1 / Compose 2.32.4。
+> 实测结论：从零到能用的服务 ≈ 5 分钟，其中构建 ≈ 30 秒。
 
 ### 3.0 速查清单（照着做）
 
-整件事只有五步，**新东西只有两个文件**：
-
 ```
-① 设备上拿到代码
-   （仓库是私有的 → 见 §3.1 三种办法；最简单是给设备配一个只读 Deploy Key）
+① 在设备上把宿主机目录和权限准备好（需要一次 sudo）
+   sudo mkdir -p /DATA/AppData/content-publisher
+   sudo chown casaos /DATA/AppData/content-publisher
 
-② 在仓库根目录放两个「不在仓库里」的文件
-   .env                     ← 凭据（gitignore）
-   site.config.local.json   ← 你的域名/品牌/博客名/主题模板名（gitignore）
+② 从 Mac 把三个文件送过去（用 tar 流，见 §3.2 —— scp 多文件在这台机器上会失败）
+   zima-content-publisher.tar.gz   ← git archive 出来的源码，不含凭据
+   .env                            ← 凭据
+   site.config.local.json          ← 你的域名/品牌/博客名/主题模板名
 
-③ 把 docker-compose.yml 粘进 ZimaOS 的「自定义安装」
+③ 在设备上解开源码
+   cd /DATA/AppData/content-publisher && tar xzf zima-content-publisher.tar.gz
 
-④ 起容器：docker compose up -d --build
-   （或从 ZimaOS 的界面点部署）
+④ 构建并启动（不需要镜像仓库，也不需要碰 ZimaOS 界面）
+   docker compose up -d --build
 
 ⑤ 打开 http://<设备 IP>:8848 → 设置页核对 → 点一次「立即同步」
 ```
+
+任何一步出意外的现象与对策都记在 §3.6，**出错先去那里对号入座**。
 
 两个文件的填写内容：
 
@@ -314,36 +328,53 @@ docker compose up -d --build
 > 没写的项继承 `site.config.json` 的占位值。但栏目表是**数组**，
 > 一旦要覆盖就得整份给（数组是整体替换）。
 
-### 3.1 机制
+### 3.1 机制：本次走的是 SSH + docker compose，不是界面
 
-ZimaOS 的 App Store 支持添加**自定义容器**：在 Web UI 里粘贴 Docker Compose YAML
-（或填镜像 / 端口 / 卷）。它是 CasaOS 系，社区里"通过 webui 自己加的
-docker-compose/cli 容器"说的就是这条路径 —— 参考
-[IceWhaleTech/ZimaOS#328](https://github.com/IceWhaleTech/ZimaOS/issues/328)、
-[IceWhale 官方仓库](https://github.com/IceWhaleTech/ZimaOS)。
+ZimaOS 的 App Store 支持添加**自定义容器**（粘贴 Compose YAML）：它是 CasaOS 系，
+社区里"通过 webui 自己加的 docker-compose/cli 容器"说的就是这条路径 —— 参考
+[IceWhaleTech/ZimaOS#328](https://github.com/IceWhaleTech/ZimaOS/issues/328)。
 
-界面上的具体位置请以你机器上的实际版本为准。
+但这次**没有用界面**，理由有三条：
 
-> ⚠️ 界面上的**具体按钮文案**请以你机器上的实际版本为准 —— 我没有在 ZimaOS 界面里
-> 操作过，这里只写机制与需要填的内容。
+1. 界面里能粘的 compose 通常只接受 `image:`，而本平台必须**在设备上构建**（原因见 §3.4）；
+2. 界面安装应用会把文件放到 `/DATA/AppData/<app>/`，而这个目录**普通用户没有写权限**，
+   界面帮你建好之后就没问题了，但你自己在终端建就要一次 sudo；
+3. SSH 一条 `docker compose up -d --build` 就把「建目录 → 放文件 → 构建 → 起容器」全做了，
+   而且日志就在 `build.log` 里，出问题能看。
+
+**界面仍有用**：容器起来之后，ZimaOS 的容器列表里能看到它，可以点开看日志 / 重启。
 
 ### 3.2 设备上怎么拿到代码
 
-**仓库已公开**，设备上直接克隆即可，不需要任何凭据：
+**仓库已公开**，`git clone` 即可，不需要任何凭据。但本次用的是 `git archive`
+打包 + 流式传输，因为它顺带解决了「怎么把两个 gitignore 文件送过去」这件事。
 
 ```bash
-git clone https://github.com/<用户>/Shopify.git
-cd Shopify
+# 1) Mac 上打包（HEAD 的内容，不含 .env / site.config.local.json / node_modules）
+cd ~/hermes/zima-shopify
+git archive --format=tar.gz -o /tmp/zima-deploy/zima-content-publisher.tar.gz HEAD
+
+# 2) 确认归档里没有敏感文件（.env.example/.mock/.real 是仓库里的模板，属于正常）
+tar tzf /tmp/zima-deploy/zima-content-publisher.tar.gz | grep -E "\.env|site.config.local"
+
+# 3) 三个文件一起送过去
+cp .env site.config.local.json /tmp/zima-deploy/
+cd /tmp/zima-deploy
+tar czf - zima-content-publisher.tar.gz .env site.config.local.json \
+  | ssh <用户>@<设备IP> 'tar xzf - -C /DATA/AppData/content-publisher && ls -la'
 ```
 
-两个**不在仓库里**的文件（`.env` 与 `site.config.local.json`）要单独带过去：
+> ⚠️ **`scp a b c 用户@设备:/目录/` 在这台 ZimaOS 上会失败**，报
+> `scp: remote mkdir "/DATA/AppData/content-publisher/": Failure` ——
+> 目录明明存在。原因不在目录，而在 scp 会先跑远端 `mkdir` 做校验，而这个路径
+> 经过 ZimaOS 的特殊挂载（见下）之后行为不一致。**用 tar 流绕开**（上面第 3 步）。
 
-```bash
-# 在 Mac 上（两个文件都在仓库根目录，已被 gitignore）
-scp .env site.config.local.json <用户>@<设备IP>:~/Shopify/
-```
+> ⚠️ **`/DATA/casaos` 是个陷阱**：它 `ls -la` 显示权限 `drwxrwxrwx`、`test -w` 也说可写，
+> 但里面只有一张 `how to unlock this folder.html` —— 它是 ZimaOS 的**加密/锁定目录**，
+> 写进去是幻影：`mkdir` 报 `File exists`，紧接着 `ls -ld` 报
+> `No such file or directory`。**要放数据就用 `/DATA/AppData/`**，那是 ZimaOS 认的应用数据目录。
 
-> ⚠️ `.env` 里有 `client_secret`，传输走局域网 / scp 这类可信通道，别用 IM 中转。
+> ⚠️ 从 macOS 用 tar 传文件会带上 `._*`（AppleDouble）垃圾文件，传完 `rm -f ._*` 清掉。
 
 <details>
 <summary>如果仓库仍设为私有（备选）</summary>
@@ -353,65 +384,107 @@ Settings → Deploy keys（只勾读权限），之后 `git clone git@github.com
 
 **B. HTTPS + PAT** —— 能用，但令牌会留在 `.git/config` 里，设备被人碰到就等于泄露。
 
-**C. 打包拷过去** —— Mac 上 `git archive --format=tar.gz -o /tmp/repo.tar.gz HEAD`，
-连同两个文件一起拷到设备解开。一次性最省事，但升级要重拷。
-
+**C. 打包拷过去** —— 就是本节所用的办法，一次性最省事，但升级要重拷。
 </details>
 
-### 3.3 镜像从哪来
+### 3.3 镜像从哪来 —— 只能在设备上构建（重要更正）
 
-两种形态，选一种：
+**结论：本平台必须在设备上 `docker compose up -d --build`，不能直接拉公开镜像跑真实店铺。**
 
-**A. 在设备上构建（最省事，适合单机）**
+原因是一条容易被忽略的架构事实：
 
-Dockerfile 就在仓库里，直接在设备上构建：
+> 前端的站点配置是**构建期编译进产物**的（`src/config/site.ts` 里用 `import.meta.glob`
+> 读 `site.config.local.json`）。也就是说，`site.config.local.json` **必须在 `pnpm build`
+> 的那一刻就存在**，否则前端只有通用占位值。
+
+于是两条路的差别是：
+
+| 路 | 前端配置 | 后端配置 | 能不能跑你的真实店铺 |
+|---|---|---|---|
+| CI 构建的公开镜像 | ❌ 通用（`Content Publisher` / `example-store.test`） | ✅ 挂载的 local 文件 | **不能**：栏目校验按通用栏目名走，你的真实博客名/模板名会被判为不匹配 |
+| 设备上构建（本节做法） | ✅ 真实（构建时文件在仓库根目录） | ✅ 挂载的 local 文件 | ✅ |
+
+配套的一处改动：`.dockerignore` **不再排除 `site.config.local.json`**（原先排除，
+本机构建时会读不到）。它仍然被 `.gitignore` 忽略 → 仓库里和 CI 上都不存在 →
+CI 出的镜像仍然是干净的通用版。
+
+> ⚠️ 反过来说：**你在设备上用真实配置构建出的镜像里含你的真实域名/品牌，绝不能推到公开仓库**
+> （`site.config.local.json` 本身没有凭据，凭据在 `.env`，而 `.env` 始终不进镜像）。
+
+所以公开镜像的定位是**演示版**：克隆仓库 → `pnpm dev`，或拉镜像看一眼界面长什么样。
+正式部署走构建。升级同理：
 
 ```bash
-cd <仓库目录>
+cd /DATA/AppData/content-publisher
+# 重新拷贝新的源码包并解开，然后：
 docker compose up -d --build
 ```
-不需要镜像仓库，也不需要先推送镜像。升级就是 `git pull && docker compose up -d --build`。
-
-**B. 本机构建后推镜像（适合多机 / 不想在设备上装构建工具链）**
-
-```bash
-docker build -t <registry>/content-publisher:1.0 .
-docker push <registry>/content-publisher:1.0
-```
-设备侧 compose 里把 `build: .` 换成 `image: <registry>/content-publisher:1.0`。
-
-> 本机（Mac）没有 Docker 时只能走 B 的前提也不成立 —— 那就走 A 或 C，
-> 让**有 Docker 的那台机器**去构建。
 
 ### 3.4 填进 ZimaOS 时要注意的
 
 | 项 | 值 / 说明 |
 |---|---|
 | 端口 | `8848:8000`（宿主端口随你，冲突就换） |
-| 卷 | `data` 目录 + `site.config.local.json`（只读挂载） |
-| 环境变量 | 店铺凭据 + `TZ=Asia/Shanghai` |
-| 重启策略 | `unless-stopped`，设备重启后自动起来 |
-| **构建 vs 镜像** | 自定义安装界面通常只让填**镜像名**，不一定支持 `build:` —— 先在终端 `docker compose up -d --build` 把镜像建出来（compose 里已经写了 `image:` 名字），界面上就能引用它 |
-| 时区 | 设 `TZ=Asia/Shanghai` 让**日志时间戳**好读。**它不影响排期正确性** —— 见下方纠正 |
+| 卷 | `./data`（SQLite + 设置 + 发布历史）+ `./site.config.local.json`（只读挂载） |
+| 环境变量 | 店铺凭据 + `TZ=Asia/Shanghai`（后者只影响**日志时间戳**，不影响排期正确性） |
+| 重启策略 | `unless-stopped` —— 已验证写在 compose 里，设备重启后自动拉起 |
+| 构建 vs 镜像 | 本平台走 `build: .`；若要在界面导入，先用 CLI 把镜像建出来（compose 里已写 `image: content-publisher:latest`），界面里引用这个名字 |
+| 容器用户 | 容器以 **root** 运行，所以挂载目录属主是谁都不影响它写入（实测 `data/` 下文件属主是 root，宿主目录属主是 casaos，正常工作） |
 
-### 3.5 起来之后怎么确认是好的
+### 3.5 起来之后怎么确认是好的（下面是本次的真实输出）
 
 ```bash
-docker compose ps                      # 状态是 running
-docker compose logs -f --tail=50       # 看有没有报错
-curl -s http://127.0.0.1:8848/api/health   # 设备本机
+$ docker compose ps
+content-publisher  Up  0.0.0.0:8848->8000/tcp, [::]:8848->8000/tcp
+
+$ curl -s http://127.0.0.1:8848/api/health
+{"ok":true,"version":"0.1.0","ssl":{...,"project_root":"/app"}}
 ```
 
-浏览器打开 `http://<设备IP>:8848`，然后：
+浏览器打开 `http://<设备IP>:8848`（本次实测 `http://10.126.126.1:8848`）：
 
-| 检查 | 期望 |
+| 检查 | 本次实测结果 |
 |---|---|
-| 仪表盘 | **没有**「演示数据模式」角标（有角标说明前端是用 mock 模式构建的） |
-| 设置页 | 店铺域名是你的真实域名，「栏目映射自检」5 行全 ✓ |
-| 点「立即同步」 | 返回「拉到 N 条未发布排期」，N 与店铺实际情况相符 |
-| 栏目页 | 能选本地文件夹、解析出候选、校验通过 |
+| 页面标题 | `Zima 发布平台 · Shopify 内容托管` ✅ 真实品牌 |
+| 「演示数据模式」角标 | 无 ✅ |
+| 通用占位值（`Content Publisher` / `example-store.test`） | 页面上不出现 ✅ |
+| 控制台报错 | 0 ✅ |
+| `/api/*` 请求 | `settings` / `contents/timeline` / `contents/stats` 全部 200 ✅ |
+| 设置页 | 店铺 `zimaboard.myshopify.com`、API `2026-04`、品牌 token `ZimaSpace` ✅ |
 
-### 3.6 安全边界（重要）
+最容易忽略、但最该做的一项 —— **验证容器真的能连上 Shopify**：
+
+```bash
+# 设备上：容器内直连并换 token（不打印 token 本身）
+docker exec content-publisher python -c "..."
+# 实测：TCP 通 0.02s，token HTTP 200 ✅
+```
+
+然后点一次「立即同步」，实测返回：
+
+```json
+{"scheduledPulled":116,"scheduledFound":116,
+ "byChannel":{"community-post":100,"discord":15,"vs":1},
+ "checked":116,"matched":116,"updated":0,"gone":0,"error":null}
+```
+
+这串数字同时证明了三件事：Shopify 连通、凭据有效、
+**博客标题 → 栏目的映射用的是你的真实配置**（否则 116 条全都归不了类）。
+
+### 3.6 本次踩到的坑（对号入座）
+
+| 现象 | 真实原因 | 解法 |
+|---|---|---|
+| `scp: remote mkdir "...": Failure` | scp 会先跑远端 `mkdir` 校验；目标路径在 ZimaOS 上行为不一致 | 改用 `tar czf - ... \| ssh 'tar xzf - -C ...'` |
+| `mkdir` 说 `File exists`，紧接 `ls` 说 `No such file or directory` | `/DATA/casaos` 是**加密/锁定目录**，写入是幻影 | 数据一律放 `/DATA/AppData/` |
+| `mkdir: cannot create directory ...: Permission denied` | `/DATA/AppData` 属主是 root，普通用户无写权限 | 一次 `sudo mkdir -p` + `sudo chown casaos <目录>` |
+| `chown: invalid group: 'casaos:casaos'` | casaos 的主组**不叫 casaos**，是 `samba`（`uid=999 gid=1000`） | 只写属主：`chown casaos <目录>` |
+| `bash: line 3: timeout: command not found` | 设备上没有 `timeout`（busybox） | 远端命令里别用 `timeout`，用 curl 自带的 `-m` |
+| `sudo` 要密码、脚本非交互卡住 | `sudo` 从 stdin 读密码，而 stdin 同时要喂脚本 | 第一行放密码 + 后面接脚本：`{ echo <密码>; cat setup.sh; } \| ssh 主机 'sudo -S bash -s'` |
+| 前端起来全是通用占位值 | 构建时 `site.config.local.json` 不在构建上下文里 | 见 §3.3：`.dockerignore` 不排除它 |
+| 从 macOS 传完多出 `._*` 文件 | tar 带上了扩展属性 | `rm -f ._*` |
+
+### 3.7 安全边界（重要）
 
 **这个平台没有登录鉴权。** 端口暴露到公网 = 把你的 Shopify 发布权公开。
 建议：
@@ -442,6 +515,11 @@ curl -s http://<IP>:8848/api/sync/status   # 看 trackedContents / lastSyncAt
 界面上：点一次「立即同步」，应当看到「拉到 N 条未发布排期」；
 然后去任一栏目页上传一份 JSON，确认解析、校验、发布都正常。
 
+> **本次实测**：同步返回 `scheduledPulled: 116`，栏目归类
+> `community-post: 100 / discord: 15 / vs: 1`，`error: null` —— 这一项已通过。
+> 「上传一份 JSON 走完整流程」这一项**尚未在设备上做**（避免动到线上内容），
+> 后台的对账与发布链路由真实的 116 条排期数据覆盖验证。
+
 ### 4.3 日常使用
 
 1. 本地（任何装了 ChatGPT/工具链的机器）产出 JSON
@@ -457,14 +535,22 @@ SQLite 用 WAL 模式，冷备前先停容器最稳。
 
 ### 4.5 升级
 
+设备上不是 git 仓库（本次用的是 `git archive` 传源码），所以升级 = **重传源码包 + 重建**：
+
 ```bash
-git pull
-docker compose up -d --build     # A 方案
-# 或
-docker pull <registry>/content-publisher:<新版本> && docker compose up -d   # B 方案
+# Mac 上重新打包
+git archive --format=tar.gz -o /tmp/zima-deploy/zima-content-publisher.tar.gz HEAD
+cd /tmp/zima-deploy && tar czf - zima-content-publisher.tar.gz | ssh <用户>@<设备IP> \
+  'tar xzf - -C /DATA/AppData/content-publisher'
+
+# 设备上重建并重启（数据目录不动）
+cd /DATA/AppData/content-publisher && docker compose up -d --build
 ```
 
-`data/` 是挂载卷，升级不动它。
+`data/` 是挂载卷，升级不动它。镜像重建只需 ≈30 秒（实测冷构建也是这个量级）。
+
+> 若某天把设备也做成了 git 克隆，就能简化成 `git pull && docker compose up -d --build`；
+> 但**别把 `.env` / `site.config.local.json` 提交进去**。
 
 ---
 
@@ -492,3 +578,10 @@ docker pull <registry>/content-publisher:<新版本> && docker compose up -d   #
    还会每次对账都报"更新了 N 条"。
 5. **演示模式默认开启是个坑** —— 内置假数据会让仪表盘看起来"已经有内容"，
    排查半天才发现是模式问题。默认值应该跟着真实场景走。
+6. **"可写"不等于"能写"** —— `/DATA/casaos` 权限位是 `777`、`test -w` 也通过，
+   实际是加密锁定目录：`mkdir` 报 `File exists`，`ls` 报 `No such file or directory`。
+   教训：在别人的平台上判断"能不能写"，只能**写完再读一次**，别信权限位。
+   （连带一个教训：当时我把这条错误判断当成了结论去解释 scp 失败，其实是两个独立问题。）
+7. **同一个配置文件，在不同层里角色不同** —— `site.config.local.json` 对后端是
+   "运行期挂载"，对前端却是"构建期输入"。只按后端理解它，就会构建出前端全是占位值的镜像。
+   教训：改这类共享配置的加载方式前，先问一句"**哪些层会在什么时候读它**"。
