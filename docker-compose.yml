@@ -1,0 +1,42 @@
+# 单容器部署：前端由后端顺带托管，只需一个端口。
+#
+# 用法：
+#   1. cp .env.example .env                        # 填店铺凭据
+#   2. cp site.config.json site.config.local.json  # 填自己的域名/品牌/博客名/模板名
+#   3. docker compose up -d --build
+#   4. 打开 http://<这台机器的 IP>:8848
+#
+# 装到 ZimaOS：App Store → 自定义安装，把本文件内容粘进去即可
+# （两种形态：设备上 `--build` 构建，或先把镜像推到 registry 再改 image）。
+
+services:
+  zima-shopify:
+    build: .
+    image: zima-shopify:latest
+    container_name: zima-shopify
+    restart: unless-stopped
+
+    ports:
+      # 宿主端口:容器端口。8848 被占用就改左边
+      - "8848:8000"
+
+    # 凭据从 .env 读（已被 .gitignore 忽略）
+    env_file:
+      - .env
+
+    environment:
+      # 只影响日志时间戳的可读性 —— 后端全程用 UTC，
+      # 排期时间以「带时区偏移的 ISO」传递，时区换算在前端做。
+      TZ: Asia/Shanghai
+      # 后台对账间隔（分钟），0 = 关闭
+      SYNC_INTERVAL_MINUTES: "15"
+
+    volumes:
+      # 运行期数据：SQLite + settings.json + 发布历史 + 手动 token
+      # 容器重建不丢
+      - ./data:/app/data
+      # 你的真实站点配置（域名/品牌/博客名/主题模板名），只读挂载
+      #
+      # ⚠️ 这个文件必须**先存在**再 up —— 否则 Docker 会在宿主上建一个**同名目录**，
+      #    容器里就变成「配置路径是个目录」，站点配置加载会失败。
+      - ./site.config.local.json:/app/site.config.local.json:ro

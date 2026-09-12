@@ -30,6 +30,12 @@ from app.storage import ContentStore
 
 NOW = datetime(2026, 9, 11, 12, 0, tzinfo=timezone.utc)
 
+# 夹具里的时间必须相对「真实的现在」：
+# 写死日期的话，等时钟走过那个时刻，derive_status 就把排期判成草稿，
+# 测试会在某一天突然变红（这次就撞上了：写死 2026-09-11T13:00Z，而当天 13:00 之后必挂）。
+FUTURE = datetime.now(timezone.utc) + timedelta(days=1)
+FUTURE_ISO = FUTURE.replace(microsecond=0).isoformat()
+
 
 @pytest.fixture()
 def store(tmp_path) -> ContentStore:
@@ -84,7 +90,7 @@ def platform_row(**overrides) -> dict:
         "title": "Discord 社群页",
         "handle": "discord",
         "status": "scheduled",
-        "scheduled_at": "2026-09-11T13:00:00+00:00",
+        "scheduled_at": FUTURE_ISO,
         "publish_key": "discord|d.json|0|discord",
         "source_file": "discord/d.json",
         "shopify_gid": "gid://shopify/Page/9",
@@ -177,7 +183,7 @@ async def test_排期到点后本地跟上已发布(store):
             "gid://shopify/Page/9": node(
                 "gid://shopify/Page/9",
                 is_published=True,
-                published_at="2026-09-11T13:00:05Z",
+                published_at=FUTURE_ISO,
             )
         }
     )
@@ -239,7 +245,7 @@ async def test_一致时不写库(store):
         platform_row(
             status="published",
             scheduled_at=None,
-            published_at="2026-09-10T15:59:00Z",
+            published_at=(FUTURE - timedelta(days=2)).replace(microsecond=0).isoformat(),
             title="Some Page",
             handle="some-page",
         )
@@ -250,7 +256,7 @@ async def test_一致时不写库(store):
                 "gid://shopify/Page/9",
                 handle="some-page",
                 title="Some Page",
-                published_at="2026-09-10T15:59:00Z",
+                published_at=(FUTURE - timedelta(days=2)).replace(microsecond=0).isoformat(),
             )
         }
     )
@@ -329,7 +335,7 @@ async def test_排期项不会把未来时间写进published_at(store):
             "gid://shopify/Page/9": node(
                 "gid://shopify/Page/9",
                 is_published=False,
-                published_at="2026-09-11T13:00:00Z",
+                published_at=FUTURE_ISO,
                 # handle/title 要和本行一致，否则算的是「改了标题」而不是我们要测的事
                 handle="discord",
                 title="Discord 社群页",
@@ -355,7 +361,8 @@ async def test_拉取后立刻对账不应报出任何更新(store):
     from tests.test_schedule_pull import FakeClient as PullFakeClient
     from tests.test_schedule_pull import page as pull_page
 
-    future = "2026-09-11T15:59:00Z"
+    # 相对时间：写死日期会在时钟走过后变成「过去」，拉取就会跳过它
+    future = FUTURE_ISO
     await SchedulePuller(
         client=PullFakeClient(pages=[pull_page("9", handle="discord", published_at=future)]),
         store=store,

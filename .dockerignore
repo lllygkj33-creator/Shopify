@@ -1,0 +1,35 @@
+# 构建镜像时不需要的东西。
+#
+# 关键：**不要把本地配置与运行期数据打进镜像** ——
+# 镜像可能被推给别人，凭据和真实域名都不该在里面。
+
+# 依赖与构建产物（镜像里重新装、重新构建）
+node_modules
+dist
+backend/.venv
+**/__pycache__
+**/*.py[cod]
+.pytest_cache
+
+# 版本控制
+.git
+.gitignore
+
+# 本地配置与凭据（运行时用挂载给容器）
+.env
+.env.real
+site.config.local.json
+
+# 运行期数据（SQLite / 设置 / 历史 / 手动 token）
+data
+
+# 开发与测试产物
+screenshots
+coverage
+**/__screenshots__
+.vitest-attachments
+.tanstack
+.vscode
+.idea
+*.log
+.DS_Store

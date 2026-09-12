@@ -64,6 +64,10 @@ class EnvSettings(BaseSettings):
     sync_interval_minutes: int = 15
 
     # --- 服务 ---
+    # 前端构建产物目录。存在时由后端顺带托管（容器里就是这么用的）：
+    # 单容器单端口、前端与 API 同源，不用配 CORS。
+    # 开发时不构建前端，这个目录不存在 → 跳过托管，两边各跑各的。
+    frontend_dist: str = ""
     api_host: str = "127.0.0.1"
     api_port: int = 8000
     # 允许前端 dev server 跨域访问
@@ -248,6 +252,13 @@ def resolved_sync_state() -> dict[str, str | None]:
     return {
         "lastSyncAt": runtime.get("last_sync_at"),
     }
+
+
+def resolved_frontend_dist() -> Path | None:
+    """前端构建产物目录；不存在就返回 None（= 不托管，开发时就是这样）。"""
+    configured = str(_env.frontend_dist or "").strip()
+    candidate = Path(configured) if configured else PROJECT_ROOT / "dist"
+    return candidate if (candidate / "index.html").exists() else None
 
 
 def resolved_sync_interval_minutes() -> int:

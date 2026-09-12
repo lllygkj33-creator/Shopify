@@ -5,12 +5,12 @@
 > | 步骤 | 状态 |
 > |---|---|
 > | 1. 推送到 GitHub | ✅ **已完成并验证**（远端 SHA 与本地一致，凭据审计 0 命中） |
-> | 2. 打包 Docker | ⬜ **待执行** —— 项目当前还没有 Dockerfile |
-> | 3. 推到 ZimaOS | ⬜ 待执行（依赖第 2 步） |
-> | 4. 正式运行 | ⬜ 待执行 |
+> | 2. 打包 Docker | 🟡 **代码与配置已完成**：Dockerfile / .dockerignore / docker-compose.yml 都在，
+>    并**以非容器方式实测过同源托管可用**（见 §2.6）。**镜像构建本身未在本机验证 —— 本机没装 Docker**。 |
+> | 3. 推到 ZimaOS | ⬜ 待执行（需要 Docker 环境；ZimaOS 上天然有） |
+> | 4. 正式运行 | 🟡 首次配置与验收命令已实测（在本机以非容器方式），其余待执行 |
 >
-> 第 1 步的命令、输出、踩过的坑都是实测记录；第 2–4 步是设计好的方案与待验证清单。
-> 执行完我会回来把真实输出补上。
+> 凡标了实测的地方都有真实输出；没跑过的地方我写"未验证"，不写成已完成。
 
 ---
 
@@ -123,7 +123,7 @@ done
 
 ---
 
-## 2. 打包 Docker ⬜
+## 2. 打包 Docker 🟡（代码完成、同源已验证；镜像构建待验）
 
 ### 2.1 方案：单容器
 
@@ -169,15 +169,21 @@ done
 SHOPIFY_SHOP_DOMAIN=<store>.myshopify.com
 SHOPIFY_CLIENT_ID=<...>
 SHOPIFY_CLIENT_SECRET=<...>      # 长期凭据，access token 是它的 24h 派生物
-DEFAULT_TIMEZONE=Asia/Shanghai
-TZ=Asia/Shanghai                 # ⚠️ 必须设，容器默认 UTC 会差 8 小时
+DEFAULT_TIMEZONE=Asia/Shanghai   # 界面显示与排期输入用的时区
+TZ=Asia/Shanghai                 # 只影响日志时间戳，见下方
 SYNC_INTERVAL_MINUTES=15
 ```
+
+> **纠正一个我一开始写错的结论**：我最初写的是"不设 TZ 会导致时间差 8 小时、排期会错"。
+> 翻代码核对后**这是错的**：后端全程用 `datetime.now(timezone.utc)`，
+> 排期时间以**必须带时区偏移的 ISO** 传递（解析时遇到不带偏移的直接报错），
+> 时区换算在前端用 `Intl` 做。所以容器是 UTC 也无所谓，`TZ` 只是让日志好读。
+> 结论修正了，但这条弯路本身值得记：**别凭印象断言"不设就会出错"**。
 
 `.env` 与 `site.config.local.json` 都在 `.gitignore` 里，用**挂载**的方式给容器，
 不 `COPY` 进镜像 —— 这样镜像可以随意分发。
 
-### 2.5 compose 草案
+### 2.5 compose（已落地为仓库里的 `docker-compose.yml`）
 
 ```yaml
 services:
@@ -202,17 +208,76 @@ services:
       - .env
 ```
 
-### 2.6 本地先验证（关键：不要跳过）
+### 2.6 未装 Docker 时怎么验（本次实际做法）
+
+本机没有 Docker（也没 podman / colima / brew），装一套要动系统级的东西，
+所以改用**等价的非容器验证** —— 容器里真正要证明的是「后端托管前端、同源可用」，
+这件事不需要容器就能验：
 
 ```bash
-docker compose up --build
-# 打开 http://localhost:8848
+# 1) 按容器里的环境变量构建前端（同源：API 基址留空 + 不用演示数据）
+VITE_USE_MOCK=false VITE_API_BASE= pnpm build
+
+# 2) 确认产物里没有硬编码的 API 地址（同源才成立）
+grep -r "127.0.0.1:8000" dist/assets/ || echo "✓ 同源相对路径"
+
+# 3) 起后端（它会自动发现 dist 并托管）
+cd backend && .venv/bin/python -m uvicorn app.main:app --port 8000
 ```
 
-验收清单：dashboard 无演示角标 → `/settings` 显示你的真实域名与模板清单 →
-点一次「立即同步」能看到拉取条数 → 发一篇测试内容。
+实测结果（真实输出）：
 
-**在 Mac 上跑通了再搬 NAS。** 镜像与 compose 是同一个产物，搬过去只是换个执行环境。
+| 请求 | 结果 |
+|---|---|
+| `GET /` | `200 text/html` |
+| `GET /settings`（客户端路由，磁盘上没这个文件） | `200 text/html` ← SPA 回落生效 |
+| `GET /channels/community-post` | `200 text/html` |
+| `GET /api/health` | `200 application/json` |
+| `GET /assets/index-*.js` | `200` |
+
+浏览器打开 `http://127.0.0.1:8000`（**只开这一个端口，没有 5177**）：
+
+```
+演示模式角标 : 无 ✓ 真实数据
+统计卡       : 86 / 106 / 1 / 0
+时间轴块     : 3
+API 调用     : 200 /api/contents/timeline | 200 /api/contents/stats | 200 /api/settings
+控制台报错   : 无
+设置页       : /settings 直开 ✓ 域名字段 = <真实店铺域名>
+```
+
+**同源方案成立**：没有跨域请求，不需要配 CORS，一个端口跑完整站。
+
+### 2.7 镜像构建这一步
+
+上面验的是**运行时行为**。镜像构建还需要 Docker 环境，本次没有：
+
+```bash
+docker compose up -d --build      # 在有 Docker 的机器上跑（ZimaOS 上就有）
+```
+
+在 Mac 上想验的话，最轻的路径是 colima（CLI，MIT 许可）：
+
+```bash
+# 需要先有 Homebrew
+brew install colima docker
+colima start
+docker compose up -d --build
+```
+
+### 2.8 这一节交付的文件
+
+| 文件 | 作用 |
+|---|---|
+| `Dockerfile` | 两阶段：node 构建前端 → python 运行后端并托管前端 |
+| `.dockerignore` | 把本地配置、凭据、运行期数据挡在镜像外 |
+| `docker-compose.yml` | 端口 / 卷 / 环境变量，ZimaOS 自定义安装直接粘这个 |
+| `backend/app/config.py` | 新增 `frontend_dist`（默认 `<仓库>/dist`，不存在就跳过托管） |
+| `backend/app/main.py` | `StaticFiles` 挂载 + SPA 回落（客户端路由直开不 404） |
+| `package.json` | 加 `packageManager: pnpm@11.22.0`，镜像里构建可复现 |
+
+> 挂载顺序有个细节：静态托管必须在**所有 `/api` 路由之后**注册，
+> 它是挂在根路径上的兜底路由。
 
 ---
 
@@ -253,7 +318,7 @@ ZimaOS 侧 compose 里把 `build: .` 换成 `image: <registry>/zima-shopify:1.0`
 | 卷 | `data` 目录 + `site.config.local.json`（只读挂载） |
 | 环境变量 | 店铺凭据 + `TZ=Asia/Shanghai` |
 | 重启策略 | `unless-stopped`，设备重启后自动起来 |
-| 时区 | **不设 TZ 会导致时间差 8 小时**，排期时间会错 |
+| 时区 | 设 `TZ=Asia/Shanghai` 让**日志时间戳**好读。**它不影响排期正确性** —— 见下方纠正 |
 
 ### 3.4 安全边界（重要）
 
@@ -267,7 +332,7 @@ ZimaOS 侧 compose 里把 `build: .` 换成 `image: <registry>/zima-shopify:1.0`
 
 ---
 
-## 4. 正式运行 ⬜
+## 4. 正式运行 🟡
 
 ### 4.1 首次配置
 

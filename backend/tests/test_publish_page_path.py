@@ -165,15 +165,23 @@ async def test_unexpected_error_is_recorded_as_that_item_failure(store, monkeypa
 
 
 def test_unhandled_exception_returns_500_with_cors_header(monkeypatch):
-    """未预期异常的 500 必须带 CORS 头，否则浏览器只会报「无法连接后端」。"""
+    """未预期异常的 500 必须带 CORS 头，否则浏览器只会报「无法连接后端」。
+
+    不能临时 `add_route` 一个会抛异常的路由来测 —— 前端静态托管挂在 `/` 上，
+    注册在它之后的路径会被它先接住（返回 index.html，状态码是 200）。
+    改让一个**真实的 API 端点**抛异常，请求才会真的走一遍中间件栈。
+    """
     client = TestClient(main.app, raise_server_exceptions=False)
     client.get("/api/health")  # 确保 app 已完成启动
 
-    @main.app.get("/__boom")
-    async def boom():  # pragma: no cover - 只在测试里挂载
+    def boom():
         raise RuntimeError("故意的")
 
-    response = client.get("/__boom", headers={"Origin": "http://localhost:5177"})
+    monkeypatch.setattr(main.store, "list_with_gid", boom)
+
+    response = client.get(
+        "/api/sync/status", headers={"Origin": "http://localhost:5177"}
+    )
 
     assert response.status_code == 500
     assert "平台内部错误（RuntimeError）" in response.json()["detail"]

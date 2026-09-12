@@ -154,8 +154,10 @@ def _load() -> SiteConfig:
 
     data = json.loads(BASE_FILE.read_text(encoding="utf-8"))
 
-    # 本地覆盖：真实部署的域名/品牌/产品名放这里，不进仓库
-    if LOCAL_FILE.exists():
+    # 本地覆盖：真实部署的域名/品牌/产品名放这里，不进仓库。
+    # 用 is_file 而不是 exists：Docker 挂载一个**不存在**的文件时会建同名目录，
+    # exists() 会为真、随后读目录报错；is_file() 能把它当作"没配"正常跳过。
+    if LOCAL_FILE.is_file():
         data = _deep_merge(
             data, json.loads(LOCAL_FILE.read_text(encoding="utf-8"))
         )

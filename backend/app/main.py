@@ -15,6 +15,8 @@ import logging
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request
+from starlette.exceptions import HTTPException as StarletteHTTPException
+from starlette.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 from fastapi.middleware.cors import CORSMiddleware
@@ -1576,3 +1578,37 @@ async def debug_token() -> dict[str, Any]:
         "shopDomain": app_config.resolved_shop_domain(),
         "maskPreview": mask_token(app_config.env.shopify_access_token),
     }
+
+
+# ---------------------------------------------------------------------------
+# 前端静态托管（容器部署用）
+# ---------------------------------------------------------------------------
+#
+# 单容器方案：前端构建产物由后端顺带托管，单端口、同源、不用配 CORS。
+# 必须在**所有 /api 路由之后**注册 —— 这是挂在根路径上的兜底路由。
+# 开发时不构建前端（dist 不存在），这里自动跳过，两边各跑各的。
+
+
+class SpaStaticFiles(StaticFiles):
+    """找不到文件时回落到 index.html。
+
+    前端是客户端路由（TanStack Router），直接打开 `/settings`、`/channels/x`
+    这类路径时磁盘上没有对应文件 —— 不回落就是 404。
+    """
+
+    async def get_response(self, path: str, scope):  # type: ignore[override]
+        try:
+            return await super().get_response(path, scope)
+        except StarletteHTTPException as error:
+            if error.status_code == 404:
+                return await super().get_response("index.html", scope)
+            raise
+
+
+_frontend_dist = app_config.resolved_frontend_dist()
+if _frontend_dist is not None:
+    app.mount(
+        "/",
+        SpaStaticFiles(directory=str(_frontend_dist), html=True),
+        name="frontend",
+    )
