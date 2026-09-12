@@ -471,6 +471,14 @@ docker exec content-publisher python -c "..."
 这串数字同时证明了三件事：Shopify 连通、凭据有效、
 **博客标题 → 栏目的映射用的是你的真实配置**（否则 116 条全都归不了类）。
 
+再验一项持久化（真实部署最容易在这里翻车）：
+
+```bash
+docker compose restart && sleep 12
+curl -s http://localhost:8848/api/sync/status
+# 实测：trackedContents 仍是 116，lastSyncAt 未被重置 ✅ —— data/ 挂载生效
+```
+
 ### 3.6 本次踩到的坑（对号入座）
 
 | 现象 | 真实原因 | 解法 |
