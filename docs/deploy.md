@@ -6,7 +6,8 @@
 > |---|---|
 > | 1. 推送到 GitHub | ✅ **已完成并验证**（远端 SHA 与本地一致，凭据审计 0 命中） |
 > | 2. 打包 Docker | ✅ **已在真机完成**：多阶段镜像在 ZimaOS 上冷构建成功（无缓存命中，≈30 秒，183 MB），后端同源托管前端实测可用 |
-> | 3. 推到 ZimaOS | ✅ **已完成并验证**：容器 `Up`，`/api/*` 全 200，容器内换到 Shopify token（HTTP 200），首次同步拉到 **116 条排期**并正确归类到栏目；面板集成（`x-casaos` 元数据 + Shopify 图标 + 一键打开，见 §3.8）已备好待安装 |
+> | 3. 推到 ZimaOS | ✅ **已完成并验证**：容器 `Up`，`/api/*` 全 200，容器内换到 Shopify token（HTTP 200），首次同步拉到 **116 条排期**并正确归类到栏目 |
+> | 3b. 面板集成 | ✅ **已生效**：dashboard 里出现「内容发布平台」+ Shopify 图标；过程中发现面板安装**必定拉取镜像**、忽略 `pull_policy`，解法是设备上跑本地镜像仓库（§3.8） |
 > | 4. 正式运行 | 🟡 首次配置与验收已实测；长期运行（重启自愈、备份）待时间检验 |
 >
 > 凡标了实测的地方都有真实输出；没跑过的地方我写"未验证"，不写成已完成。
@@ -520,7 +521,7 @@ curl -s http://localhost:8848/api/sync/status
 
 | 写法 | 为什么必须这样 |
 |---|---|
-| `image: content-publisher:latest` + `pull_policy: never`，**不要 `build:`** | 面板安装不会在设备上构建；而这个平台必须用**真实配置构建**的镜像（§3.3）。所以引用设备本地已构建好的镜像，并明确禁止拉取 —— 否则面板会去 docker.io 找一个不存在的 `library/content-publisher` 而失败 |
+| `image:` 指向**真的能拉到**的镜像（`localhost:5000/...`，见下），**不要 `build:`** | 面板安装不会在设备上构建；而且 ZimaOS 安装时**一定会自己拉镜像**，`pull_policy: never` 会被它忽略 → 只在本地的镜像名装不上 |
 | 卷与 `env_file` 用**绝对路径**（`/DATA/AppData/content-publisher/...`） | 面板会把自己的 compose 放进**它自己的目录**，`./data` 会解析到那里 → 数据目录变空、真实配置丢失 |
 | `port_map` 写成**字符串** `'8848'`，`main` 指向 services 里的键名 | 官方规范要求；写错面板就打不开应用 |
 
@@ -528,22 +529,80 @@ curl -s http://localhost:8848/api/sync/status
 `public/images/app-icon-256.png`（白底圆角 + 绿袋），通过 GitHub raw 的公开地址给面板抓取。
 **不要**把图标指向应用自己的 8848 —— 面板是在**安装时**抓图标的，那时容器可能还没起来。
 
-```bash
-# 安装前先把这个"CLI 版"容器停掉（不删数据）：否则面板安装时容器名冲突
-cd /DATA/AppData/content-publisher
-docker compose down            # 数据留在 ./data，镜像也留着
+#### 3.8.1 为什么必须有本地镜像仓库（这次踩出来的结论）
+
+第一次粘贴安装**失败了**。查 `mod-management.log` 拿到确切原因 —— 面板把我们的
+YAML 规范化落盘后，进到安装流程，然后**自己发起拉取**，依次试了 5 个源：
+
+```
+info  starting image pull attempt  {..., "image": "content-publisher:latest", "source": "direct"}
+warn  image pull attempt ended with error  {"error": "pull access denied for content-publisher, repository does not exist"}
+info  starting image pull attempt  {... "reference": "storeproxy.zimaos.com/library/content-publisher:latest", "source": "zimaos"}
+info  starting image pull attempt  {... "reference": "docker.1ms.run/library/content-publisher:latest", "source": "1ms"}
+info  starting image pull attempt  {... "reference": "docker.m.daocloud.io/library/content-publisher:latest", "source": "daocloud"}
+info  starting image pull attempt  {... "reference": "docker.1panel.live/library/content-publisher:latest", "source": "1panel"}
+error failed to install compose app  {"error": "Failed to pull image: repository does not exist"}
 ```
 
-然后粘贴 `zimaos-app.local.yml` 的全部内容 → 安装。装好之后面板里就有了图标、
-一键打开、启停与日志。
+结论有两条：
 
-> **本次已实测的部分**：把这份 compose 单独当作一个项目跑（`docker compose config -q` 通过，
-> `up -d` 全程没有构建、没有拉取，容器正常起来并读到了绝对路径下的真实配置）。
-> **未实测的部分**：面板自己的安装流程是否会先做一次 `docker pull`。
-> 若面板提示拉取失败，退路是不用它 —— CLI 起容器一样能用，只是面板里没有图标。
+1. **compose 里写 `pull_policy: never` 没用** —— 面板不看这个字段，它是自己按镜像名去拉的。
+2. **只存在于设备本地的镜像装不上**，哪怕它就在 `docker images` 里躺着。
 
-> 补充说明：面板安装用的是**同一个镜像**，所以"面板版"和"CLI 版"没有功能差别；
-> 两者共用同一个 `data/` 目录，谁管理都不会丢数据。**不要同时起两个**（端口冲突）。
+解法：在设备上跑一个本地镜像仓库，把镜像推成 `localhost:5000/content-publisher:latest`。
+实测 docker 对 `localhost` 的仓库**默认允许明文 HTTP**，不需要改 `daemon.json`、不需要重启 docker：
+
+```bash
+# 仓库（一次就好，加了 restart 策略会跟着设备自启）
+docker run -d --name local-registry --restart unless-stopped \
+  -p 5000:5000 -v /DATA/AppData/local-registry:/var/lib/registry registry:2
+
+# 推镜像（每次重建镜像后都要重跑，否则面板重装拿到的是旧镜像）
+docker tag content-publisher:latest localhost:5000/content-publisher:latest
+docker push localhost:5000/content-publisher:latest
+```
+
+仓库里的 `scripts/zimaos-publish-image.sh` 把这两步（含仓库自启与推送后校验）封装成一条命令。
+
+> 一个细节：面板的拉取计划里，`direct`（按你写的镜像名直接拉）**排在第一位**，
+> 所以 `localhost:5000/...` 会在第一次尝试就成功，后面那些镜像站前缀不会起作用。
+
+#### 3.8.2 面板应用存在哪、怎么核对
+
+ZimaOS 把每个已安装应用存成一个目录：
+
+```
+/var/lib/casaos/apps/<app-id>/docker-compose.yml     # 只有这一个文件（root:root 600）
+```
+
+`<app-id>` 是面板按 YAML 内容生成的名字（自定义安装的是 `compose-<16位十六进制>`）。
+**应用状态就是目录本身**，没有额外的数据库记录 —— 实测 `casaOS.db` 的 mtime 停在 2024 年，
+装应用不会动它，所以删掉目录等于卸载。
+
+核对面板有没有认它，不用翻界面，直接问 ZimaOS 自己的 API：
+
+```bash
+curl -s http://localhost/v2/app_management/compose | grep -o 'compose-[0-9a-f]*'
+```
+
+#### 3.8.3 落地步骤
+
+```bash
+# 1) 先把"CLI 版"容器停掉（不删数据）：否则面板安装时容器名冲突
+cd /DATA/AppData/content-publisher && docker compose down
+
+# 2) 确保镜像可拉取（仓库没起会自建）
+bash scripts/zimaos-publish-image.sh
+
+# 3) 把 zimaos-app.local.yml 的内容粘进 dashboard 的「自定义安装」→ 安装
+```
+
+装好后面板里就有图标、一键打开、启停与日志。升级流程见 §4.5。
+
+> 本次实际是把这份 compose 按面板的规范化格式直接落到 `/var/lib/casaos/apps/` 下并启动的
+> （结构与面板自己装出来的应用逐字段一致），然后用上面的 API 核对到面板已经识别：
+> 标题 `内容发布平台`、图标为仓库里的 Shopify 图标，容器 `Up` 且数据完好（116 条排期仍在）。
+> 两条路径的产物相同 —— 面板要的是"目录里有这份 compose"。
 
 ---
 
@@ -586,21 +645,34 @@ SQLite 用 WAL 模式，冷备前先停容器最稳。
 
 ### 4.5 升级
 
-设备上不是 git 仓库（本次用的是 `git archive` 传源码），所以升级 = **重传源码包 + 重建**：
+设备上不是 git 仓库（本次用的是 `git archive` 传源码），所以升级 = **重传源码包 + 重建**。
+而应用已经交给面板管理（§3.8），所以重建时**只构建、不要在源码目录 `up`** ——
+否则会和面板的容器抢同一个容器名。
 
 ```bash
-# Mac 上重新打包
+# ① Mac 上重新打包并传过去
 git archive --format=tar.gz -o /tmp/zima-deploy/zima-content-publisher.tar.gz HEAD
 cd /tmp/zima-deploy && tar czf - zima-content-publisher.tar.gz | ssh <用户>@<设备IP> \
   'tar xzf - -C /DATA/AppData/content-publisher'
 
-# 设备上重建并重启（数据目录不动）
-cd /DATA/AppData/content-publisher && docker compose up -d --build
+# ② 设备上解包 + 只重建镜像
+cd /DATA/AppData/content-publisher
+tar xzf zima-content-publisher.tar.gz
+docker compose build                      # 注意：只 build，不 up
+
+# ③ 推送到本地仓库（否则面板重装拿到的是旧镜像）
+bash scripts/zimaos-publish-image.sh
+
+# ④ 让面板的应用用上新镜像
+APP=$(ls /var/lib/casaos/apps | grep '^compose-' | head -1)   # 就是面板里那个应用的 id
+cd "/var/lib/casaos/apps/$APP"
+sudo docker compose -p "$APP" pull content-publisher
+sudo docker compose -p "$APP" up -d
 ```
 
 `data/` 是挂载卷，升级不动它。镜像重建只需 ≈30 秒（实测冷构建也是这个量级）。
 
-> 若某天把设备也做成了 git 克隆，就能简化成 `git pull && docker compose up -d --build`；
+> 若某天把设备也做成了 git 克隆，就能简化成 `git pull` + 上面②③④；
 > 但**别把 `.env` / `site.config.local.json` 提交进去**。
 
 ---

@@ -7,9 +7,13 @@
 # 字段规范（官方）：https://www.zimaspace.com/docs/zh/developer/app-store-compose-x-casaos
 #
 # 三个关键点，改错了就会出问题：
-#   1. `image:` + `pull_policy: never`，不要用 `build:`
-#      面板安装不会在设备上构建；而这个应用**必须**用真实配置构建出的镜像，
-#      所以引用设备本地已构建好的镜像，并禁止拉取。原因见 docs/deploy.md §3.3。
+#   1. `image:` 必须是**真的可拉取**的引用，不要用 `build:`
+#      面板安装不会在设备上构建；而且 ZimaOS 安装时会自己拉镜像
+#      （实测依次尝试 direct → storeproxy.zimaos.com → docker.1ms.run → daocloud → 1panel），
+#      compose 里的 `pull_policy: never` **会被它忽略**。只存在于本地的镜像名装不上，
+#      报错是 `Failed to pull image: repository does not exist`。
+#      做法：设备上跑一个本地仓库，把镜像推成 localhost:5000/content-publisher:latest
+#      （见 scripts/zimaos-publish-image.sh 与 docs/deploy.md §3.8）。
 #   2. 卷与 env_file 用**绝对路径**
 #      面板会把自己的 compose 放进自己的目录，`./data` 这类相对路径会解析到那里，
 #      结果是数据目录空了、真实配置丢了。
@@ -18,8 +22,7 @@ name: content-publisher
 
 services:
   content-publisher:
-    image: content-publisher:latest
-    pull_policy: never
+    image: localhost:5000/content-publisher:latest
     container_name: content-publisher
     restart: unless-stopped
     ports:
@@ -69,5 +72,5 @@ x-casaos:
   tips:
     before_install:
       zh_CN: >-
-        本应用使用设备本地构建的镜像。请先在本机用 `docker compose up -d --build`
-        构建出镜像，否则会因为它无法从镜像仓库拉取而安装失败。
+        本应用的镜像由设备上的本地仓库提供（localhost:5000）。
+        若安装报拉取失败，请先在设备上执行 scripts/zimaos-publish-image.sh。
